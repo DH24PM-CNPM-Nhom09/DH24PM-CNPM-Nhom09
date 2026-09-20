@@ -388,21 +388,6 @@ erDiagram
 
 ---
 
-## 3. Rà soát Dữ liệu & Bảo mật — ĐÃ CHỐT (họp nhóm GĐ3)
-
-| # | Vấn đề | Quyết định chốt | Lý do | Áp dụng |
-|---|---|---|---|---|
-| 1 | `password_hash`, `failed_login_count`, `locked_until` còn tồn tại dù dùng Google Login | **Giữ lại** làm phương án dự phòng | Google Login là chính; giữ `password_hash` (nullable) để sau này hỗ trợ đăng nhập email/mật khẩu dự phòng hoặc tài khoản nội bộ (staff). Ghi rõ trong DDD: "Auth chính là Google Login, password_hash chỉ dùng khi cần fallback". | **Đổi schema**: `password_hash` chuyển `NOT NULL` → `NULL` ở cả 2 bảng — xem `migration_v3_GD3.sql` |
-| 2 | `notification.recipient_id`, `audit_log.actor_id` là polymorphic (không FK thật) | **Giữ nguyên** thiết kế polymorphic + validate ở tầng ứng dụng | Cách làm phổ biến; không ép FK vì recipient/actor có thể là candidate hoặc staff. DDD ghi: "Toàn vẹn đảm bảo ở tầng ứng dụng (Prisma middleware / service layer)". Không cần trigger phức tạp. | Chỉ cập nhật tài liệu (DDD) |
-| 3 | Comment ghi 12 trigger, thực tế 11 | **Sửa số liệu thành 11** | Đếm đúng theo script. | Sửa comment cuối `admission_db.sql`: `v2 → v3`, `12 trigger → 11 trigger` |
-| 4 | Chưa có bảng `permission` chi tiết | **Không thêm bảng** vào schema lúc này | Quy mô đồ án + thời gian còn lại: RBAC ở mức Role là đủ. Quyền chi tiết (duyệt hồ sơ, ký quyết định...) kiểm soát bằng middleware/guard theo `role_code`. Ma trận phân quyền sẽ là tài liệu, không đổi DB. | Chỉ cập nhật tài liệu (DDD) — mình sẽ làm ma trận phân quyền riêng |
-| 5 | Thiếu index trên `audit_log.created_at` | **Thêm index** | Bảng audit tăng nhanh, hay query theo thời gian. | **Đổi schema**: `CREATE INDEX idx_audit_created_at ON audit_log(created_at);` — xem `migration_v3_GD3.sql` |
-| 6 | `transaction_code` UNIQUE nhưng cho phép nhiều NULL | **Giữ nguyên** + ghi chú trong test case | Đúng hành vi chuẩn MariaDB/MySQL. Ghi rõ trong Test Case của DDD để QA không báo nhầm lỗi. | Chỉ cập nhật tài liệu (Test Case) |
-
-📄 Migration thực thi 2 thay đổi schema (#1, #5) nằm ở file riêng: **`migration_v3_GD3.sql`** (kèm trong lần gửi này).
-
----
-
 ## 4. Danh sách 40 bảng theo 10 miền nghiệp vụ (tổng hợp nhanh)
 
 | Miền | Bảng |
@@ -418,11 +403,3 @@ erDiagram
 | 9. Thông báo & công bố | announcement, notification |
 | 10. Nhật ký hệ thống | audit_log |
 
----
-
-## 5. Bước tiếp theo
-
-1. ✅ Cả 6 vấn đề đã chốt trong họp nhóm (mục 3). ERD ở mục 1 **đã khớp** với các quyết định này (không cần vẽ lại) vì cardinality không đổi, chỉ đổi `NOT NULL → NULL` và thêm 1 index — hai việc này không ảnh hưởng sơ đồ ERD.
-2. Chạy `migration_v3_GD3.sql` lên `admission_db` (v2 → v3) và sửa comment cuối file `admission_db.sql` (12 → 11 trigger) như mục 3 hàng #3.
-3. Push cả 2 file (`ERD_PhanHe_TuyenSinh_GD3.md` + `migration_v3_GD3.sql`) lên nhánh GitHub của bạn, tag **Thái Hoàng Minh (Team Lead)** để đưa vào DDD và **nhóm Backend** để đối chiếu khi vẽ Class/Sequence Diagram.
-4. Việc tiếp theo của mình: **tài liệu thiết kế CSDL chi tiết chuẩn GĐ3** (mô tả từng cột/kiểu dữ liệu/ràng buộc) và **ma trận phân quyền theo role_code** (thay cho bảng permission, theo quyết định #4) để phối hợp với nhóm DevOps về bảo mật/xử lý lỗi.
