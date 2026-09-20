@@ -5,7 +5,6 @@
 | Người thực hiện | Lâm Hoài An — QA / Security & Data Specialist |
 | Nguồn dữ liệu | `admission_db.sql` (v2, 40 bảng / 10 miền nghiệp vụ, 11 trigger, 1 stored procedure) |
 | Tài liệu liên quan | Thiết kế CSDL Phân hệ Tuyển sinh (GĐ2), HLD (GĐ2) |
-| Trạng thái | Đã chốt cùng nhóm (xem mục 3) — sẵn sàng đưa vào DDD chính thức |
 
 
 ## 0. Chú giải ký hiệu quan hệ (Mermaid crow's foot)
@@ -387,7 +386,7 @@ erDiagram
 
 ---
 
-## 4. Danh sách 40 bảng theo 10 miền nghiệp vụ (tổng hợp nhanh)
+## 3. Danh sách 40 bảng theo 10 miền nghiệp vụ (tổng hợp nhanh)
 
 | Miền | Bảng |
 |---|---|
