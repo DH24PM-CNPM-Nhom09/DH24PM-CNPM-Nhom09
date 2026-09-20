@@ -7,7 +7,6 @@
 | Tài liệu liên quan | Thiết kế CSDL Phân hệ Tuyển sinh (GĐ2), HLD (GĐ2) |
 | Trạng thái | Đã chốt cùng nhóm (xem mục 3) — sẵn sàng đưa vào DDD chính thức |
 
-> File này dùng Mermaid (`erDiagram`) — **GitHub tự render trực tiếp** khi commit file `.md`, không cần công cụ ngoài.
 
 ## 0. Chú giải ký hiệu quan hệ (Mermaid crow's foot)
 
