@@ -5,7 +5,7 @@ Dưới đây là danh sách thành viên tham gia dự án và vai trò đảm 
 
 | STT | Họ và Tên | Vai Trò | Nhiệm Vụ Chính | Liên Hệ |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | **Thái Hoàng Minh** | Team Lead | Chịu trách nhiệm quản lý backlog, làm cầu nối trao đổi với Giảng viên và các nhóm khác, điều phối tiến độ công việc và phân chia task trong Sprint. | minh_dpm235451@student.agu.edu.vn/  [Tài liệu](https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09/tree/b8b2f0019a1d7187d8ebdbcff34c846149e34545/docs) |
+| 1 | **Thái Hoàng Minh** | Team Lead | Chịu trách nhiệm quản lý backlog, làm cầu nối trao đổi với Giảng viên và các nhóm khác, điều phối tiến độ công việc và phân chia task trong Sprint. | minh_dpm235451@student.agu.edu.vn/  [Tài liệu](https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09/tree/main/docs) |
 | 2 | **Châu Minh Tuệ** |  Frontend / Mobile Developers | Chịu trách nhiệm xây dựng giao diện người dùng web (Next.js) đảm bảo đồng bộ UI/UX theo Design System chung. | tue_dpm235494@student.agu.edu.vn / [Frontend](https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/tree/Frontend/frontend) |
 | 3 | **Nguyễn Phúc Khang** | Frontend / Mobile Developers | Chịu trách nhiệm xây dựng giao diện người dùng ứng dụng di động (Flutter)  | khang_dpm235429@student.agu.edu.vn / [Frontend](https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/tree/Frontend/frontend) |
 | 4 | **Lê Phước Hào**| Backend Developers | Chịu trách nhiệm xây dựng API, xử lý nghiệp vụ cốt lõi (Business Logic) bằng NestJS hoặc Spring Boot theo kiến trúc Clean Architecture / Modular Monolith. | hao_dpm235507@student.agu.edu.vn / [Backend](https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/tree/Backend/src) |
