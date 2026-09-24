@@ -5,7 +5,7 @@ Dưới đây là danh sách thành viên tham gia dự án và vai trò đảm 
 
 | STT | Họ và Tên | Vai Trò | Nhiệm Vụ Chính | Liên Hệ |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | **Thái Hoàng Minh** | Team Lead | Chịu trách nhiệm quản lý backlog, làm cầu nối trao đổi với Giảng viên và các nhóm khác, điều phối tiến độ công việc và phân chia task trong Sprint. | minh_dpm235451@student.agu.edu.vn  |
+| 1 | **Thái Hoàng Minh** | Team Lead | Chịu trách nhiệm quản lý backlog, làm cầu nối trao đổi với Giảng viên và các nhóm khác, điều phối tiến độ công việc và phân chia task trong Sprint. | (minh_dpm235451@student.agu.edu.vn). / [Xem Thư Mục Docs](./docs)  |
 | 2 | **Châu Minh Tuệ** |  Frontend / Mobile Developers | Chịu trách nhiệm xây dựng giao diện người dùng web (Next.js) đảm bảo đồng bộ UI/UX theo Design System chung. | [Email](mailto:b@example.com) / [Frontend](./Frontend) |
 | 3 | **Nguyễn Phúc Khang** | Frontend / Mobile Developers | Chịu trách nhiệm xây dựng giao diện người dùng ứng dụng di động (Flutter)  | [Email](mailto:c@example.com) / [Frontend](./Frontend) |
 | 4 | **Lê Phước Hào**| Backend Developers | Chịu trách nhiệm xây dựng API, xử lý nghiệp vụ cốt lõi (Business Logic) bằng NestJS hoặc Spring Boot theo kiến trúc Clean Architecture / Modular Monolith. | [Email](mailto:d@example.com) / [Backend](./Backend) |
