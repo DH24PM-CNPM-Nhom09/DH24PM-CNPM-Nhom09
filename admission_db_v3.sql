@@ -1,5 +1,5 @@
 -- ============================================================================
--- CƠ SỞ DỮ LIỆU: admission_db (v2 — đã chỉnh sửa theo góp ý rà soát)
+-- CƠ SỞ DỮ LIỆU: admission_db (v3 — đã áp dụng migration_v3_GD3.sql)
 -- HỆ THỐNG QUẢN LÝ TUYỂN SINH SAU ĐẠI HỌC — PHÂN HỆ 1: QUẢN LÝ TUYỂN SINH
 -- Nguồn: Đặc tả Use Case Phân hệ Tuyển sinh (bản mới) + Biên bản rà soát thiết kế v1
 -- Yêu cầu môi trường: MariaDB >= 10.2.7 (bắt buộc để ràng buộc CHECK được
@@ -36,7 +36,12 @@ CREATE TABLE admission_batch (
         CHECK (status IN ('DRAFT','OPEN','CLOSED','IN_REVIEW','COMPLETED','CANCELLED')),
     deleted_at              DATETIME     NULL COMMENT 'Soft delete',
     created_at              DATETIME     NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at              DATETIME     NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    -- LƯU Ý: không dùng "ON UPDATE UTC_TIMESTAMP()" ở đây vì MariaDB chỉ chấp
+    -- nhận họ CURRENT_TIMESTAMP cho mệnh đề ON UPDATE tự động (lỗi cú pháp nếu
+    -- dùng hàm khác) — auto-update sang giờ UTC được xử lý bằng trigger
+    -- trg_admission_batch_updated_at ở cuối file, để không phụ thuộc time_zone
+    -- của server/session.
+    updated_at              DATETIME     NOT NULL DEFAULT UTC_TIMESTAMP(),
     CHECK (registration_end_at > registration_start_at),
     CHECK (exam_start_at IS NULL OR exam_end_at IS NULL OR exam_end_at > exam_start_at)
 ) ENGINE=InnoDB;
@@ -142,7 +147,9 @@ CREATE TABLE system_config (
     config_key    VARCHAR(100) PRIMARY KEY,
     config_value  VARCHAR(500) NOT NULL,
     description   VARCHAR(255) NULL,
-    updated_at    DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP()
+    -- Xem lưu ý ở admission_batch.updated_at — auto-update giờ UTC nằm ở
+    -- trigger trg_system_config_updated_at cuối file, không dùng ON UPDATE.
+    updated_at    DATETIME NOT NULL DEFAULT UTC_TIMESTAMP()
 ) ENGINE=InnoDB;
 
 -- ============================================================================
@@ -562,16 +569,16 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- CHỈ MỤC BỔ SUNG PHỤC VỤ TRUY VẤN THƯỜNG DÙNG
 -- ============================================================================
 
-CREATE INDEX idx_application_review_status ON application(review_status);
-CREATE INDEX idx_application_admission_status ON application(admission_status);
-CREATE INDEX idx_application_batch_major ON application(batch_major_id);
-CREATE INDEX idx_payment_status ON application_payment(gateway_status);
-CREATE INDEX idx_review_application ON application_review(application_id);
-CREATE INDEX idx_audit_entity ON audit_log(entity_table, entity_id);
-CREATE INDEX idx_audit_created_at ON audit_log(created_at);
-CREATE INDEX idx_notification_recipient ON notification(recipient_type, recipient_id);
-CREATE INDEX idx_otp_expires ON otp_verification(expires_at);
-CREATE INDEX idx_status_history_application ON application_status_history(application_id);
+CREATE INDEX IF NOT EXISTS idx_application_review_status ON application(review_status);
+CREATE INDEX IF NOT EXISTS idx_application_admission_status ON application(admission_status);
+CREATE INDEX IF NOT EXISTS idx_application_batch_major ON application(batch_major_id);
+CREATE INDEX IF NOT EXISTS idx_payment_status ON application_payment(gateway_status);
+CREATE INDEX IF NOT EXISTS idx_review_application ON application_review(application_id);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_table, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_notification_recipient ON notification(recipient_type, recipient_id);
+CREATE INDEX IF NOT EXISTS idx_otp_expires ON otp_verification(expires_at);
+CREATE INDEX IF NOT EXISTS idx_status_history_application ON application_status_history(application_id);
 
 -- ============================================================================
 -- STORED PROCEDURE DÙNG CHUNG CHO TRIGGER
@@ -581,14 +588,26 @@ DELIMITER $$
 
 CREATE PROCEDURE sp_recalc_application_total_score(IN p_application_id BIGINT UNSIGNED)
 BEGIN
-    UPDATE application_ranking ar
-    SET ar.total_score = (
-        SELECT COALESCE(SUM(es.score * s.weight), 0)
-        FROM exam_score es
-        JOIN exam_subject s ON s.subject_id = es.subject_id
-        WHERE es.application_id = p_application_id
+    -- SỬA LỖI: bản cũ chỉ UPDATE, nên nếu chưa có dòng application_ranking cho
+    -- hồ sơ này (trường hợp thường gặp: điểm được nhập trước khi ai đó tạo
+    -- dòng xếp hạng), UPDATE khớp 0 dòng -> total_score coi như "mất", và mãi
+    -- treo ở giá trị mặc định cho tới khi có phúc khảo sau này. Dùng
+    -- INSERT ... ON DUPLICATE KEY UPDATE để luôn tự tạo dòng nếu chưa có.
+    -- rank_order = 1 chỉ là giá trị khởi tạo tạm (do cột có CHECK > 0, không
+    -- nhận NULL/0); giá trị thật do bước "Xếp hạng thí sinh" (UC-TT-02) gán
+    -- lại khi so sánh toàn bộ ứng viên cùng batch_major, không bị trigger này
+    -- ghi đè vì mệnh đề ON DUPLICATE KEY UPDATE bên dưới chỉ đụng total_score.
+    INSERT INTO application_ranking (application_id, total_score, rank_order)
+    VALUES (
+        p_application_id,
+        (SELECT COALESCE(SUM(es.score * s.weight), 0)
+         FROM exam_score es
+         JOIN exam_subject s ON s.subject_id = es.subject_id
+         WHERE es.application_id = p_application_id),
+        1
     )
-    WHERE ar.application_id = p_application_id;
+    ON DUPLICATE KEY UPDATE
+        total_score = VALUES(total_score);
 END$$
 
 DELIMITER ;
@@ -782,7 +801,29 @@ END$$
 
 DELIMITER ;
 
+-- 10) & 11) Thay thế "ON UPDATE UTC_TIMESTAMP()" (sai cú pháp MariaDB — ON
+--     UPDATE tự động chỉ nhận họ CURRENT_TIMESTAMP) bằng trigger tự set giờ
+--     UTC khi UPDATE, cho 2 bảng có cột updated_at: admission_batch, system_config.
+DELIMITER $$
+
+CREATE TRIGGER trg_admission_batch_updated_at
+BEFORE UPDATE ON admission_batch
+FOR EACH ROW
+BEGIN
+    SET NEW.updated_at = UTC_TIMESTAMP();
+END$$
+
+CREATE TRIGGER trg_system_config_updated_at
+BEFORE UPDATE ON system_config
+FOR EACH ROW
+BEGIN
+    SET NEW.updated_at = UTC_TIMESTAMP();
+END$$
+
+DELIMITER ;
+
 -- ============================================================================
 -- HẾT SCRIPT — Tổng cộng 40 bảng trên 10 miền nghiệp vụ + 1 procedure +
--- 11 trigger đồng bộ/ràng buộc liên bảng (CSDL: admission_db, v3 — đã áp dụng migration_v3_GD3.sql)
+-- 13 trigger đồng bộ/ràng buộc liên bảng (CSDL: admission_db, v3.1 — đã áp
+-- dụng migration_v3_GD3.sql + migration_v4_fix_updated_at_and_ranking.sql)
 -- ============================================================================
