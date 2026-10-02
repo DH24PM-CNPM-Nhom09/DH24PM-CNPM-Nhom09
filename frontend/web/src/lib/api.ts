@@ -2,13 +2,14 @@
 // Lớp gọi API — nhóm Backend chỉ cần implement đúng các hàm bên dưới theo
 // path /api/v1/... là Frontend chạy được ngay, không cần sửa gì ở đây.
 //
-// Đang chạy ở chế độ MOCK (USE_MOCK = true): trả dữ liệu giả để bạn demo/
-// dựng giao diện trước khi Backend xong. Khi Backend có API thật, đổi
-// USE_MOCK = false và cấu hình NEXT_PUBLIC_API_BASE_URL trong file .env.local
+// Mặc định chạy chế độ MOCK: trả dữ liệu giả để demo khi chưa bật Backend.
+// Nối Backend thật: thêm vào file .env.local
+//   NEXT_PUBLIC_USE_MOCK=false
+//   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
 import type { Application, ApplicationDocument, Candidate, SupervisorRequest } from "./types";
 
-const USE_MOCK = true;
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 
 function getToken(): string | null {
@@ -43,10 +44,13 @@ export async function loginWithGoogle(googleIdToken: string) {
     if (typeof window !== "undefined") localStorage.setItem("access_token", "mock-token");
     return delay({ accessToken: "mock-token" });
   }
-  return request<{ accessToken: string }>("/auth/google", {
+  const res = await request<{ accessToken: string }>("/auth/google", {
     method: "POST",
     body: JSON.stringify({ idToken: googleIdToken }),
   });
+  // Lưu token để các lần gọi sau tự gắn header Authorization
+  if (typeof window !== "undefined") localStorage.setItem("access_token", res.accessToken);
+  return res;
 }
 
 export async function requestPasswordResetOtp(emailOrPhone: string) {

@@ -3,6 +3,7 @@
 // duyệt/từ chối vẫn còn khi tải lại trang (demo trước hội đồng không bị mất).
 // Khi nối Backend thật (USE_MOCK = false) file này không còn được dùng tới.
 // ============================================================================
+import { emitDataChange } from "./events";
 import { createSeedDb, DB_VERSION } from "./mockData";
 import type { AdminDb } from "./types";
 
@@ -54,6 +55,7 @@ export function nextId(key: keyof AdminDb["seq"] | string): number {
 export function commit() {
   persist();
   listeners.forEach((l) => l());
+  emitDataChange();
 }
 
 export function subscribeDb(listener: () => void) {

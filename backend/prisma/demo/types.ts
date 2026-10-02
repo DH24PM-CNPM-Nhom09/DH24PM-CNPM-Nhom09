@@ -3,7 +3,7 @@
 // Tên trường bám đúng cột trong admission_db v3 (đổi snake_case -> camelCase)
 // để khi nối Backend thật (NestJS + Prisma) chỉ cần map 1-1, không đổi logic.
 // ============================================================================
-import type { AdmissionStatus, DocumentType, ReviewStatus } from "../types";
+import type { AdmissionStatus, DocumentType, ReviewStatus } from "./base-types";
 
 export type { AdmissionStatus, DocumentType, ReviewStatus };
 
@@ -89,19 +89,17 @@ export type PaymentMethod = "BANK_TRANSFER" | "MOMO" | "VNPAY" | "KHAC";
 export interface AdminCandidate {
   candidateId: number;
   fullName: string;
-  dob: string | null;
-  gender: "NAM" | "NU" | "KHAC" | null;
-  idNumber: string | null;
-  email: string | null;
-  phoneNumber: string | null;
-  address: string | null;
-  /** Học vấn kê khai lúc nộp hồ sơ (UC-DK-02, bảng application_education — v4). null = chưa kê khai */
-  graduatedFrom: string | null;
-  graduatedMajor: string | null;
-  graduationYear: number | null;
-  gpa: number | null;
-  /** Thang điểm GPA: 4 hoặc 10 */
-  gpaScale?: number;
+  dob: string;
+  gender: "NAM" | "NU" | "KHAC";
+  idNumber: string;
+  email: string;
+  phoneNumber: string;
+  address: string;
+  /** Thông tin học vấn kê khai lúc nộp hồ sơ (UC-DK-02) */
+  graduatedFrom: string;
+  graduatedMajor: string;
+  graduationYear: number;
+  gpa: number;
 }
 
 export interface AdminDocument {
@@ -161,8 +159,7 @@ export interface AdminApplication {
   /** Cán bộ đang phụ trách thẩm định (người bấm "Tiếp nhận") */
   assignedStaffId: number | null;
   documents: AdminDocument[];
-  /** null = thí sinh chưa phát sinh giao dịch lệ phí nào */
-  payment: Payment | null;
+  payment: Payment;
   supplements: SupplementRequest[];
   history: StatusHistoryEntry[];
 }

@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { USE_MOCK } from "./api";
-import { subscribeDb } from "./store";
+import { onDataChange } from "./events";
 
 /**
- * Tải dữ liệu bất đồng bộ + tự tải lại khi "CSDL giả" thay đổi (mock) để mọi
- * khối trên màn hình luôn khớp nhau sau mỗi thao tác. Khi dùng API thật, gọi
- * reload() sau thao tác ghi.
+ * Tải dữ liệu bất đồng bộ + tự tải lại (không nháy màn hình) mỗi khi có thao
+ * tác ghi thành công, để mọi khối trên màn hình luôn khớp nhau.
  */
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
@@ -38,10 +36,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  useEffect(() => {
-    if (!USE_MOCK) return;
-    return subscribeDb(() => run(true));
-  }, [run]);
+  useEffect(() => onDataChange(() => run(true)), [run]);
 
   return { data, error, loading, reload: run };
 }

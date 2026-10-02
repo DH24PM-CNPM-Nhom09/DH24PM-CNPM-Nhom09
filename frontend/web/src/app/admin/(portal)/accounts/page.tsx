@@ -46,6 +46,7 @@ function AccountsInner() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ staffCode: "", fullName: "", email: "", allowPassword: false, roles: ["CAN_BO_TUYEN_SINH"] as RoleCode[] });
   const [busy, setBusy] = useState(false);
+  const [issued, setIssued] = useState<{ name: string; email: string; password: string } | null>(null);
   const [formError, setFormError] = useState("");
 
   const list = (data ?? []).filter((s) => !q.trim() || `${s.fullName} ${s.email} ${s.staffCode}`.toLowerCase().includes(q.trim().toLowerCase()));
@@ -199,7 +200,10 @@ function AccountsInner() {
               loading={busy}
               onClick={() =>
                 run(
-                  () => createStaff(form),
+                  async () => {
+                    const created = await createStaff(form);
+                    if (created.temporaryPassword) setIssued({ name: created.fullName, email: created.email, password: created.temporaryPassword });
+                  },
                   `Đã cấp tài khoản cho ${form.fullName}.`,
                   () => {
                     setCreateOpen(false);
@@ -230,7 +234,7 @@ function AccountsInner() {
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#1B3A66]" checked={form.allowPassword} onChange={(e) => setForm({ ...form, allowPassword: e.target.checked })} />
             <span>
               Cho phép đăng nhập bằng mật khẩu
-              <span className="block text-xs text-gray-500">Mặc định chỉ đăng nhập bằng Google. Bật mục này, hệ thống gửi email đặt mật khẩu lần đầu.</span>
+              <span className="block text-xs text-gray-500">Mặc định chỉ đăng nhập bằng Google. Bật mục này, hệ thống tạo mật khẩu tạm để bạn chuyển cho cán bộ.</span>
             </span>
           </label>
         </div>
@@ -238,6 +242,34 @@ function AccountsInner() {
           <RolePicker value={form.roles} onChange={(r) => setForm({ ...form, roles: r })} />
         </div>
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
+      </Modal>
+      <Modal
+        open={!!issued}
+        onClose={() => setIssued(null)}
+        title="Mật khẩu tạm thời"
+        description="Chỉ hiển thị một lần. Gửi cho cán bộ qua kênh an toàn và đề nghị đổi mật khẩu ở lần đăng nhập đầu."
+        footer={
+          <Btn variant="navy" onClick={() => setIssued(null)}>
+            Đã ghi lại
+          </Btn>
+        }
+      >
+        {issued && (
+          <dl className="space-y-3 text-sm">
+            <div>
+              <dt className="text-xs text-gray-500">Cán bộ</dt>
+              <dd className="font-semibold text-gray-900">{issued.name}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-gray-500">Email đăng nhập</dt>
+              <dd className="font-mono text-gray-900">{issued.email}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-gray-500">Mật khẩu tạm</dt>
+              <dd className="select-all rounded-input bg-gray-100 px-3 py-2 font-mono text-base font-semibold tracking-wide text-gray-900">{issued.password}</dd>
+            </div>
+          </dl>
+        )}
       </Modal>
     </>
   );

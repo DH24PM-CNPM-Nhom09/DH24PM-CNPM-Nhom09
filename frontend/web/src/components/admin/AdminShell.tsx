@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { resetMockData, staffLogout, USE_MOCK } from "@/lib/admin/api";
+import { refreshStaff, resetMockData, staffLogout, USE_MOCK } from "@/lib/admin/api";
 import { can as canRoles, ROLE_LABEL, type Permission } from "@/lib/admin/permissions";
 import { useStaffSession, writeSession } from "@/lib/admin/session";
 import { getDb } from "@/lib/admin/store";
@@ -57,6 +57,13 @@ function ShellInner({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (session === null) router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
   }, [session, router, pathname]);
+
+  // Backend thật: mỗi lần chuyển trang đọc lại vai trò (lỗi 401 sẽ tự đăng xuất)
+  useEffect(() => {
+    if (USE_MOCK || !session) return;
+    refreshStaff().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, session?.accessToken]);
 
   // Mock: đồng bộ vai trò / trạng thái mới nhất (Admin vừa đổi quyền hoặc khóa)
   useEffect(() => {

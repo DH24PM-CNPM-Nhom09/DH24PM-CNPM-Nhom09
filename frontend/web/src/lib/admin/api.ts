@@ -1,16 +1,18 @@
 // ============================================================================
 // Lớp gọi API của phân hệ Quản lý.
 //
-// USE_MOCK = true  -> chạy trên "CSDL giả" (store.ts), mô phỏng đúng các quy tắc
-//                     nghiệp vụ Backend phải làm: state machine, RBAC, ghi
-//                     application_status_history, audit_log, notification.
-// USE_MOCK = false -> gọi Backend NestJS theo đúng path ghi ở từng hàm.
+// Chọn chế độ bằng biến môi trường trong .env.local:
+//   NEXT_PUBLIC_ADMIN_USE_MOCK=false            -> gọi Backend NestJS thật
+//   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
+// Không đặt gì -> chạy dữ liệu mẫu trong trình duyệt (store.ts), mô phỏng đúng
+// quy tắc nghiệp vụ của backend để demo khi chưa bật backend.
 //
 // Bảng endpoint đầy đủ cho Backend: xem README (mục "API phân hệ Quản lý").
 // ============================================================================
 import { can, type Permission } from "./permissions";
 import { readSession, writeSession, type StaffSession } from "./session";
 import { blockReason, TRANSITIONS, type ReviewAction } from "./stateMachine";
+import { emitDataChange } from "./events";
 import { commit, getDb, nextId, resetDb } from "./store";
 import type {
   AdminApplication,
@@ -31,7 +33,9 @@ import type {
   VerifyStatus,
 } from "./types";
 
-export const USE_MOCK = true;
+export const USE_MOCK = process.env.NEXT_PUBLIC_ADMIN_USE_MOCK !== "false";
+/** Mật khẩu của tài khoản demo: dữ liệu mẫu chấp nhận mọi mật khẩu ≥ 6 ký tự; backend seed dùng Demo@123 */
+export const DEMO_PASSWORD = "Demo@123";
 
 // Nhãn tiếng Việt để nhật ký đọc được ngay, không phải tra mã trạng thái
 const REVIEW_VI: Record<ReviewStatus, string> = {
@@ -64,20 +68,27 @@ function fail(error_code: string, message: string): never {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = readSession()?.accessToken;
-  const res = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (res.status === 401) {
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw { error_code: "NETWORK", message: `Không kết nối được máy chủ (${API_BASE}). Kiểm tra backend đã chạy chưa.` } satisfies ApiError;
+  }
+  if (res.status === 401 && token) {
+    // Phiên hết hạn hoặc tài khoản vừa bị khóa -> đăng xuất về trang đăng nhập
     writeSession(null);
   }
   if (!res.ok) {
     throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Đã có lỗi xảy ra, vui lòng thử lại." }));
   }
+  if ((options.method ?? "GET").toUpperCase() !== "GET") emitDataChange();
   return res.json();
 }
 
@@ -167,9 +178,36 @@ export function staffLogout() {
   writeSession(null);
 }
 
-export function demoAccounts(): StaffAccount[] {
-  if (!USE_MOCK) return [];
-  return structuredClone(getDb().staff.filter((s) => [1, 3, 5, 6].includes(s.staffAccountId)));
+/** Backend thật: đọc lại vai trò mới nhất (Quản trị vừa đổi quyền) để menu hiển thị đúng */
+export async function refreshStaff(): Promise<StaffAccount | null> {
+  if (USE_MOCK) return null;
+  const s = readSession();
+  if (!s) return null;
+  const staff = await request<StaffAccount>("/auth/staff/me");
+  if (JSON.stringify(staff) !== JSON.stringify(s.staff)) writeSession({ ...s, staff });
+  return staff;
+}
+
+/** Nút đăng nhập nhanh: luôn có ở dữ liệu mẫu; với API thật chỉ hiện khi NEXT_PUBLIC_DEMO_LOGIN=true */
+export function demoAccounts(): Pick<StaffAccount, "staffAccountId" | "email" | "roles">[] {
+  if (USE_MOCK) return structuredClone(getDb().staff.filter((s) => [1, 3, 5, 6].includes(s.staffAccountId)));
+  if (process.env.NEXT_PUBLIC_DEMO_LOGIN !== "true") return [];
+  return [
+    { staffAccountId: 1, email: "canbo@agu.edu.vn", roles: ["CAN_BO_TUYEN_SINH"] },
+    { staffAccountId: 3, email: "hoidong@agu.edu.vn", roles: ["HOI_DONG"] },
+    { staffAccountId: 5, email: "lanhdao@agu.edu.vn", roles: ["LANH_DAO_KHOA"] },
+    { staffAccountId: 6, email: "quantri@agu.edu.vn", roles: ["ADMIN"] },
+  ];
+}
+
+/** Tải tệp minh chứng (kèm token) để xem trước — chỉ có khi dùng backend thật */
+export async function fetchDocumentFile(documentId: number): Promise<Blob> {
+  const token = readSession()?.accessToken;
+  const res = await fetch(`${API_BASE}/admin/application-documents/${documentId}/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không tải được tệp." }));
+  return res.blob();
 }
 
 // ============================================================================
@@ -317,8 +355,8 @@ export async function listApplications(query: ApplicationQuery): Promise<Applica
       (a) =>
         a.applicationCode.toLowerCase().includes(q) ||
         a.candidate.fullName.toLowerCase().includes(q) ||
-        a.candidate.email.toLowerCase().includes(q) ||
-        a.candidate.idNumber.includes(q),
+        (a.candidate.email ?? "").toLowerCase().includes(q) ||
+        (a.candidate.idNumber ?? "").includes(q),
     );
 
   const counts = { ALL: list.length, DRAFT: 0, SUBMITTED: 0, UNDER_REVIEW: 0, NEEDS_SUPPLEMENT: 0, APPROVED: 0, REJECTED: 0 } as ApplicationPage["counts"];
@@ -338,13 +376,13 @@ export async function listApplications(query: ApplicationQuery): Promise<Applica
       applicationId: a.applicationId,
       applicationCode: a.applicationCode,
       candidateName: a.candidate.fullName,
-      candidateEmail: a.candidate.email,
+      candidateEmail: a.candidate.email ?? "",
       majorName: major.majorName,
       degreeLevel: major.degreeLevel,
       batchCode: batch.batchCode,
       reviewStatus: a.reviewStatus,
       submittedAt: a.submittedAt,
-      paid: a.payment.gatewayStatus === "SUCCESS",
+      paid: a.payment?.gatewayStatus === "SUCCESS",
       docsValid: a.documents.filter((d) => d.verifyStatus === "VALID").length,
       docsTotal: a.documents.length,
       overdue: a.reviewStatus === "NEEDS_SUPPLEMENT" && blockReason(a, "REJECT_EXPIRED") === null,
@@ -823,8 +861,8 @@ export async function listStaff(): Promise<StaffAccount[]> {
   return delay(getDb().staff);
 }
 
-export async function createStaff(dto: { staffCode: string; fullName: string; email: string; roles: RoleCode[]; allowPassword: boolean }) {
-  if (!USE_MOCK) return request<StaffAccount>("/staff-accounts", { method: "POST", body: JSON.stringify(dto) });
+export async function createStaff(dto: { staffCode: string; fullName: string; email: string; roles: RoleCode[]; allowPassword: boolean }): Promise<StaffAccount & { temporaryPassword?: string | null }> {
+  if (!USE_MOCK) return request<StaffAccount & { temporaryPassword: string | null }>("/staff-accounts", { method: "POST", body: JSON.stringify(dto) });
   const me = requirePermission("account:manage");
   const db = getDb();
   const email = dto.email.trim().toLowerCase();
@@ -845,7 +883,7 @@ export async function createStaff(dto: { staffCode: string; fullName: string; em
   db.staff.push(staff);
   audit(db, me.staffAccountId, "STAFF_CREATE", "staff_account", staff.staffAccountId, `Cấp tài khoản ${staff.staffCode} (${staff.roles.join(", ")})`);
   commit();
-  return delay(staff);
+  return delay({ ...staff, temporaryPassword: dto.allowPassword ? `Tam${Math.random().toString(36).slice(2, 8)}` : null });
 }
 
 export async function updateStaffRoles(staffAccountId: number, roles: RoleCode[]) {

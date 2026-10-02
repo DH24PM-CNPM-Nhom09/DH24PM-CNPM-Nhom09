@@ -26,13 +26,13 @@ Mở `http://localhost:3000/admin/login` và bấm một trong 4 tài khoản de
 | Lãnh đạo khoa/viện | lanhdao@agu.edu.vn | Phê duyệt chỉ tiêu ngành, xem tiến độ, nhật ký |
 | Quản trị hệ thống | quantri@agu.edu.vn | Cấp tài khoản, phân quyền, khóa/mở khóa, nhật ký |
 
-Ở chế độ dữ liệu mẫu, mật khẩu bất kỳ từ 6 ký tự đều được chấp nhận. Mọi thao tác được lưu trong trình duyệt (localStorage) nên tải lại trang vẫn còn. Nút **Khôi phục** ở góc dưới thanh bên đưa dữ liệu về như ban đầu (nên bấm trước buổi demo).
+Ở chế độ dữ liệu mẫu (mặc định, chưa cần backend), mật khẩu bất kỳ từ 6 ký tự đều được chấp nhận. Mọi thao tác được lưu trong trình duyệt (localStorage) nên tải lại trang vẫn còn. Nút **Khôi phục** ở góc dưới thanh bên đưa dữ liệu về như ban đầu (nên bấm trước buổi demo).
 
 ## Kịch bản demo gợi ý (5 phút)
 
 1. Đăng nhập **Cán bộ tuyển sinh**, mở thẻ "Hồ sơ mới chờ tiếp nhận", chọn 1 hồ sơ, bấm **Tiếp nhận thẩm định**.
 2. Đánh dấu 1 minh chứng **Không hợp lệ** (chọn lý do có sẵn), bấm **Yêu cầu bổ sung**: nội dung tự điền từ lý do vừa chọn, đặt hạn.
-3. Bấm **Giả lập: thí sinh đã nộp bổ sung**, hồ sơ quay lại bước thẩm định. Đánh dấu tất cả **Hợp lệ** rồi bấm **Đạt thẩm định**. Xem lịch sử xử lý bên phải.
+3. Bấm **Giả lập: thí sinh đã nộp bổ sung** (chỉ có ở dữ liệu mẫu; với backend thật thì đăng nhập cổng thí sinh để nộp), hồ sơ quay lại bước thẩm định. Đánh dấu tất cả **Hợp lệ** rồi bấm **Đạt thẩm định**. Xem lịch sử xử lý bên phải.
 4. Vào **Đợt tuyển sinh**, mở đợt nháp 2027: nút **Mở đăng ký** bị khóa và ghi rõ lý do (ngành chưa duyệt, tổng trọng số 80%). Sửa trọng số thành 50% + 50%.
 5. Đăng xuất, vào **Lãnh đạo**, phê duyệt ngành. Quay lại Cán bộ: nút Mở đăng ký đã bật.
 6. Vào **Hội đồng**: xử lý 1 đơn phúc khảo; thử mở `/admin/accounts` để thấy màn hình "không có quyền".
@@ -57,7 +57,22 @@ Mỗi lần chuyển: ghi 1 dòng `application_status_history`, 1 dòng `audit_l
 
 **Phân quyền (RBAC)**: ma trận quyền khai báo bằng code trong `src/lib/admin/permissions.ts`, đúng hướng Backend GĐ3 (không có bảng permission). Backend copy y hệt sang `PERMISSION_MATRIX` cho `RbacGuard`. Frontend chỉ ẩn/hiện; Backend vẫn phải chặn lại.
 
-## API phân hệ Quản lý (đổi `USE_MOCK = false` trong `src/lib/admin/api.ts` để gọi thật)
+## Chạy với backend thật
+
+Backend nằm ở thư mục `backend/` cạnh `frontend/` (NestJS + Prisma + MariaDB). Cách cài XAMPP, tạo CSDL và chạy backend: xem `backend/README.md`.
+Khi backend đã chạy ở cổng 4000, tạo file `frontend/web/.env.local`:
+
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
+NEXT_PUBLIC_ADMIN_USE_MOCK=false
+NEXT_PUBLIC_USE_MOCK=false
+NEXT_PUBLIC_DEMO_LOGIN=true
+```
+
+Tắt rồi chạy lại `npm run dev`. Dòng `NEXT_PUBLIC_USE_MOCK` dành cho phân hệ Thí sinh, `NEXT_PUBLIC_ADMIN_USE_MOCK` dành cho phân hệ Quản lý.
+Xóa file `.env.local` là quay về dữ liệu mẫu trong trình duyệt. Tài khoản demo khi dùng backend có mật khẩu chung `Demo@123`.
+
+## API phân hệ Quản lý
 
 | Hàm | Method | Path |
 |---|---|---|
@@ -87,4 +102,4 @@ Dữ liệu trả về đúng kiểu trong `src/lib/admin/types.ts` (tên trư�
 
 ## Chưa làm ở bản này
 
-Xếp phòng thi và nhập điểm (M5), xếp hạng và công bố trúng tuyển (M6), quyết định và nhập học (M7). Khung trang, phân quyền và lớp API đã sẵn để thêm các màn này theo cùng cách.
+Xếp phòng thi và nhập điểm (M5), xếp hạng và công bố trúng tuyển (M6), quyết định và nhập học (M7), màn cán bộ xử lý khiếu nại chung. Khung trang, phân quyền và lớp API đã sẵn để thêm các màn này theo cùng cách.

@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import { IconAlert, IconCheck, IconChevronLeft, IconClock, IconFile } from "@/components/admin/Icons";
 import { Btn, DocBadge, ErrorBox, fieldCls, Label, Modal, Notice, Panel, ReviewBadge, Skeleton, useToast } from "@/components/admin/ui";
-import { getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
+import { fetchDocumentFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
 import { DEGREE_LABEL, DOCUMENT_LABEL, errorMessage, fmtDate, fmtDateTime, fmtMoney, fmtSize, PAYMENT_METHOD_LABEL, relativeDays, toLocalInput } from "@/lib/admin/format";
 import { activeSupplement, blockReason, isSupplementOverdue, type ReviewAction } from "@/lib/admin/stateMachine";
 import type { AdminDocument, ReviewStatus } from "@/lib/admin/types";
@@ -42,6 +42,42 @@ function eventTitle(from: ReviewStatus | null, to: ReviewStatus) {
   if (to === "APPROVED") return "Kết luận đạt thẩm định";
   if (to === "REJECTED") return "Kết luận không đạt";
   return "Cập nhật hồ sơ";
+}
+
+/** Xem tệp minh chứng: tải bằng fetch kèm token rồi hiển thị (PDF trong khung, ảnh trực tiếp) */
+function DocPreview({ doc }: { doc: AdminDocument }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [type, setType] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (USE_MOCK) return;
+    let objectUrl: string | null = null;
+    fetchDocumentFile(doc.documentId)
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setType(blob.type);
+        setUrl(objectUrl);
+      })
+      .catch((e) => setErr(errorMessage(e, "Không tải được tệp.")));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc.documentId]);
+
+  if (url && type.startsWith("image/")) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={doc.fileName} className="max-h-[70vh] w-full rounded-input border border-gray-200 object-contain" />;
+  }
+  if (url) return <iframe src={url} title={doc.fileName} className="h-[65vh] w-full rounded-input border border-gray-200" />;
+  return (
+    <div className="flex aspect-[4/3] w-full flex-col items-center justify-center rounded-input border border-gray-200 bg-gray-50 text-center">
+      <IconFile size={40} className="text-gray-300" />
+      <p className="mt-3 text-sm font-semibold text-gray-600">{doc.fileName}</p>
+      <p className="mt-1 max-w-sm px-6 text-xs text-gray-500">
+        {USE_MOCK ? "Dữ liệu mẫu trong trình duyệt không có tệp thật. Khi chạy với backend, tệp hiển thị tại đây." : err || "Đang tải tệp…"}
+      </p>
+    </div>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -199,16 +235,20 @@ function DetailInner() {
   const sidePanels = (
     <>
       <Panel title="Lệ phí xét tuyển">
-        <dl className="grid grid-cols-2 gap-4">
-          <Field label="Số tiền">{fmtMoney(a.payment.amount)}</Field>
-          <Field label="Trạng thái">
-            {a.payment.gatewayStatus === "SUCCESS" ? <span className="text-[#166534]">Thành công</span> : <span className="text-[#92400E]">Chờ thanh toán</span>}
-          </Field>
-          <Field label="Phương thức">{PAYMENT_METHOD_LABEL[a.payment.paymentMethod]}</Field>
-          <Field label="Mã giao dịch">
-            <span className="font-mono text-[13px]">{a.payment.transactionCode ?? "—"}</span>
-          </Field>
-        </dl>
+        {a.payment ? (
+          <dl className="grid grid-cols-2 gap-4">
+            <Field label="Số tiền">{fmtMoney(a.payment.amount)}</Field>
+            <Field label="Trạng thái">
+              {a.payment.gatewayStatus === "SUCCESS" ? <span className="text-[#166534]">Thành công</span> : <span className="text-[#92400E]">Chờ thanh toán</span>}
+            </Field>
+            <Field label="Phương thức">{PAYMENT_METHOD_LABEL[a.payment.paymentMethod]}</Field>
+            <Field label="Mã giao dịch">
+              <span className="font-mono text-[13px]">{a.payment.transactionCode ?? "—"}</span>
+            </Field>
+          </dl>
+        ) : (
+          <p className="text-sm text-gray-500">Thí sinh chưa phát sinh giao dịch lệ phí nào.</p>
+        )}
       </Panel>
 
       <Panel title="Lịch sử xử lý" bodyClass="px-5 py-4">
@@ -304,23 +344,29 @@ function DetailInner() {
           <Panel title="Thông tin thí sinh">
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Ngày sinh">{fmtDate(c.dob)}</Field>
-              <Field label="Giới tính">{c.gender === "NU" ? "Nữ" : c.gender === "NAM" ? "Nam" : "Khác"}</Field>
-              <Field label="Số CCCD">{c.idNumber}</Field>
-              <Field label="Email">{c.email}</Field>
-              <Field label="Điện thoại">{c.phoneNumber}</Field>
-              <Field label="Địa chỉ">{c.address}</Field>
+              <Field label="Giới tính">{c.gender === "NU" ? "Nữ" : c.gender === "NAM" ? "Nam" : c.gender === "KHAC" ? "Khác" : "—"}</Field>
+              <Field label="Số CCCD">{c.idNumber ?? "—"}</Field>
+              <Field label="Email">{c.email ?? "—"}</Field>
+              <Field label="Điện thoại">{c.phoneNumber ?? "—"}</Field>
+              <Field label="Địa chỉ">{c.address ?? "—"}</Field>
             </dl>
             <h3 className="mb-3 mt-6 border-t border-gray-100 pt-5 text-sm font-bold text-gray-900">Học vấn kê khai</h3>
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-              <Field label="Cơ sở đào tạo">{c.graduatedFrom}</Field>
-              <Field label="Ngành tốt nghiệp">{c.graduatedMajor}</Field>
-              <Field label="Năm tốt nghiệp">{c.graduationYear}</Field>
+              <Field label="Cơ sở đào tạo">{c.graduatedFrom ?? "Chưa kê khai"}</Field>
+              <Field label="Ngành tốt nghiệp">{c.graduatedMajor ?? "—"}</Field>
+              <Field label="Năm tốt nghiệp">{c.graduationYear ?? "—"}</Field>
               <Field label="Điểm trung bình tích lũy">
-                <span className="tabular-nums">{c.gpa.toFixed(2).replace(".", ",")}</span> / 4
-                {minGpa !== null && (
-                  <span className={`ml-2 text-xs font-semibold ${c.gpa >= minGpa ? "text-[#166534]" : "text-[#B91C1C]"}`}>
-                    {c.gpa >= minGpa ? "đạt" : "chưa đạt"} mức tối thiểu {minGpa.toFixed(2).replace(".", ",")}
-                  </span>
+                {c.gpa === null ? (
+                  "—"
+                ) : (
+                  <>
+                    <span className="tabular-nums">{c.gpa.toFixed(2).replace(".", ",")}</span> / {c.gpaScale ?? 4}
+                    {minGpa !== null && (c.gpaScale ?? 4) === 4 && (
+                      <span className={`ml-2 text-xs font-semibold ${c.gpa >= minGpa ? "text-[#166534]" : "text-[#B91C1C]"}`}>
+                        {c.gpa >= minGpa ? "đạt" : "chưa đạt"} mức tối thiểu {minGpa.toFixed(2).replace(".", ",")}
+                      </span>
+                    )}
+                  </>
                 )}
               </Field>
             </dl>
@@ -363,8 +409,8 @@ function DetailInner() {
               <div className="space-y-4">
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-center gap-2">
-                    {a.payment.gatewayStatus === "SUCCESS" ? <IconCheck size={16} className="text-[#15803D]" /> : <IconAlert size={16} className="text-[#B45309]" />}
-                    Lệ phí xét tuyển {a.payment.gatewayStatus === "SUCCESS" ? "đã thanh toán" : "chưa thanh toán"}
+                    {a.payment?.gatewayStatus === "SUCCESS" ? <IconCheck size={16} className="text-[#15803D]" /> : <IconAlert size={16} className="text-[#B45309]" />}
+                    Lệ phí xét tuyển {a.payment?.gatewayStatus === "SUCCESS" ? "đã thanh toán" : "chưa thanh toán"}
                   </li>
                   <li className="flex items-center gap-2">
                     {validCount === a.documents.length ? <IconCheck size={16} className="text-[#15803D]" /> : <IconClock size={16} className="text-gray-400" />}
@@ -577,18 +623,10 @@ function DetailInner() {
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
       </Modal>
 
-      <Modal open={dialog?.kind === "preview"} onClose={() => setDialog(null)} title={dialog?.kind === "preview" ? DOCUMENT_LABEL[dialog.doc.documentType] : ""} width="max-w-2xl">
+      <Modal open={dialog?.kind === "preview"} onClose={() => setDialog(null)} title={dialog?.kind === "preview" ? `${DOCUMENT_LABEL[dialog.doc.documentType]}: ${dialog.doc.fileName}` : ""} width="max-w-3xl">
         {dialog?.kind === "preview" && (
           <div>
-            <div className="flex aspect-[4/3] w-full flex-col items-center justify-center rounded-input border border-gray-200 bg-gray-50 text-center">
-              <IconFile size={40} className="text-gray-300" />
-              <p className="mt-3 text-sm font-semibold text-gray-600">{dialog.doc.fileName}</p>
-              <p className="mt-1 max-w-sm px-6 text-xs text-gray-500">
-                {USE_MOCK
-                  ? "Dữ liệu mẫu không có tệp thật. Khi nối Backend, khung này hiển thị PDF qua đường dẫn tạm có chữ ký (signed URL)."
-                  : "Đang tải tệp…"}
-              </p>
-            </div>
+            <DocPreview doc={dialog.doc} />
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Dung lượng">{fmtSize(dialog.doc.fileSizeKb)}</Field>
               <Field label="Tải lên lúc">{fmtDateTime(dialog.doc.uploadedAt)}</Field>

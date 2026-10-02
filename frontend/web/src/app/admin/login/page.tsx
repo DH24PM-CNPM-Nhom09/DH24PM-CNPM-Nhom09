@@ -5,11 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { GoogleMark } from "@/components/admin/Icons";
 import { Btn, fieldCls, Label } from "@/components/admin/ui";
-import { demoAccounts, staffLogin, staffLoginWithGoogle, USE_MOCK } from "@/lib/admin/api";
+import { DEMO_PASSWORD, demoAccounts, staffLogin, staffLoginWithGoogle, USE_MOCK } from "@/lib/admin/api";
 import { errorMessage } from "@/lib/admin/format";
 import { ROLE_DESCRIPTION, ROLE_LABEL } from "@/lib/admin/permissions";
 import { readSession } from "@/lib/admin/session";
-import type { StaffAccount } from "@/lib/admin/types";
 
 function LoginForm() {
   const router = useRouter();
@@ -21,7 +20,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState<"password" | "google" | null>(null);
-  const [demos, setDemos] = useState<StaffAccount[]>([]);
+  const [demos, setDemos] = useState<ReturnType<typeof demoAccounts>>([]);
 
   useEffect(() => {
     if (readSession()) router.replace(target);
@@ -62,13 +61,13 @@ function LoginForm() {
     }
   }
 
-  async function quick(acc: StaffAccount) {
+  async function quick(acc: (typeof demos)[number]) {
     setEmail(acc.email);
-    setPassword("demo123");
+    setPassword(DEMO_PASSWORD);
     setError("");
     setLoading("password");
     try {
-      await staffLogin(acc.email, "demo123");
+      await staffLogin(acc.email, DEMO_PASSWORD);
       router.replace(target);
     } catch (err) {
       setError(errorMessage(err));
@@ -141,8 +140,10 @@ function LoginForm() {
 
           {demos.length > 0 && (
             <div className="mt-8 rounded-card border border-dashed border-gray-300 bg-white p-4">
-              <p className="text-[13px] font-semibold text-gray-700">Tài khoản demo (chỉ có ở chế độ dữ liệu mẫu)</p>
-              <p className="mt-0.5 text-xs text-gray-500">Bấm để vào nhanh với từng vai trò và thấy phần việc khác nhau.</p>
+              <p className="text-[13px] font-semibold text-gray-700">Tài khoản demo</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Bấm để vào nhanh với từng vai trò{USE_MOCK ? "" : ` (mật khẩu ${DEMO_PASSWORD})`}. Chỉ dùng khi demo, tắt trước khi triển khai thật.
+              </p>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {demos.map((d) => (
                   <button

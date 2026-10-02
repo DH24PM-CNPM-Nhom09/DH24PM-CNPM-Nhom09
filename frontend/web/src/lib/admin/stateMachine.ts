@@ -58,7 +58,8 @@ export function blockReason(app: AdminApplication, action: ReviewAction, now = D
   if (app.reviewStatus !== t.from) return "Không áp dụng ở trạng thái hiện tại.";
 
   if (action === "APPROVE") {
-    if (app.payment.gatewayStatus !== "SUCCESS") return "Thí sinh chưa hoàn tất lệ phí xét tuyển.";
+    if (app.payment?.gatewayStatus !== "SUCCESS") return "Thí sinh chưa hoàn tất lệ phí xét tuyển.";
+    if (app.documents.length === 0) return "Hồ sơ chưa có minh chứng nào.";
     const notValid = app.documents.filter((d) => d.verifyStatus !== "VALID");
     if (notValid.length > 0) return `Còn ${notValid.length} minh chứng chưa được xác nhận hợp lệ.`;
   }
