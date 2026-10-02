@@ -1,0 +1,568 @@
+// ============================================================================
+// Prisma schema - Phan he Quan ly Tuyen sinh Sau dai hoc
+// Nguon: ERD_PhanHe_TuyenSinh_GD3.md (40 bang / 10 mien) + migration_v3_GD3.sql
+// LUU Y: day la ban dung tu ERD tong hop (khong phai dump truc tiep tu
+// admission_db_v3.sql). Truoc khi migrate that, doi chieu lai tung cot voi
+// QA (Lam Hoai An) hoac chay `prisma db pull` tren DB that de doi chieu.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ================= MIEN 1: DANH MUC & CAU HINH DOT TUYEN SINH =================
+
+model AdmissionBatch {
+  batchId   BigInt    @id @default(autoincrement()) @map("batch_id")
+  batchCode String    @unique @map("batch_code") @db.VarChar(50)
+  degreeLevel String  @map("degree_level") @db.VarChar(30)
+  status    String    @db.VarChar(30)
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  batchMajors        AdmissionBatchMajor[]
+  examRooms          ExamRoom[]
+  admissionDecisions AdmissionDecision[]
+  announcements      Announcement[]
+
+  @@map("admission_batch")
+}
+
+model AdmissionMajor {
+  majorId     BigInt @id @default(autoincrement()) @map("major_id")
+  majorCode   String @unique @map("major_code") @db.VarChar(50)
+  degreeLevel String @map("degree_level") @db.VarChar(30)
+  status      String @db.VarChar(30)
+
+  batchMajors AdmissionBatchMajor[]
+
+  @@map("admission_major")
+}
+
+model AdmissionBatchMajor {
+  batchMajorId   BigInt  @id @default(autoincrement()) @map("batch_major_id")
+  batchId        BigInt  @map("batch_id")
+  majorId        BigInt  @map("major_id")
+  quota          Int
+  benchmarkScore Decimal? @map("benchmark_score") @db.Decimal(5, 2)
+  status         String  @db.VarChar(30)
+
+  batch       AdmissionBatch      @relation(fields: [batchId], references: [batchId])
+  major       AdmissionMajor      @relation(fields: [majorId], references: [majorId])
+  conditions  AdmissionCondition[]
+  committees  AdmissionCommittee[]
+  examSubjects ExamSubject[]
+  applications Application[]
+  benchmarks  AdmissionBenchmark[]
+
+  @@map("admission_batch_major")
+}
+
+model AdmissionCondition {
+  conditionId   BigInt   @id @default(autoincrement()) @map("condition_id")
+  batchMajorId  BigInt   @map("batch_major_id")
+  conditionCode String   @map("condition_code") @db.VarChar(50)
+  minGpa        Decimal? @map("min_gpa") @db.Decimal(3, 2)
+
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+
+  @@map("admission_condition")
+}
+
+model AdmissionCommittee {
+  committeeId   BigInt @id @default(autoincrement()) @map("committee_id")
+  batchMajorId  BigInt @map("batch_major_id")
+  committeeName String @map("committee_name") @db.VarChar(150)
+  status        String @db.VarChar(30)
+
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+  members    CommitteeMember[]
+  interviews InterviewSchedule[]
+
+  @@map("admission_committee")
+}
+
+model CommitteeMember {
+  memberId        BigInt @id @default(autoincrement()) @map("member_id")
+  committeeId     BigInt @map("committee_id")
+  roleInCommittee String @map("role_in_committee") @db.VarChar(50)
+
+  committee AdmissionCommittee @relation(fields: [committeeId], references: [committeeId])
+
+  @@map("committee_member")
+}
+
+model ExamSubject {
+  subjectId    BigInt  @id @default(autoincrement()) @map("subject_id")
+  batchMajorId BigInt  @map("batch_major_id")
+  examFormat   String  @map("exam_format") @db.VarChar(30)
+  weight       Decimal @db.Decimal(3, 2)
+
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+  scores     ExamScore[]
+
+  @@map("exam_subject")
+}
+
+// ================= MIEN 2: NGUOI DUNG NOI BO & PHAN QUYEN =================
+
+model StaffAccount {
+  staffAccountId BigInt  @id @default(autoincrement()) @map("staff_account_id")
+  staffCode      String  @unique @map("staff_code") @db.VarChar(50)
+  email          String  @unique @db.VarChar(150)
+  // Nullable theo migration v3 - hang 1: tai khoan dang nhap bang Google se
+  // khong co password_hash.
+  passwordHash   String? @map("password_hash") @db.VarChar(255)
+  status         String  @db.VarChar(30)
+
+  staffRoles                  StaffRole[]
+  applicationReviews          ApplicationReview[]
+  supplementRequestsCreated   SupplementRequest[]
+  statusHistoryChanges        ApplicationStatusHistory[]
+  examScoresGraded            ExamScore[]
+  admissionBenchmarksDecided  AdmissionBenchmark[]
+  admissionResultsApproved    AdmissionResult[] @relation("ApprovedByStaff")
+  admissionResultsApprovedLd  AdmissionResult[] @relation("ApprovedByLeader")
+  decisionsSigned             AdmissionDecision[]
+  originalDocsVerified        OriginalDocumentSubmission[]
+  enrollmentsCompleted        EnrollmentCompletion[]
+  announcementsCreated        Announcement[]
+
+  @@map("staff_account")
+}
+
+model Role {
+  roleId   BigInt @id @default(autoincrement()) @map("role_id")
+  roleCode String @unique @map("role_code") @db.VarChar(50)
+  roleName String @map("role_name") @db.VarChar(100)
+
+  staffRoles StaffRole[]
+
+  @@map("role")
+}
+
+model StaffRole {
+  staffRoleId    BigInt @id @default(autoincrement()) @map("staff_role_id")
+  staffAccountId BigInt @map("staff_account_id")
+  roleId         BigInt @map("role_id")
+
+  staffAccount StaffAccount @relation(fields: [staffAccountId], references: [staffAccountId])
+  role         Role         @relation(fields: [roleId], references: [roleId])
+
+  @@map("staff_role")
+}
+
+model SystemConfig {
+  configKey   String @id @map("config_key") @db.VarChar(100)
+  configValue String @map("config_value") @db.Text
+
+  @@map("system_config")
+}
+
+// ================= MIEN 3: TAI KHOAN & HO SO CA NHAN THI SINH =================
+
+model CandidateAccount {
+  accountId    BigInt  @id @default(autoincrement()) @map("account_id")
+  username     String  @unique @db.VarChar(50)
+  email        String  @unique @db.VarChar(150)
+  phoneNumber  String  @unique @map("phone_number") @db.VarChar(20)
+  // Nullable theo migration v3 - hang 1 (tuong tu staff_account).
+  passwordHash String? @map("password_hash") @db.VarChar(255)
+  status       String  @db.VarChar(30)
+
+  otps      OtpVerification[]
+  candidate Candidate?
+
+  @@map("candidate_account")
+}
+
+model OtpVerification {
+  otpId     BigInt   @id @default(autoincrement()) @map("otp_id")
+  accountId BigInt   @map("account_id")
+  purpose   String   @db.VarChar(30)
+  expiresAt DateTime @map("expires_at")
+
+  account CandidateAccount @relation(fields: [accountId], references: [accountId])
+
+  @@map("otp_verification")
+}
+
+model Candidate {
+  candidateId BigInt @id @default(autoincrement()) @map("candidate_id")
+  accountId   BigInt @unique @map("account_id")
+  fullName    String @map("full_name") @db.VarChar(150)
+  idNumber    String @unique @map("id_number") @db.VarChar(20)
+
+  account      CandidateAccount @relation(fields: [accountId], references: [accountId])
+  applications Application[]
+
+  @@map("candidate")
+}
+
+// ================= MIEN 4: HO SO, MINH CHUNG, LE PHI & NCS =================
+
+model Application {
+  applicationId   BigInt  @id @default(autoincrement()) @map("application_id")
+  applicationCode String  @unique @map("application_code") @db.VarChar(50)
+  candidateId     BigInt  @map("candidate_id")
+  batchMajorId    BigInt  @map("batch_major_id")
+  reviewStatus    String  @default("DA_NOP") @map("review_status") @db.VarChar(30)
+  admissionStatus String? @map("admission_status") @db.VarChar(30)
+  isCancelled     Boolean @default(false) @map("is_cancelled")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  candidate   Candidate           @relation(fields: [candidateId], references: [candidateId])
+  batchMajor  AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+
+  documents           ApplicationDocument[]
+  researchProposal    ResearchProposal?
+  payments             ApplicationPayment[]
+  reviews              ApplicationReview[]
+  supplementRequests   SupplementRequest[]
+  statusHistory        ApplicationStatusHistory[]
+  examAssignment       ExamAssignment?
+  interviewSchedules   InterviewSchedule[]
+  examScores           ExamScore[]
+  ranking              ApplicationRanking?
+  waitlist             Waitlist?
+  admissionResult      AdmissionResult?
+  decisionDetails      DecisionApplication[]
+  enrollmentConfirmation      EnrollmentConfirmation?
+  originalDocumentSubmission  OriginalDocumentSubmission?
+  enrollmentCompletion        EnrollmentCompletion?
+
+  @@map("application")
+}
+
+model ApplicationDocument {
+  documentId   BigInt @id @default(autoincrement()) @map("document_id")
+  applicationId BigInt @map("application_id")
+  documentType String @map("document_type") @db.VarChar(50)
+  fileHash     String @map("file_hash") @db.VarChar(64)
+  fileSizeKb   Int    @map("file_size_kb")
+
+  application       Application        @relation(fields: [applicationId], references: [applicationId])
+  researchProposals ResearchProposal[]
+
+  @@map("application_document")
+}
+
+model Lecturer {
+  lecturerId   BigInt @id @default(autoincrement()) @map("lecturer_id")
+  lecturerCode String @unique @map("lecturer_code") @db.VarChar(50)
+  email        String @unique @db.VarChar(150)
+  status       String @db.VarChar(30)
+
+  proposedIn         ResearchProposal[]
+  supervisorRequests SupervisorRequest[]
+
+  @@map("lecturer")
+}
+
+model ResearchProposal {
+  proposalId           BigInt  @id @default(autoincrement()) @map("proposal_id")
+  applicationId        BigInt  @unique @map("application_id")
+  documentId           BigInt  @map("document_id")
+  preferredLecturerId  BigInt  @map("preferred_lecturer_id")
+  researchTopic        String  @map("research_topic") @db.VarChar(255)
+
+  application       Application          @relation(fields: [applicationId], references: [applicationId])
+  document          ApplicationDocument  @relation(fields: [documentId], references: [documentId])
+  preferredLecturer Lecturer             @relation(fields: [preferredLecturerId], references: [lecturerId])
+  supervisorRequests SupervisorRequest[]
+
+  @@map("research_proposal")
+}
+
+model SupervisorRequest {
+  requestId  BigInt @id @default(autoincrement()) @map("request_id")
+  proposalId BigInt @map("proposal_id")
+  lecturerId BigInt @map("lecturer_id")
+  status     String @db.VarChar(30)
+
+  proposal ResearchProposal @relation(fields: [proposalId], references: [proposalId])
+  lecturer Lecturer         @relation(fields: [lecturerId], references: [lecturerId])
+
+  @@map("supervisor_request")
+}
+
+model ApplicationPayment {
+  paymentId       BigInt   @id @default(autoincrement()) @map("payment_id")
+  applicationId   BigInt   @map("application_id")
+  amount          Decimal  @db.Decimal(12, 2)
+  paymentMethod   String   @map("payment_method") @db.VarChar(30)
+  // UNIQUE nhung cho phep nhieu NULL - dung hanh vi MySQL/MariaDB mac dinh
+  // (migration v3 - hang 6). KHONG duoc gan '' thay cho null.
+  transactionCode String?  @unique @map("transaction_code") @db.VarChar(100)
+  gatewayStatus   String   @map("gateway_status") @db.VarChar(30)
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("application_payment")
+}
+
+// ================= MIEN 5: THAM DINH & LICH SU TRANG THAI =================
+
+model ApplicationReview {
+  reviewId         BigInt @id @default(autoincrement()) @map("review_id")
+  applicationId    BigInt @map("application_id")
+  reviewerStaffId  BigInt @map("reviewer_staff_id")
+  reviewResult     String @map("review_result") @db.VarChar(30)
+
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  reviewer    StaffAccount @relation(fields: [reviewerStaffId], references: [staffAccountId])
+
+  @@map("application_review")
+}
+
+model SupplementRequest {
+  requestId          BigInt @id @default(autoincrement()) @map("request_id")
+  applicationId      BigInt @map("application_id")
+  requestedByStaffId BigInt @map("requested_by_staff_id")
+  status             String @db.VarChar(30)
+
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  requestedBy StaffAccount @relation(fields: [requestedByStaffId], references: [staffAccountId])
+
+  @@map("supplement_request")
+}
+
+model ApplicationStatusHistory {
+  historyId         BigInt   @id @default(autoincrement()) @map("history_id")
+  applicationId     BigInt   @map("application_id")
+  changedByStaffId  BigInt?  @map("changed_by_staff_id")
+  changedByType     String   @map("changed_by_type") @db.VarChar(30)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  application Application   @relation(fields: [applicationId], references: [applicationId])
+  changedBy   StaffAccount? @relation(fields: [changedByStaffId], references: [staffAccountId])
+
+  @@index([createdAt])
+  @@map("application_status_history")
+}
+
+// ================= MIEN 6: TO CHUC XET TUYEN / THI =================
+
+model ExamRoom {
+  roomId   BigInt @id @default(autoincrement()) @map("room_id")
+  batchId  BigInt @map("batch_id")
+  roomCode String @map("room_code") @db.VarChar(30)
+  capacity Int
+
+  batch       AdmissionBatch    @relation(fields: [batchId], references: [batchId])
+  assignments ExamAssignment[]
+
+  @@map("exam_room")
+}
+
+model ExamAssignment {
+  assignmentId  BigInt @id @default(autoincrement()) @map("assignment_id")
+  applicationId BigInt @unique @map("application_id")
+  roomId        BigInt @map("room_id")
+  sbdCode       String @unique @map("sbd_code") @db.VarChar(30)
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+  room        ExamRoom    @relation(fields: [roomId], references: [roomId])
+
+  @@map("exam_assignment")
+}
+
+model InterviewSchedule {
+  scheduleId    BigInt @id @default(autoincrement()) @map("schedule_id")
+  applicationId BigInt @map("application_id")
+  committeeId   BigInt @map("committee_id")
+  status        String @db.VarChar(30)
+
+  application Application        @relation(fields: [applicationId], references: [applicationId])
+  committee   AdmissionCommittee @relation(fields: [committeeId], references: [committeeId])
+
+  @@map("interview_schedule")
+}
+
+model ExamScore {
+  scoreId        BigInt  @id @default(autoincrement()) @map("score_id")
+  applicationId  BigInt  @map("application_id")
+  subjectId      BigInt  @map("subject_id")
+  graderStaffId  BigInt  @map("grader_staff_id")
+  score          Decimal @db.Decimal(5, 2)
+
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  subject     ExamSubject  @relation(fields: [subjectId], references: [subjectId])
+  grader      StaffAccount @relation(fields: [graderStaffId], references: [staffAccountId])
+  appeals     ScoreAppeal[]
+
+  @@map("exam_score")
+}
+
+model ScoreAppeal {
+  appealId BigInt   @id @default(autoincrement()) @map("appeal_id")
+  scoreId  BigInt   @map("score_id")
+  oldScore Decimal  @map("old_score") @db.Decimal(5, 2)
+  newScore Decimal? @map("new_score") @db.Decimal(5, 2)
+  status   String   @db.VarChar(30)
+
+  score ExamScore @relation(fields: [scoreId], references: [scoreId])
+
+  @@map("score_appeal")
+}
+
+// ================= MIEN 7: XET TRUNG TUYEN =================
+
+model AdmissionBenchmark {
+  benchmarkId      BigInt  @id @default(autoincrement()) @map("benchmark_id")
+  batchMajorId     BigInt  @unique @map("batch_major_id")
+  decidedByStaffId BigInt  @map("decided_by_staff_id")
+  benchmarkValue   Decimal @map("benchmark_value") @db.Decimal(5, 2)
+
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+  decidedBy  StaffAccount        @relation(fields: [decidedByStaffId], references: [staffAccountId])
+
+  @@map("admission_benchmark")
+}
+
+model ApplicationRanking {
+  rankingId     BigInt  @id @default(autoincrement()) @map("ranking_id")
+  applicationId BigInt  @unique @map("application_id")
+  totalScore    Decimal @map("total_score") @db.Decimal(5, 2)
+  rankOrder     Int     @map("rank_order")
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("application_ranking")
+}
+
+model Waitlist {
+  waitlistId    BigInt @id @default(autoincrement()) @map("waitlist_id")
+  applicationId BigInt @unique @map("application_id")
+  status        String @db.VarChar(30)
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("waitlist")
+}
+
+model AdmissionResult {
+  resultId           BigInt    @id @default(autoincrement()) @map("result_id")
+  applicationId      BigInt    @unique @map("application_id")
+  approvedByStaffId  BigInt?   @map("approved_by_staff_id")
+  approvedByLeaderId BigInt?   @map("approved_by_leader_id")
+  result             String    @db.VarChar(30)
+  publishedAt        DateTime? @map("published_at")
+
+  application   Application   @relation(fields: [applicationId], references: [applicationId])
+  approvedBy    StaffAccount? @relation("ApprovedByStaff", fields: [approvedByStaffId], references: [staffAccountId])
+  approvedByLd  StaffAccount? @relation("ApprovedByLeader", fields: [approvedByLeaderId], references: [staffAccountId])
+
+  @@map("admission_result")
+}
+
+// ================= MIEN 8: RA QUYET DINH & NHAP HOC =================
+
+model AdmissionDecision {
+  decisionId     BigInt @id @default(autoincrement()) @map("decision_id")
+  batchId        BigInt @map("batch_id")
+  signedByStaffId BigInt @map("signed_by_staff_id")
+  decisionNo     String @unique @map("decision_no") @db.VarChar(50)
+  status         String @db.VarChar(30)
+
+  batch    AdmissionBatch        @relation(fields: [batchId], references: [batchId])
+  signedBy StaffAccount          @relation(fields: [signedByStaffId], references: [staffAccountId])
+  details  DecisionApplication[]
+
+  @@map("admission_decision")
+}
+
+model DecisionApplication {
+  detailId      BigInt @id @default(autoincrement()) @map("detail_id")
+  decisionId    BigInt @map("decision_id")
+  applicationId BigInt @map("application_id")
+
+  decision    AdmissionDecision @relation(fields: [decisionId], references: [decisionId])
+  application Application       @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("decision_application")
+}
+
+model EnrollmentConfirmation {
+  confirmationId BigInt @id @default(autoincrement()) @map("confirmation_id")
+  applicationId  BigInt @unique @map("application_id")
+  status         String @db.VarChar(30)
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("enrollment_confirmation")
+}
+
+model OriginalDocumentSubmission {
+  submissionId       BigInt  @id @default(autoincrement()) @map("submission_id")
+  applicationId      BigInt  @unique @map("application_id")
+  verifiedByStaffId  BigInt? @map("verified_by_staff_id")
+  status             String  @db.VarChar(30)
+
+  application Application   @relation(fields: [applicationId], references: [applicationId])
+  verifiedBy  StaffAccount? @relation(fields: [verifiedByStaffId], references: [staffAccountId])
+
+  @@map("original_document_submission")
+}
+
+model EnrollmentCompletion {
+  completionId      BigInt  @id @default(autoincrement()) @map("completion_id")
+  applicationId     BigInt  @unique @map("application_id")
+  completedByStaffId BigInt @map("completed_by_staff_id")
+  transferRef       String  @map("transfer_ref") @db.VarChar(100)
+
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  completedBy StaffAccount @relation(fields: [completedByStaffId], references: [staffAccountId])
+
+  @@map("enrollment_completion")
+}
+
+// ================= MIEN 9: THONG BAO & CONG BO =================
+
+model Announcement {
+  announcementId    BigInt @id @default(autoincrement()) @map("announcement_id")
+  batchId           BigInt @map("batch_id")
+  createdByStaffId  BigInt @map("created_by_staff_id")
+  status            String @db.VarChar(30)
+
+  batch     AdmissionBatch @relation(fields: [batchId], references: [batchId])
+  createdBy StaffAccount   @relation(fields: [createdByStaffId], references: [staffAccountId])
+
+  @@map("announcement")
+}
+
+model Notification {
+  notificationId BigInt @id @default(autoincrement()) @map("notification_id")
+  // KHONG co FK vat ly (thiet ke polymorphic co chu dich - migration v3 hang 2).
+  // Toan ven du lieu duoc dam bao o tang app (xem NotificationService).
+  recipientType  String @map("recipient_type") @db.VarChar(20)
+  recipientId    BigInt @map("recipient_id")
+  channel        String @db.VarChar(20)
+  status         String @db.VarChar(30)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("notification")
+}
+
+// ================= MIEN 10: NHAT KY HE THONG =================
+
+model AuditLog {
+  logId       BigInt   @id @default(autoincrement()) @map("log_id")
+  // Polymorphic tuong tu Notification - validate o tang app (AuditLogService).
+  actorType   String   @map("actor_type") @db.VarChar(20)
+  actorId     BigInt?  @map("actor_id")
+  action      String   @db.VarChar(100)
+  entityTable String   @map("entity_table") @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // idx_audit_created_at - migration v3, hang 5: phuc vu truy van audit_log
+  // theo thoi gian. Moi query loc/ sap xep theo thoi gian PHAI dung created_at.
+  @@index([createdAt], name: "idx_audit_created_at")
+  @@map("audit_log")
+}
