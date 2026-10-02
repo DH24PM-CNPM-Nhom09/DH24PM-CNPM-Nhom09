@@ -8,7 +8,7 @@ import { can as canRoles, ROLE_LABEL, type Permission } from "@/lib/admin/permis
 import { useStaffSession, writeSession } from "@/lib/admin/session";
 import { getDb } from "@/lib/admin/store";
 import type { StaffAccount } from "@/lib/admin/types";
-import { IconCalendar, IconDashboard, IconFolder, IconList, IconLogout, IconMegaphone, IconMenu, IconRefresh, IconScale, IconShield, IconUsers, IconX } from "./Icons";
+import { IconCalendar, IconDashboard, IconFolder, IconKey, IconList, IconLogout, IconMegaphone, IconMenu, IconRefresh, IconScale, IconShield, IconUsers, IconX } from "./Icons";
 import { Btn, Modal, ToastProvider, useToast } from "./ui";
 
 interface AdminCtx {
@@ -57,6 +57,8 @@ function ShellInner({ children }: { children: ReactNode }) {
   // Chưa đăng nhập -> về trang đăng nhập cán bộ, nhớ trang đang mở
   useEffect(() => {
     if (session === null) router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
+    // Đang dùng mật khẩu tạm -> bắt đổi mật khẩu trước khi làm việc
+    else if (session?.staff.mustChangePassword) router.replace("/admin/change-password");
   }, [session, router, pathname]);
 
   // Backend thật: mỗi lần chuyển trang đọc lại vai trò (lỗi 401 sẽ tự đăng xuất)
@@ -86,7 +88,7 @@ function ShellInner({ children }: { children: ReactNode }) {
     [session],
   );
 
-  if (!ctx) {
+  if (!ctx || session?.staff.mustChangePassword) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50" aria-busy="true">
         <span className="h-6 w-6 animate-spin rounded-full border-2 border-navy-800 border-t-transparent" />
@@ -148,6 +150,9 @@ function ShellInner({ children }: { children: ReactNode }) {
             <p className="truncate text-[13px] font-semibold">{ctx.staff.fullName}</p>
             <p className="truncate text-xs text-white/60">{ctx.staff.roles.map((r) => ROLE_LABEL[r]).join(", ")}</p>
           </div>
+          <Link href="/admin/change-password" className="rounded-md p-2 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
+            <IconKey size={17} />
+          </Link>
           <button type="button" onClick={logout} className="rounded-md p-2 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Đăng xuất" title="Đăng xuất">
             <IconLogout size={17} />
           </button>

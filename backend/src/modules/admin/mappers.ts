@@ -12,6 +12,7 @@ export function toStaffDto(s: StaffWithRoles) {
     fullName: s.full_name,
     email: s.email,
     hasPassword: !!s.password_hash,
+    mustChangePassword: s.must_change_password,
     status: s.status,
     roles: s.staff_role.map((r) => r.role.role_code),
   };

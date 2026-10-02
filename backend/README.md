@@ -32,12 +32,13 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 3 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 4 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v4_backend.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v5_announcement.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v6_staff_security.sql"
 ```
 
 Kiểm tra: CSDL `admission_db` có **42 bảng** (40 bảng gốc + `application_education` + `complaint`).
@@ -62,7 +63,7 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
 > **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
-> lệnh này chạy migration v5, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+> lệnh này chạy migration v5 + v6, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
 
 ### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
 
@@ -129,6 +130,13 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 
 ---
 
+## Trước khi triển khai thật (bắt buộc)
+
+1. Tạo CSDL mới, chạy đủ các file SQL v3 → v6, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
+2. Quản trị vào **Tài khoản cán bộ** cấp tài khoản cho từng cán bộ bằng email công tác thật (nên chọn chỉ đăng nhập Google).
+3. `backend/.env`: `DEV_AUTH_BYPASS=false`, đổi `JWT_SECRET` thành chuỗi ngẫu nhiên dài, điền `GOOGLE_CLIENT_ID`, `SMTP_USER`, `SMTP_PASS`.
+4. Frontend `.env.local`: `NEXT_PUBLIC_DEMO_LOGIN=false` (ẩn khung tài khoản demo ở trang đăng nhập cán bộ).
+
 ## Quy tắc nghiệp vụ backend đang chặn
 
 - **Phân quyền**: mỗi API khai báo `@RequirePermission(...)` theo ma trận trong `src/common/permissions.ts`. Ma trận này giống hệt bản ở frontend. Vai trò được đọc lại từ CSDL ở mọi request, nên khóa tài khoản hay đổi vai trò có hiệu lực ngay.
@@ -144,6 +152,10 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 - **Đăng ký thí sinh**: khai họ tên, ngày sinh, email, số điện thoại, mật khẩu (≥ 8 ký tự, có chữ và số). Tài khoản ở trạng thái `PENDING_VERIFY` cho tới khi nhập đúng mã gửi về email; chưa xác thực thì không đăng nhập được. Thông tin đăng ký được ghi luôn vào bảng `candidate` (hồ sơ cá nhân).
 - **Mã OTP** (đăng ký và quên mật khẩu): 6 số, chỉ lưu bản băm bcrypt, hết hạn sau 5 phút, mỗi lần chỉ 1 mã còn hiệu lực. Chờ 60 giây giữa 2 lần gửi, tối đa 5 lần/giờ; nhập sai 5 lần thì mã bị hủy.
 - **Đăng nhập thí sinh bằng mật khẩu** (email hoặc số điện thoại): sai 5 lần thì khóa 15 phút (chỉnh trong `system_config`).
+- **Tài khoản cán bộ**:
+  - Mật khẩu tạm (khi quản trị cấp tài khoản hoặc "Cấp lại mật khẩu") bắt buộc phải đổi ở lần đăng nhập đầu; trong lúc đó backend chặn mọi API khác (`PASSWORD_CHANGE_REQUIRED`).
+  - Mật khẩu cán bộ: ≥ 8 ký tự, có chữ hoa, chữ thường, chữ số, không chứa tên email.
+  - Đăng nhập sai 5 lần liên tiếp thì khóa tạm 15 phút (cùng cấu hình `LOGIN_MAX_FAILED`, `LOGIN_LOCK_MINUTES` với thí sinh).
 - **Thông báo**: thông báo `PUBLISHED` ai cũng xem được (kể cả chưa đăng nhập); chỉ cán bộ tuyển sinh được soạn, đăng, gỡ. Mọi thao tác ghi nhật ký.
 - **Lỗi**: luôn trả về `{ error_code, message }` bằng tiếng Việt.
 
@@ -167,7 +179,8 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | POST/PATCH/PUT | `/admission-batches`, `/admission-batches/:id/status`, `/admission-batches/:id/majors`, `/admission-batch-majors/:id` | batch:manage |
 | PATCH | `/admission-batch-majors/:id/approve` | batch:approve |
 | GET / POST | `/score-appeals`, `/score-appeals/:id/resolve` | appeal:view / appeal:resolve |
-| GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id/status` | account:manage |
+| GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id/status`, `/staff-accounts/:id/reset-password` | account:manage |
+| POST | `/auth/staff/change-password` | cán bộ (kể cả khi đang bị bắt đổi mật khẩu) |
 | GET | `/audit-logs` | audit:view |
 | GET/PATCH | `/candidates/me` | thí sinh |
 | GET | `/applications/me`, `/applications/me/documents`, `/applications/me/supervisor-request`, `/notifications/me` | thí sinh |

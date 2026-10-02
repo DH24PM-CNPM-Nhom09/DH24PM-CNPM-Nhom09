@@ -581,6 +581,10 @@ model staff_account {
   password_hash                                                          String?                        @db.VarChar(255)
   status                                                                 String                         @default("ACTIVE") @db.VarChar(20)
   deleted_at                                                             DateTime?                      @db.DateTime(0)
+  must_change_password                                                   Boolean                        @default(false)
+  password_changed_at                                                    DateTime?                      @db.DateTime(0)
+  failed_login_count                                                     Int                            @default(0)
+  locked_until                                                           DateTime?                      @db.DateTime(0)
   admission_batch_major                                                  admission_batch_major[]
   admission_benchmark                                                    admission_benchmark[]
   admission_decision                                                     admission_decision[]

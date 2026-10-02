@@ -169,6 +169,12 @@ export class StaffController {
   status(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
     return this.svc.setStatus(asStaff(user), id, str(body.status));
   }
+
+  @Patch(":id/reset-password")
+  @RequirePermission("account:manage")
+  resetPassword(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.resetPassword(asStaff(user), id);
+  }
 }
 
 // ============================================================ M8 — Nhật ký

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import { IconPlus } from "@/components/admin/Icons";
 import { Btn, EmptyState, ErrorBox, fieldCls, Label, LoadingRows, Modal, PageHeader, StaffStatusBadge, useToast } from "@/components/admin/ui";
-import { createStaff, listStaff, setStaffStatus, updateStaffRoles } from "@/lib/admin/api";
+import { createStaff, listStaff, resetStaffPassword, setStaffStatus, updateStaffRoles } from "@/lib/admin/api";
 import { errorMessage } from "@/lib/admin/format";
 import { ALL_ROLES, PERMISSION_MATRIX, ROLE_DESCRIPTION, ROLE_LABEL } from "@/lib/admin/permissions";
 import type { RoleCode, StaffAccount } from "@/lib/admin/types";
@@ -43,6 +43,7 @@ function AccountsInner() {
   const [roleTarget, setRoleTarget] = useState<StaffAccount | null>(null);
   const [roles, setRoles] = useState<RoleCode[]>([]);
   const [lockTarget, setLockTarget] = useState<StaffAccount | null>(null);
+  const [resetTarget, setResetTarget] = useState<StaffAccount | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ staffCode: "", fullName: "", email: "", allowPassword: false, roles: ["CAN_BO_TUYEN_SINH"] as RoleCode[] });
   const [busy, setBusy] = useState(false);
@@ -124,7 +125,10 @@ function AccountsInner() {
                         ))}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-gray-600">{s.hasPassword ? "Mật khẩu hoặc Google" : "Chỉ Google"}</td>
+                    <td className="px-5 py-3.5 text-gray-600">
+                      {s.hasPassword ? "Mật khẩu hoặc Google" : "Chỉ Google"}
+                      {s.mustChangePassword && <span className="mt-0.5 block text-xs font-semibold text-[#92400E]">Chờ đổi mật khẩu tạm</span>}
+                    </td>
                     <td className="px-5 py-3.5">
                       <StaffStatusBadge status={s.status} />
                     </td>
@@ -133,6 +137,11 @@ function AccountsInner() {
                         <Btn size="sm" onClick={() => { setFormError(""); setRoleTarget(s); setRoles(s.roles); }}>
                           Phân quyền
                         </Btn>
+                        {s.staffAccountId !== me.staffAccountId && (
+                          <Btn size="sm" onClick={() => { setFormError(""); setResetTarget(s); }} title="Cấp mật khẩu tạm mới khi cán bộ quên mật khẩu">
+                            Cấp lại mật khẩu
+                          </Btn>
+                        )}
                         {s.staffAccountId !== me.staffAccountId && (
                           <Btn size="sm" variant={s.status === "ACTIVE" ? "danger" : "outline"} onClick={() => { setFormError(""); setLockTarget(s); }}>
                             {s.status === "ACTIVE" ? "Khóa" : "Mở khóa"}
@@ -244,10 +253,46 @@ function AccountsInner() {
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
       </Modal>
       <Modal
+        open={!!resetTarget}
+        onClose={() => setResetTarget(null)}
+        title="Cấp lại mật khẩu tạm?"
+        description="Mật khẩu cũ của cán bộ sẽ không dùng được nữa. Hệ thống tạo mật khẩu tạm mới (hiển thị một lần) và bắt cán bộ đổi ở lần đăng nhập tới."
+        footer={
+          <>
+            <Btn onClick={() => setResetTarget(null)}>Hủy</Btn>
+            <Btn
+              variant="navy"
+              loading={busy}
+              onClick={() =>
+                resetTarget &&
+                run(
+                  async () => {
+                    const r = await resetStaffPassword(resetTarget.staffAccountId);
+                    setIssued({ name: resetTarget.fullName, email: resetTarget.email, password: r.temporaryPassword });
+                    await reload(true);
+                  },
+                  "Đã cấp mật khẩu tạm mới.",
+                  () => setResetTarget(null),
+                )
+              }
+            >
+              Cấp mật khẩu tạm
+            </Btn>
+          </>
+        }
+      >
+        {resetTarget && (
+          <p className="rounded-input bg-gray-50 px-3 py-2.5 text-sm">
+            <span className="font-semibold text-gray-900">{resetTarget.fullName}</span> <span className="text-gray-500">({resetTarget.email})</span>
+          </p>
+        )}
+        {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
+      </Modal>
+      <Modal
         open={!!issued}
         onClose={() => setIssued(null)}
         title="Mật khẩu tạm thời"
-        description="Chỉ hiển thị một lần. Gửi cho cán bộ qua kênh an toàn và đề nghị đổi mật khẩu ở lần đăng nhập đầu."
+        description="Chỉ hiển thị một lần. Gửi cho cán bộ qua kênh an toàn (gặp trực tiếp, tin nhắn riêng). Hệ thống bắt cán bộ đổi mật khẩu ngay ở lần đăng nhập đầu."
         footer={
           <Btn variant="navy" onClick={() => setIssued(null)}>
             Đã ghi lại

@@ -20,6 +20,8 @@ export interface StaffAccount {
   email: string;
   /** null = tài khoản chỉ đăng nhập bằng Google (password_hash NULL theo migration v3) */
   hasPassword: boolean;
+  /** Đang dùng mật khẩu tạm do quản trị cấp -> phải đổi trước khi dùng hệ thống */
+  mustChangePassword?: boolean;
   status: StaffStatus;
   roles: RoleCode[];
 }

@@ -44,6 +44,9 @@ export const Public = () => SetMetadata(PUBLIC, true);
 export const RequirePermission = (p: Permission) => SetMetadata(PERMISSION, p);
 /** Chỉ tài khoản thí sinh */
 export const CandidateOnly = () => SetMetadata(CANDIDATE, true);
+const PENDING_PW = "auth:allowPendingPasswordChange";
+/** Route vẫn gọi được khi cán bộ đang bị bắt đổi mật khẩu (xem thông tin mình, đổi mật khẩu) */
+export const AllowPendingPasswordChange = () => SetMetadata(PENDING_PW, true);
 
 export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest().user as AuthUser);
 
@@ -91,6 +94,9 @@ export class AuthGuard implements CanActivate {
         roles: staff.staff_role.map((r) => r.role.role_code as RoleCode),
       };
       if (candidateOnly) forbidden("Chức năng này chỉ dành cho thí sinh.");
+      // Đang dùng mật khẩu tạm: chặn mọi thao tác cho tới khi đổi mật khẩu
+      if (staff.must_change_password && !this.reflector.getAllAndOverride<boolean>(PENDING_PW, targets))
+        fail("PASSWORD_CHANGE_REQUIRED", "Bạn cần đổi mật khẩu tạm trước khi sử dụng hệ thống.", 403);
       if (permission && !can(user.roles, permission)) forbidden();
       req.user = user;
       return true;

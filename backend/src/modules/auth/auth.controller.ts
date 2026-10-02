@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
-import { asStaff, CurrentUser, Public, type AuthUser } from "../../common/auth";
+import { AllowPendingPasswordChange, asStaff, CurrentUser, Public, type AuthUser } from "../../common/auth";
 import { str } from "../../common/util";
 import { AuthService } from "./auth.service";
 
@@ -23,8 +23,16 @@ export class AuthController {
   }
 
   @Get("staff/me")
+  @AllowPendingPasswordChange()
   staffMe(@CurrentUser() user: AuthUser) {
     return this.auth.staffMe(asStaff(user).staffAccountId);
+  }
+
+  @Post("staff/change-password")
+  @HttpCode(200)
+  @AllowPendingPasswordChange()
+  staffChangePassword(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.auth.staffChangePassword(asStaff(user).staffAccountId, str(body.currentPassword), str(body.newPassword));
   }
 
   // ---- Thí sinh

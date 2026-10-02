@@ -86,7 +86,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     writeSession(null);
   }
   if (!res.ok) {
-    throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Đã có lỗi xảy ra, vui lòng thử lại." }));
+    const body = await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Đã có lỗi xảy ra, vui lòng thử lại." }));
+    // Backend chặn vì đang dùng mật khẩu tạm -> đánh dấu phiên để khung trang chuyển sang màn đổi mật khẩu
+    const s = readSession();
+    if (body?.error_code === "PASSWORD_CHANGE_REQUIRED" && s && !s.staff.mustChangePassword) writeSession({ ...s, staff: { ...s.staff, mustChangePassword: true } });
+    throw body;
   }
   if ((options.method ?? "GET").toUpperCase() !== "GET") emitDataChange();
   return res.json();
@@ -913,6 +917,45 @@ export async function setStaffStatus(staffAccountId: number, status: StaffStatus
   audit(db, me.staffAccountId, status === "ACTIVE" ? "STAFF_UNLOCK" : "STAFF_LOCK", "staff_account", staffAccountId, `${status === "ACTIVE" ? "Mở khóa" : "Khóa"} tài khoản ${s.staffCode}`);
   commit();
   return delay({ success: true });
+}
+
+/** Quản trị cấp lại mật khẩu tạm cho cán bộ (cán bộ bị bắt đổi ở lần đăng nhập tới) */
+export async function resetStaffPassword(staffAccountId: number): Promise<{ temporaryPassword: string }> {
+  if (!USE_MOCK) return request<{ temporaryPassword: string }>(`/staff-accounts/${staffAccountId}/reset-password`, { method: "PATCH" });
+  const me = requirePermission("account:manage");
+  const db = getDb();
+  const s = db.staff.find((x) => x.staffAccountId === staffAccountId);
+  if (!s) fail("NOT_FOUND", "Không tìm thấy tài khoản.");
+  if (s.staffAccountId === me.staffAccountId) fail("SELF_RESET", "Để đổi mật khẩu của chính mình, dùng chức năng “Đổi mật khẩu”.");
+  s.hasPassword = true;
+  s.mustChangePassword = true;
+  audit(db, me.staffAccountId, "STAFF_PASSWORD_RESET", "staff_account", staffAccountId, `Cấp lại mật khẩu tạm cho ${s.staffCode}`);
+  commit();
+  return delay({ temporaryPassword: `Tam${Math.random().toString(36).slice(2, 8)}9` });
+}
+
+/** Cán bộ tự đổi mật khẩu. Thành công: cập nhật phiên (bỏ cờ bắt đổi mật khẩu) */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<StaffAccount> {
+  const session = readSession();
+  if (!session) fail("UNAUTHORIZED", "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
+  let staff: StaffAccount;
+  if (!USE_MOCK) {
+    staff = await request<StaffAccount>("/auth/staff/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+  } else {
+    await delay(null, 300);
+    if (newPassword.length < 8 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword))
+      fail("WEAK_PASSWORD", "Mật khẩu mới cần ít nhất 8 ký tự, có chữ hoa, chữ thường và chữ số.");
+    if (newPassword === currentPassword) fail("SAME_PASSWORD", "Mật khẩu mới phải khác mật khẩu hiện tại.");
+    const db = getDb();
+    const s = db.staff.find((x) => x.staffAccountId === session.staff.staffAccountId);
+    if (s) s.mustChangePassword = false;
+    audit(db, session.staff.staffAccountId, "STAFF_PASSWORD_CHANGE", "staff_account", session.staff.staffAccountId, "Tự đổi mật khẩu");
+    commit();
+    staff = { ...session.staff, mustChangePassword: false };
+  }
+  writeSession({ ...session, staff });
+  emitDataChange();
+  return staff;
 }
 
 // ============================================================================

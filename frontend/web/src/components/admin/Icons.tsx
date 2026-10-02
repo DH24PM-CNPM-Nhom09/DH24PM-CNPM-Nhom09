@@ -148,3 +148,9 @@ export const IconMegaphone = (p: P) => (
     <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
   </Base>
 );
+export const IconKey = (p: P) => (
+  <Base {...p}>
+    <circle cx="8" cy="15" r="4" />
+    <path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2" />
+  </Base>
+);

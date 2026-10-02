@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 // ============================================================================
 // npm run db:update — cập nhật CSDL ĐANG CÓ DỮ LIỆU lên bản mới nhất. Chạy lại nhiều lần vẫn an toàn.
-//   1. Chạy database/migration_v5_announcement.sql (thêm cột cho bảng announcement — chỉ THÊM)
+//   1. Chạy database/migration_v5_announcement.sql và migration_v6_staff_security.sql (chỉ THÊM cột)
 //   2. Sửa cột candidate.nationality bị lỗi font ("Viá»‡t Nam" -> "Việt Nam") do bản cũ ghi sai
 //   3. Nạp thông báo tuyển sinh / quy định mẫu nếu bảng announcement còn trống
 // Không xóa bất kỳ dòng hay cột nào.
@@ -26,9 +26,14 @@ function sqlStatements(file: string) {
 
 (async () => {
   try {
-    const file = path.join(__dirname, "..", "database", "migration_v5_announcement.sql");
-    for (const stmt of sqlStatements(file)) await prisma.$executeRawUnsafe(stmt);
-    console.log("✓ Đã chạy migration v5 (thêm cột category, is_pinned, updated_at cho bảng announcement).");
+    const migrations: [string, string][] = [
+      ["migration_v5_announcement.sql", "migration v5 (thêm cột category, is_pinned, updated_at cho bảng announcement)"],
+      ["migration_v6_staff_security.sql", "migration v6 (đổi mật khẩu bắt buộc, chống dò mật khẩu cho tài khoản cán bộ)"],
+    ];
+    for (const [name, label] of migrations) {
+      for (const stmt of sqlStatements(path.join(__dirname, "..", "database", name))) await prisma.$executeRawUnsafe(stmt);
+      console.log(`✓ Đã chạy ${label}.`);
+    }
 
     const fixed = await prisma.$executeRawUnsafe("UPDATE candidate SET nationality = ? WHERE nationality = ?", "Việt Nam", "Viá»‡t Nam");
     console.log(fixed ? `✓ Đã sửa lỗi font quốc tịch cho ${fixed} thí sinh.` : "✓ Cột quốc tịch không có lỗi font.");

@@ -4,7 +4,7 @@
 //   npm run db:seed        -> tạo tài khoản Quản trị đầu tiên (nếu chưa có cán bộ nào)
 //   npm run db:seed:demo   -> nạp bộ dữ liệu mẫu đầy đủ (chỉ chạy trên CSDL TRỐNG)
 // Không bao giờ xóa dữ liệu: gặp CSDL đã có dữ liệu thì dừng và báo.
-// Yêu cầu: đã chạy admission_db_v3.sql + migration_v4_backend.sql + migration_v5_announcement.sql.
+// Yêu cầu: đã chạy admission_db_v3.sql + migration_v4 + migration_v5 + migration_v6 (thư mục database/).
 // ============================================================================
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
@@ -40,10 +40,11 @@ async function seedAdmin() {
       full_name: "Quản trị hệ thống",
       email: "quantri@agu.edu.vn",
       password_hash: await bcrypt.hash(password, 10),
+      must_change_password: true,
       staff_role: { create: [{ role_id: roles.ADMIN }] },
     },
   });
-  console.log(`✓ Tạo tài khoản quản trị: quantri@agu.edu.vn / ${password}  (đổi mật khẩu sau khi đăng nhập)`);
+  console.log(`✓ Tạo tài khoản quản trị: quantri@agu.edu.vn / ${password}  (hệ thống bắt đổi mật khẩu ở lần đăng nhập đầu)`);
 }
 
 /** PDF 1 trang hợp lệ, đủ để xem thử trong trình duyệt */

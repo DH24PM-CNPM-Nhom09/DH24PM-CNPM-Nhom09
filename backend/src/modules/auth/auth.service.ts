@@ -67,12 +67,53 @@ export class AuthService {
   async staffLogin(email: string, password: string) {
     if (!email?.trim() || !password) fail("VALIDATION", "Nhập email công tác và mật khẩu.");
     const staff = await this.prisma.staff_account.findFirst({ where: { email: email.trim().toLowerCase(), deleted_at: null } });
-    if (!staff) fail("INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.", HttpStatus.UNAUTHORIZED);
+    const wrong: () => never = () => fail("INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.", HttpStatus.UNAUTHORIZED);
+    if (!staff) wrong();
+    if (staff.locked_until && staff.locked_until > new Date())
+      fail(
+        "ACCOUNT_LOCKED",
+        `Đăng nhập sai quá nhiều lần. Tài khoản tạm khóa đến ${staff.locked_until.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" })}.`,
+        HttpStatus.FORBIDDEN,
+      );
     if (staff.status !== "ACTIVE") fail("ACCOUNT_LOCKED", "Tài khoản đang bị khóa. Liên hệ quản trị hệ thống để mở khóa.", HttpStatus.FORBIDDEN);
     if (!staff.password_hash)
       fail("ERR_PASSWORD_LOGIN_DISABLED", "Tài khoản này chỉ đăng nhập bằng Google. Chọn “Đăng nhập với Google”.", HttpStatus.FORBIDDEN);
-    if (!(await bcrypt.compare(password, staff.password_hash))) fail("INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.", HttpStatus.UNAUTHORIZED);
+    if (!(await bcrypt.compare(password, staff.password_hash))) {
+      // Chống dò mật khẩu: sai LOGIN_MAX_FAILED lần liên tiếp -> khóa LOGIN_LOCK_MINUTES phút
+      const max = await this.config.int("LOGIN_MAX_FAILED", 5);
+      const lockMin = await this.config.int("LOGIN_LOCK_MINUTES", 15);
+      const count = staff.failed_login_count + 1;
+      await this.prisma.staff_account.update({
+        where: { staff_account_id: staff.staff_account_id },
+        data: count >= max ? { failed_login_count: 0, locked_until: new Date(Date.now() + lockMin * 60_000) } : { failed_login_count: count },
+      });
+      if (count >= max)
+        await this.audit.record({ type: "SYSTEM", id: null }, "STAFF_LOGIN_LOCKED", { table: "staff_account", id: staff.staff_account_id }, `Tạm khóa ${staff.email} ${lockMin} phút do đăng nhập sai ${max} lần`);
+      wrong();
+    }
+    if (staff.failed_login_count || staff.locked_until)
+      await this.prisma.staff_account.update({ where: { staff_account_id: staff.staff_account_id }, data: { failed_login_count: 0, locked_until: null } });
     return this.staffSession(staff.staff_account_id, "mật khẩu");
+  }
+
+  /** Cán bộ tự đổi mật khẩu (bắt buộc khi đang dùng mật khẩu tạm) */
+  async staffChangePassword(staffId: number, currentPassword: string, newPassword: string) {
+    const staff = await this.prisma.staff_account.findUniqueOrThrow({ where: { staff_account_id: BigInt(staffId) } });
+    if (!staff.password_hash) fail("ERR_PASSWORD_LOGIN_DISABLED", "Tài khoản này chỉ đăng nhập bằng Google nên không có mật khẩu để đổi.");
+    if (!(await bcrypt.compare(currentPassword ?? "", staff.password_hash))) fail("WRONG_PASSWORD", "Mật khẩu hiện tại không đúng.");
+    const pw = newPassword ?? "";
+    if (pw.length < 8 || !/[a-z]/.test(pw) || !/[A-Z]/.test(pw) || !/\d/.test(pw))
+      fail("WEAK_PASSWORD", "Mật khẩu mới cần ít nhất 8 ký tự, có chữ hoa, chữ thường và chữ số.");
+    if (pw === currentPassword) fail("SAME_PASSWORD", "Mật khẩu mới phải khác mật khẩu hiện tại.");
+    if (pw.toLowerCase().includes(staff.email.split("@")[0].toLowerCase())) fail("WEAK_PASSWORD", "Mật khẩu không được chứa tên email của bạn.");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.staff_account.update({
+        where: { staff_account_id: staff.staff_account_id },
+        data: { password_hash: await bcrypt.hash(pw, 10), must_change_password: false, password_changed_at: new Date(), failed_login_count: 0, locked_until: null },
+      });
+      await this.audit.record({ type: "STAFF", id: staffId }, "STAFF_PASSWORD_CHANGE", { table: "staff_account", id: staff.staff_account_id }, "Tự đổi mật khẩu", tx);
+    });
+    return this.staffMe(staffId);
   }
 
   async staffGoogle(idToken: string) {

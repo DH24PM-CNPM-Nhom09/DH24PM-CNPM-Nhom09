@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
+import { randomInt } from "crypto";
 import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
@@ -10,6 +10,19 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { toStaffDto } from "./mappers";
 
 const withRoles = { staff_role: { include: { role: true } } } as const;
+
+/** Mật khẩu tạm 10 ký tự, dễ đọc (bỏ các ký tự dễ nhầm 0/O, 1/l/I), luôn có chữ hoa, chữ thường, số */
+function tempPassword(): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ", lower = "abcdefghijkmnpqrstuvwxyz", digit = "23456789";
+  const all = upper + lower + digit;
+  const pick = (set: string) => set[randomInt(set.length)];
+  const chars = [pick(upper), pick(lower), pick(digit), ...Array.from({ length: 7 }, () => pick(all))];
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
 
 @Injectable()
 export class StaffService {
@@ -52,7 +65,7 @@ export class StaffService {
     if (await this.prisma.staff_account.count({ where: { email } })) conflict("DUPLICATE_EMAIL", "Email đã được dùng cho tài khoản khác.");
     if (await this.prisma.staff_account.count({ where: { staff_code: staffCode } })) conflict("DUPLICATE_CODE", "Mã cán bộ đã tồn tại.");
     const ids = await this.roleIds(roles);
-    const temporaryPassword = body.allowPassword === true ? randomBytes(6).toString("base64url") : null;
+    const temporaryPassword = body.allowPassword === true ? tempPassword() : null;
 
     const staff = await this.prisma.$transaction(async (tx) => {
       const s = await tx.staff_account.create({
@@ -61,6 +74,8 @@ export class StaffService {
           full_name: fullName,
           email,
           password_hash: temporaryPassword ? await bcrypt.hash(temporaryPassword, 10) : null,
+          // Mật khẩu tạm do quản trị biết -> bắt cán bộ đổi ở lần đăng nhập đầu
+          must_change_password: !!temporaryPassword,
           staff_role: { create: ids.map((role_id) => ({ role_id })) },
         },
         include: withRoles,
@@ -84,6 +99,25 @@ export class StaffService {
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "STAFF_ROLE_UPDATE", { table: "staff_role", id: s.staff_account_id }, `${s.staff_code}: ${before} → ${roles.join(", ")}`, tx);
     });
     return { success: true };
+  }
+
+  /**
+   * Cấp lại mật khẩu tạm cho cán bộ quên mật khẩu (hoặc cho phép tài khoản chỉ-Google đăng nhập bằng mật khẩu).
+   * Mật khẩu tạm trả về MỘT LẦN; cán bộ bị bắt đổi ở lần đăng nhập tới. Tự đổi của mình thì dùng "Đổi mật khẩu".
+   */
+  async resetPassword(me: StaffUser, staffId: number) {
+    if (staffId === me.staffAccountId) fail("SELF_RESET", "Để đổi mật khẩu của chính mình, dùng chức năng “Đổi mật khẩu”.");
+    const s = await this.prisma.staff_account.findFirst({ where: { staff_account_id: BigInt(staffId), deleted_at: null } });
+    if (!s) notFound("Không tìm thấy tài khoản.");
+    const temporaryPassword = tempPassword();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.staff_account.update({
+        where: { staff_account_id: s.staff_account_id },
+        data: { password_hash: await bcrypt.hash(temporaryPassword, 10), must_change_password: true, failed_login_count: 0, locked_until: null },
+      });
+      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "STAFF_PASSWORD_RESET", { table: "staff_account", id: s.staff_account_id }, `Cấp lại mật khẩu tạm cho ${s.staff_code}`, tx);
+    });
+    return { temporaryPassword };
   }
 
   async setStatus(me: StaffUser, staffId: number, status: string) {
