@@ -6,6 +6,8 @@ import { Btn, ErrorBox, fieldCls, Label, Notice, PageHeader, Panel, Skeleton, us
 import { getPaymentSettings, updatePaymentSettings, type PaymentSettings } from "@/lib/admin/api";
 import { errorMessage, fmtMoney } from "@/lib/admin/format";
 import { useAsync } from "@/lib/admin/useAsync";
+import VietQrCode from "@/components/payment/VietQrCode";
+import { BANKS, bankByBin } from "@/lib/vietqr";
 
 /** Cán bộ tuyển sinh cấu hình mức lệ phí và tài khoản nhận chuyển khoản hiển thị cho thí sinh */
 function Inner() {
@@ -30,7 +32,8 @@ function Inner() {
   }
 
   const set = <K extends keyof PaymentSettings>(k: K, v: PaymentSettings[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
-  const bankReady = Boolean(form.bankName.trim() && form.accountNo.trim() && form.accountName.trim());
+  const bankReady = Boolean(form.bankBin && form.accountNo.trim() && form.accountName.trim());
+  const accountOk = /^[0-9A-Za-z]{4,19}$/.test(form.accountNo.trim());
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -38,8 +41,9 @@ function Inner() {
     setFormError("");
     if (!Number.isInteger(form.feeThacSi) || !Number.isInteger(form.feeTienSi) || form.feeThacSi < 0 || form.feeTienSi < 0)
       return setFormError("Lệ phí phải là số tiền hợp lệ (đồng).");
-    const parts = [form.bankName, form.accountNo, form.accountName].map((x) => x.trim());
-    if (parts.some(Boolean) && !parts.every(Boolean)) return setFormError("Điền đủ ngân hàng, số tài khoản và tên chủ tài khoản (hoặc để trống cả ba).");
+    const parts = [form.bankBin, form.accountNo, form.accountName].map((x) => x.trim());
+    if (parts.some(Boolean) && !parts.every(Boolean)) return setFormError("Chọn ngân hàng và điền đủ số tài khoản, tên chủ tài khoản (hoặc để trống cả ba).");
+    if (form.accountNo.trim() && !accountOk) return setFormError("Số tài khoản gồm 4–19 chữ số, không có dấu cách hay gạch ngang.");
     setSaving(true);
     try {
       setForm(await updatePaymentSettings(form));
@@ -86,12 +90,28 @@ function Inner() {
             )}
             <div>
               <Label htmlFor="bank">Ngân hàng</Label>
-              <input id="bank" className={fieldCls} value={form.bankName} maxLength={200} placeholder="Tên ngân hàng, chi nhánh" onChange={(e) => set("bankName", e.target.value)} />
+              <select
+                id="bank"
+                className={fieldCls}
+                value={form.bankBin}
+                onChange={(e) => {
+                  const b = bankByBin(e.target.value);
+                  setForm((f) => (f ? { ...f, bankBin: b?.bin ?? "", bankName: b ? `${b.short} - ${b.name}` : "" } : f));
+                }}
+              >
+                <option value="">Chọn ngân hàng</option>
+                {BANKS.map((b) => (
+                  <option key={b.bin} value={b.bin}>
+                    {b.short} - {b.name}
+                  </option>
+                ))}
+              </select>
+              {!form.bankBin && form.bankName && <p className="mt-1 text-xs text-[#92400E]">Đang lưu “{form.bankName}”. Chọn lại ngân hàng trong danh sách để tạo được mã QR.</p>}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="acc-no">Số tài khoản</Label>
-                <input id="acc-no" inputMode="numeric" className={`${fieldCls} font-mono`} value={form.accountNo} maxLength={40} onChange={(e) => set("accountNo", e.target.value)} />
+                <input id="acc-no" inputMode="numeric" className={`${fieldCls} font-mono`} value={form.accountNo} maxLength={19} onChange={(e) => set("accountNo", e.target.value.replace(/[\s-]/g, ""))} />
               </div>
               <div>
                 <Label htmlFor="acc-name">Tên chủ tài khoản</Label>
@@ -99,9 +119,19 @@ function Inner() {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              Thí sinh được hướng dẫn ghi nội dung chuyển khoản là <span className="font-mono text-gray-700">&lt;mã hồ sơ&gt; &lt;mã thí sinh&gt;</span>. Cán bộ đối chiếu sao kê theo nội dung này rồi bấm
-              “Xác nhận đã thu” trong trang chi tiết hồ sơ.
+              Mỗi thí sinh nhận một mã VietQR riêng, đã điền sẵn số tiền và nội dung chuyển khoản là mã hồ sơ bỏ dấu gạch (ví dụ <span className="font-mono text-gray-700">THS2026D2834010100050</span>). Cán bộ đối chiếu sao kê, dán nội dung này vào ô tìm kiếm ở trang Hồ sơ xét tuyển để mở đúng hồ sơ, rồi bấm “Xác nhận đã thu”.
             </p>
+            {form.bankBin && accountOk && (
+              <div className="flex flex-col items-center gap-3 rounded-input border border-dashed border-gray-300 p-4 sm:flex-row sm:items-start">
+                <VietQrCode bin={form.bankBin} accountNo={form.accountNo.trim()} amount={form.feeThacSi} note="THS2026D2834010100001" size={168} fileName="ma-qr-xem-truoc" />
+                <div className="text-[13px] text-gray-600">
+                  <p className="font-semibold text-gray-900">Xem trước mã QR của thí sinh</p>
+                  <p className="mt-1">
+                    Ví dụ hồ sơ thạc sĩ: {fmtMoney(form.feeThacSi)}, nội dung “THS2026D2834010100001”. Hãy quét thử bằng app ngân hàng (không cần chuyển) để kiểm tra app hiện đúng tên chủ tài khoản <span className="font-semibold uppercase">{form.accountName || "…"}</span> trước khi lưu.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </Panel>
 

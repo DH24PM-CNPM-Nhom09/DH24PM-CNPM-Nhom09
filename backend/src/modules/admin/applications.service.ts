@@ -8,7 +8,7 @@ import type { StaffUser } from "../../common/auth";
 import { env } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
 import { blockReason, REVIEW_VI, STAFF_ACTIONS, TRANSITIONS, type ReviewAction, type ReviewFacts, type ReviewStatus } from "../../common/review-rules";
-import { dec, id, iso, isoReq, num, parseReviewStatus, toInt, ymd } from "../../common/util";
+import { dec, id, iso, isoReq, num, parseReviewStatus, toInt, transferNote, ymd } from "../../common/util";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
 import { toAuditDto, toBatchDto, toBatchMajorDto, toHistoryDto, toMajorDto } from "./mappers";
 
@@ -183,9 +183,15 @@ export class ApplicationsService {
     if (q.majorId) and.push({ admission_batch_major: { major_id: BigInt(toInt(q.majorId, 0)) } });
     const text = (q.q ?? "").trim();
     if (text) {
+      // Dán nội dung chuyển khoản từ sao kê (mã hồ sơ đã bỏ dấu gạch) vẫn tìm ra hồ sơ
+      const byNote =
+        /^[A-Za-z0-9]{6,25}$/.test(text)
+          ? (await this.prisma.$queryRaw<{ application_id: bigint }[]>`SELECT application_id FROM application WHERE REPLACE(application_code, '-', '') LIKE ${`%${text}%`} LIMIT 200`).map((r) => r.application_id)
+          : [];
       and.push({
         OR: [
           { application_code: { contains: text } },
+          ...(byNote.length ? [{ application_id: { in: byNote } }] : []),
           { candidate: { full_name: { contains: text } } },
           { candidate: { id_number: { contains: text } } },
           { candidate: { candidate_account: { email: { contains: text } } } },
@@ -315,7 +321,7 @@ export class ApplicationsService {
               gatewayStatus: pay.gateway_status,
               paidAt: iso(pay.paid_at),
               receiptNo: pay.receipt_no,
-              transferContent: `${a.application_code} ${id(a.candidate_id)}`,
+              transferContent: transferNote(a.application_code),
             }
           : null,
         supplements: a.supplement_request.map((s) => ({
@@ -382,12 +388,13 @@ export class ApplicationsService {
 
   /** Cấu hình lệ phí và tài khoản nhận chuyển khoản (bảng system_config) */
   async paymentSettings() {
-    const keys = ["APPLICATION_FEE_THAC_SI", "APPLICATION_FEE_TIEN_SI", "PAYMENT_BANK_NAME", "PAYMENT_ACCOUNT_NO", "PAYMENT_ACCOUNT_NAME"];
+    const keys = ["APPLICATION_FEE_THAC_SI", "APPLICATION_FEE_TIEN_SI", "PAYMENT_BANK_BIN", "PAYMENT_BANK_NAME", "PAYMENT_ACCOUNT_NO", "PAYMENT_ACCOUNT_NAME"];
     const rows = await this.prisma.system_config.findMany({ where: { config_key: { in: keys } } });
     const v = (k: string) => rows.find((r) => r.config_key === k)?.config_value?.trim() ?? "";
     return {
       feeThacSi: Number(v("APPLICATION_FEE_THAC_SI")) || 600_000,
       feeTienSi: Number(v("APPLICATION_FEE_TIEN_SI")) || 1_000_000,
+      bankBin: v("PAYMENT_BANK_BIN"),
       bankName: v("PAYMENT_BANK_NAME"),
       accountNo: v("PAYMENT_ACCOUNT_NO"),
       accountName: v("PAYMENT_ACCOUNT_NAME"),
@@ -402,10 +409,13 @@ export class ApplicationsService {
     };
     const text = (x: unknown, max: number) => String(x ?? "").trim().replace(/\s+/g, " ").slice(0, max);
     const accountNo = text(body.accountNo, 40).replace(/\s/g, "");
-    if (accountNo && !/^[0-9A-Za-z-]{4,40}$/.test(accountNo)) fail("VALIDATION", "Số tài khoản chỉ gồm chữ số (có thể có chữ cái, gạch ngang).");
+    if (accountNo && !/^[0-9A-Za-z]{4,19}$/.test(accountNo)) fail("VALIDATION", "Số tài khoản gồm 4–19 chữ số (hoặc chữ cái), không có dấu cách hay gạch ngang.");
+    const bankBin = text(body.bankBin, 6);
+    if (bankBin && !/^\d{6}$/.test(bankBin)) fail("VALIDATION", "Mã ngân hàng (BIN) gồm 6 chữ số.");
     const values: [string, string, string][] = [
       ["APPLICATION_FEE_THAC_SI", fee(body.feeThacSi, "Lệ phí thạc sĩ"), "Lệ phí xét tuyển thạc sĩ (đồng)"],
       ["APPLICATION_FEE_TIEN_SI", fee(body.feeTienSi, "Lệ phí tiến sĩ"), "Lệ phí xét tuyển tiến sĩ (đồng)"],
+      ["PAYMENT_BANK_BIN", bankBin, "Mã BIN ngân hàng nhận lệ phí (NAPAS), dùng tạo mã VietQR"],
       ["PAYMENT_BANK_NAME", text(body.bankName, 200), "Ngân hàng nhận lệ phí"],
       ["PAYMENT_ACCOUNT_NO", accountNo, "Số tài khoản nhận lệ phí"],
       ["PAYMENT_ACCOUNT_NAME", text(body.accountName, 200).toUpperCase(), "Tên chủ tài khoản nhận lệ phí"],

@@ -12,6 +12,7 @@ USE admission_db;
 INSERT INTO system_config (config_key, config_value, description) VALUES
     ('APPLICATION_FEE_THAC_SI', '600000',  'Lệ phí xét tuyển thạc sĩ (đồng)'),
     ('APPLICATION_FEE_TIEN_SI', '1000000', 'Lệ phí xét tuyển tiến sĩ (đồng)'),
+    ('PAYMENT_BANK_BIN',        '',        'Mã BIN ngân hàng nhận lệ phí (NAPAS), dùng tạo mã VietQR'),
     ('PAYMENT_BANK_NAME',       '',        'Ngân hàng nhận lệ phí'),
     ('PAYMENT_ACCOUNT_NO',      '',        'Số tài khoản nhận lệ phí'),
     ('PAYMENT_ACCOUNT_NAME',    '',        'Tên chủ tài khoản nhận lệ phí')

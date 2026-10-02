@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Input";
 import Badge, { admissionStatusLabel, admissionStatusTone, reviewStatusLabel, reviewStatusTone } from "@/components/ui/Badge";
 import { Alert, errMsg } from "@/components/auth/AuthBits";
 import DocSlot from "@/components/application/DocSlot";
+import VietQrCode from "@/components/payment/VietQrCode";
 import { getMyFullApplication, submitSupplement, uploadDocument } from "@/lib/api";
 import { fmtDate, fmtDateTime, timeLeft } from "@/lib/announcements";
 import { checkFile, DEGREE_LABEL, DOC_LABEL, EDU_LABEL, fmtMoney, fmtSize, HISTORY_LABEL, VERIFY_LABEL } from "@/lib/application";
@@ -260,16 +261,38 @@ function StatusInner() {
                 Số tiền: <span className="text-lg font-extrabold text-gray-900">{fmtMoney(app.payment.amount)}</span>
               </p>
               {hasBank && bank ? (
-                <dl className="mt-4 grid gap-3 rounded-input bg-gray-50 p-4 sm:grid-cols-2">
-                  <Row label="Ngân hàng">{bank.bankName}</Row>
-                  <Row label="Chủ tài khoản">{bank.accountName}</Row>
-                  <Row label="Số tài khoản" copy={bank.accountNo} mono>
-                    {bank.accountNo}
-                  </Row>
-                  <Row label="Nội dung chuyển khoản" copy={app.payment.transferContent} mono>
-                    {app.payment.transferContent}
-                  </Row>
-                </dl>
+                <div className="mt-4 flex flex-col gap-5 rounded-input bg-gray-50 p-4 sm:flex-row sm:items-start">
+                  {bank.bankBin && (
+                    <div className="flex shrink-0 flex-col items-center gap-1 self-center sm:self-start">
+                      <VietQrCode
+                        bin={bank.bankBin}
+                        accountNo={bank.accountNo}
+                        amount={app.payment.amount}
+                        note={app.payment.transferContent}
+                        size={200}
+                        fileName={`ma-qr-le-phi-${app.payment.transferContent}`}
+                        caption={`${fmtMoney(app.payment.amount)} - ${app.payment.transferContent}`}
+                      />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    {bank.bankBin && (
+                      <p className="mb-3 text-[13px] text-gray-700">
+                        <span className="font-semibold">Cách nhanh nhất:</span> mở app ngân hàng bất kỳ, chọn <span className="font-semibold">Quét QR</span> và quét mã QR này. Số tài khoản, số tiền và nội dung đã được điền sẵn. Dùng điện thoại xem trang này thì bấm “Tải ảnh mã QR”, rồi trong app chọn quét từ ảnh.
+                      </p>
+                    )}
+                    <dl className="grid gap-3 sm:grid-cols-2">
+                      <Row label="Ngân hàng">{bank.bankName}</Row>
+                      <Row label="Chủ tài khoản">{bank.accountName}</Row>
+                      <Row label="Số tài khoản" copy={bank.accountNo} mono>
+                        {bank.accountNo}
+                      </Row>
+                      <Row label="Nội dung chuyển khoản" copy={app.payment.transferContent} mono>
+                        {app.payment.transferContent}
+                      </Row>
+                    </dl>
+                  </div>
+                </div>
               ) : (
                 <div className="mt-4 rounded-input bg-gray-50 p-4 text-sm text-gray-700">
                   Nộp lệ phí trực tiếp tại Phòng Đào tạo Sau đại học, Trường Đại học An Giang, và báo mã hồ sơ{" "}
@@ -277,7 +300,7 @@ function StatusInner() {
                 </div>
               )}
               <p className="mt-3 text-xs text-gray-500">
-                Ghi đúng nội dung chuyển khoản để Phòng Đào tạo đối chiếu. Trạng thái sẽ chuyển sang “Đã nộp” sau khi cán bộ xác nhận (thường trong 1–2 ngày làm việc). Hồ sơ chỉ được kết luận đạt khi đã nộp lệ phí.
+                Nếu chuyển khoản thủ công, ghi đúng nội dung chuyển khoản để Phòng Đào tạo đối chiếu. Trạng thái sẽ chuyển sang “Đã nộp” sau khi cán bộ xác nhận (thường trong 1–2 ngày làm việc). Hồ sơ chỉ được kết luận đạt khi đã nộp lệ phí.
               </p>
             </>
           )}

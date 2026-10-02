@@ -134,7 +134,7 @@ export interface FullApplication {
     receiptNo: string | null;
     paidAt: string | null;
     transferContent: string;
-    bank: { bankName: string; accountNo: string; accountName: string };
+    bank: { bankBin?: string; bankName: string; accountNo: string; accountName: string };
   } | null;
   supplement: { content: string; deadline: string } | null;
   history: { status: ReviewStatus; at: string; by: "CANDIDATE" | "STAFF" | "SYSTEM"; reason: string | null }[];

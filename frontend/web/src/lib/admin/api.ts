@@ -554,11 +554,13 @@ export async function confirmPayment(applicationId: number, data: { receiptNo?: 
 export interface PaymentSettings {
   feeThacSi: number;
   feeTienSi: number;
+  /** Mã BIN NAPAS của ngân hàng (6 số) — cần để tạo mã VietQR */
+  bankBin: string;
   bankName: string;
   accountNo: string;
   accountName: string;
 }
-let mockPaymentSettings: PaymentSettings = { feeThacSi: 600000, feeTienSi: 1000000, bankName: "", accountNo: "", accountName: "" };
+let mockPaymentSettings: PaymentSettings = { feeThacSi: 600000, feeTienSi: 1000000, bankBin: "", bankName: "", accountNo: "", accountName: "" };
 
 /** GET /admin/payment-settings */
 export async function getPaymentSettings(): Promise<PaymentSettings> {

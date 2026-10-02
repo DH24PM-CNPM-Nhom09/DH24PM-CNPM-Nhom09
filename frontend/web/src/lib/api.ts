@@ -293,7 +293,7 @@ export async function submitMyApplication(): Promise<FullApplication> {
       submittedAt: now,
       canEdit: false,
       history: [{ status: "SUBMITTED", at: now, by: "CANDIDATE", reason: "Thí sinh nộp hồ sơ" }],
-      payment: { amount: a.fee, status: "PENDING", method: "BANK_TRANSFER", receiptNo: null, paidAt: null, transferContent: `${a.applicationCode} 1`, bank: { bankName: "", accountNo: "", accountName: "" } },
+      payment: { amount: a.fee, status: "PENDING", method: "BANK_TRANSFER", receiptNo: null, paidAt: null, transferContent: a.applicationCode.replace(/[^A-Za-z0-9]/g, ""), bank: { bankBin: "", bankName: "", accountNo: "", accountName: "" } },
     };
     return delay(mockFull());
   }

@@ -30,3 +30,11 @@ export function parseReviewStatus(s: string | null | undefined): string | null {
   const m = s.match(/review=([A-Z_]+)/);
   return m ? m[1] : /^[A-Z_]+$/.test(s) ? s : null;
 }
+
+/**
+ * Nội dung chuyển khoản lệ phí = mã hồ sơ bỏ dấu gạch (chỉ chữ và số, tối đa 25 ký tự)
+ * để mọi ngân hàng và mã VietQR đều giữ nguyên. Ví dụ THS-2026-D2-8340101-00050 -> THS2026D2834010100050
+ */
+export function transferNote(applicationCode: string) {
+  return applicationCode.replace(/[^A-Za-z0-9]/g, "").slice(0, 25);
+}

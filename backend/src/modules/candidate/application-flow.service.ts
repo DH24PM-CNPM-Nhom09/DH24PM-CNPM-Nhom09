@@ -6,7 +6,7 @@ import { AuditService } from "../../common/audit.service";
 import type { CandidateUser } from "../../common/auth";
 import { env, SystemConfigService } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
-import { dec, id, iso, isoReq, num, parseReviewStatus, str } from "../../common/util";
+import { dec, id, iso, isoReq, num, parseReviewStatus, str, transferNote } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ApplicationsService } from "../admin/applications.service";
 
@@ -110,6 +110,7 @@ export class ApplicationFlowService {
     const prop = a.research_proposal;
     const supReq = prop?.supervisor_request[0] ?? null;
     const bank = {
+      bankBin: await this.config.text("PAYMENT_BANK_BIN"),
       bankName: await this.config.text("PAYMENT_BANK_NAME"),
       accountNo: await this.config.text("PAYMENT_ACCOUNT_NO"),
       accountName: await this.config.text("PAYMENT_ACCOUNT_NAME"),
@@ -170,7 +171,7 @@ export class ApplicationFlowService {
             method: pay.payment_method,
             receiptNo: pay.receipt_no,
             paidAt: iso(pay.paid_at),
-            transferContent: `${a.application_code} ${a.candidate_id}`,
+            transferContent: transferNote(a.application_code),
             bank,
           }
         : null,
@@ -361,7 +362,7 @@ export class ApplicationFlowService {
         candidateId,
         `Đã nhận hồ sơ ${a.application_code}`,
         `Hồ sơ ${a.application_code} (${a.admission_batch_major.admission_major.major_name}, ${a.admission_batch_major.admission_batch.batch_name}) đã được nộp thành công.\n` +
-          `Vui lòng nộp lệ phí xét tuyển ${amount.toLocaleString("vi-VN")} đồng theo hướng dẫn trên cổng thông tin, ghi nội dung chuyển khoản: ${a.application_code} ${candidateId}.\n` +
+          `Vui lòng nộp lệ phí xét tuyển ${amount.toLocaleString("vi-VN")} đồng theo hướng dẫn trên cổng thông tin, ghi nội dung chuyển khoản: ${transferNote(a.application_code)} (có mã QR trên cổng thông tin, quét bằng app ngân hàng là điền sẵn).\n` +
           `Cán bộ tuyển sinh sẽ tiếp nhận và thẩm định hồ sơ; kết quả được thông báo qua cổng và email.`,
         tx,
       );
