@@ -100,6 +100,8 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   CANDIDATE_REGISTER: "Thí sinh đăng ký tài khoản",
   STAFF_PASSWORD_CHANGE: "Đổi mật khẩu",
   STAFF_UPDATE: "Sửa thông tin cán bộ",
+  STAFF_OFFBOARD: "Cho nghỉ việc",
+  STAFF_RESTORE: "Khôi phục tài khoản",
   STAFF_PASSWORD_RESET: "Cấp lại mật khẩu tạm",
   STAFF_LOGIN_LOCKED: "Tạm khóa do đăng nhập sai nhiều lần",
   COMPLAINT_SUBMIT: "Thí sinh gửi khiếu nại",

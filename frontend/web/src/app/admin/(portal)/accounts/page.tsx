@@ -4,7 +4,7 @@ import { useState } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import { IconPlus } from "@/components/admin/Icons";
 import { Btn, EmptyState, ErrorBox, fieldCls, Label, LoadingRows, Modal, PageHeader, StaffStatusBadge, useToast } from "@/components/admin/ui";
-import { createStaff, listStaff, refreshStaff, resetStaffPassword, setStaffStatus, updateStaffInfo, updateStaffRoles, USE_MOCK } from "@/lib/admin/api";
+import { createStaff, listStaff, offboardStaff, refreshStaff, resetStaffPassword, restoreStaff, setStaffStatus, updateStaffInfo, updateStaffRoles, USE_MOCK } from "@/lib/admin/api";
 import { readSession, writeSession } from "@/lib/admin/session";
 import { errorMessage } from "@/lib/admin/format";
 import { ALL_ROLES, PERMISSION_MATRIX, ROLE_DESCRIPTION, ROLE_LABEL } from "@/lib/admin/permissions";
@@ -39,7 +39,10 @@ function RolePicker({ value, onChange }: { value: RoleCode[]; onChange: (v: Role
 function AccountsInner() {
   const { staff: me } = useAdmin();
   const toast = useToast();
-  const { data, error, loading, reload } = useAsync(listStaff, []);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const { data, error, loading, reload } = useAsync(() => listStaff(showDeleted), [showDeleted]);
+  const [offTarget, setOffTarget] = useState<StaffAccount | null>(null);
+  const [offReason, setOffReason] = useState("");
   const [q, setQ] = useState("");
   const [roleTarget, setRoleTarget] = useState<StaffAccount | null>(null);
   const [roles, setRoles] = useState<RoleCode[]>([]);
@@ -81,10 +84,14 @@ function AccountsInner() {
         }
       />
 
-      <div className="mb-4 max-w-sm">
-        <label>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label className="w-full max-w-sm">
           <span className="sr-only">Tìm cán bộ</span>
           <input className={fieldCls} placeholder="Tìm theo tên, email hoặc mã cán bộ" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" className="h-4 w-4 accent-[#E8734A]" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+          Hiện cán bộ đã nghỉ việc
         </label>
       </div>
 
@@ -109,19 +116,19 @@ function AccountsInner() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {list.map((s) => (
-                  <tr key={s.staffAccountId}>
+                  <tr key={s.staffAccountId} className={s.deletedAt ? "bg-gray-50 text-gray-400 [&_*]:!text-gray-400" : ""}>
                     <td className="px-5 py-3.5">
                       <p className="font-semibold text-gray-900">
                         {s.fullName}
                         {s.staffAccountId === me.staffAccountId && <span className="ml-2 text-xs font-normal text-gray-400">(bạn)</span>}
-                        <button
+                        {!s.deletedAt && <button
                           type="button"
                           onClick={() => { setFormError(""); setEditTarget(s); setEditName(s.fullName); }}
                           className="ml-2 rounded px-1.5 py-0.5 text-xs font-semibold text-accent hover:bg-accent-50"
                           aria-label={`Sửa họ tên ${s.fullName}`}
                         >
                           Sửa tên
-                        </button>
+                        </button>}
                       </p>
                       <p className="text-[13px] text-gray-500">
                         <span className="font-mono">{s.staffCode}</span>, {s.email}
@@ -141,10 +148,33 @@ function AccountsInner() {
                       {s.mustChangePassword && <span className="mt-0.5 block text-xs font-semibold text-[#92400E]">Chờ đổi mật khẩu tạm</span>}
                     </td>
                     <td className="px-5 py-3.5">
-                      <StaffStatusBadge status={s.status} />
+                      {s.deletedAt ? (
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-gray-200 px-2.5 py-1 text-xs font-semibold">
+                          Đã nghỉ việc {new Date(s.deletedAt).toLocaleDateString("vi-VN")}
+                        </span>
+                      ) : (
+                        <StaffStatusBadge status={s.status} />
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="flex justify-end gap-2">
+                      {s.deletedAt ? (
+                        <div className="flex justify-end">
+                          <Btn size="sm" className="!text-gray-700" loading={busy} onClick={async () => {
+                              setBusy(true);
+                              try {
+                                await restoreStaff(s.staffAccountId);
+                                toast(`Đã khôi phục tài khoản ${s.fullName}.`);
+                              } catch (e) {
+                                toast(errorMessage(e), "error");
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}>
+                            Khôi phục
+                          </Btn>
+                        </div>
+                      ) : (
+                      <div className="flex flex-wrap justify-end gap-2">
                         <Btn size="sm" onClick={() => { setFormError(""); setRoleTarget(s); setRoles(s.roles); }}>
                           Phân quyền
                         </Btn>
@@ -158,7 +188,13 @@ function AccountsInner() {
                             {s.status === "ACTIVE" ? "Khóa" : "Mở khóa"}
                           </Btn>
                         )}
+                        {s.staffAccountId !== me.staffAccountId && (
+                          <Btn size="sm" variant="danger" onClick={() => { setFormError(""); setOffReason(""); setOffTarget(s); }} title="Cán bộ nghỉ làm: vô hiệu tài khoản, giữ nguyên lịch sử">
+                            Cho nghỉ việc
+                          </Btn>
+                        )}
                       </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -261,6 +297,48 @@ function AccountsInner() {
         <div className="mt-5">
           <RolePicker value={form.roles} onChange={(r) => setForm({ ...form, roles: r })} />
         </div>
+        {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
+      </Modal>
+      <Modal
+        open={!!offTarget}
+        onClose={() => setOffTarget(null)}
+        title="Cho cán bộ nghỉ việc?"
+        description="Tài khoản bị vô hiệu ngay và ẩn khỏi danh sách. Dữ liệu KHÔNG bị xóa: lịch sử thẩm định, nhật ký, thông báo đã đăng vẫn giữ tên người này. Hồ sơ người này đang phụ trách mà chưa kết luận sẽ được trả về hàng chờ cho cán bộ khác tiếp nhận."
+        footer={
+          <>
+            <Btn onClick={() => setOffTarget(null)}>Hủy</Btn>
+            <Btn
+              variant="danger"
+              loading={busy}
+              onClick={() =>
+                offTarget &&
+                run(
+                  async () => {
+                    const r = await offboardStaff(offTarget.staffAccountId, offReason);
+                    if (r.releasedApplications) toast(`Đã trả ${r.releasedApplications} hồ sơ về hàng chờ.`, "info");
+                  },
+                  `Đã cho ${offTarget.fullName} nghỉ việc.`,
+                  () => setOffTarget(null),
+                )
+              }
+            >
+              Xác nhận cho nghỉ việc
+            </Btn>
+          </>
+        }
+      >
+        {offTarget && (
+          <div className="grid gap-3">
+            <p className="rounded-input bg-gray-50 px-3 py-2.5 text-sm">
+              <span className="font-semibold text-gray-900">{offTarget.fullName}</span> <span className="text-gray-500">({offTarget.staffCode}, {offTarget.email})</span>
+            </p>
+            <div>
+              <Label htmlFor="off-reason">Lý do (không bắt buộc)</Label>
+              <input id="off-reason" className={fieldCls} maxLength={200} placeholder="VD: Chuyển công tác từ 01/11/2026" value={offReason} onChange={(e) => setOffReason(e.target.value)} />
+            </div>
+            <p className="text-xs text-gray-500">Có thể khôi phục lại khi người này quay lại làm: bật “Hiện cán bộ đã nghỉ việc” rồi bấm “Khôi phục”.</p>
+          </div>
+        )}
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
       </Modal>
       <Modal

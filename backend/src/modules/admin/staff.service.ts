@@ -31,8 +31,13 @@ export class StaffService {
     private readonly audit: AuditService,
   ) {}
 
-  async list() {
-    const rows = await this.prisma.staff_account.findMany({ where: { deleted_at: null }, include: withRoles, orderBy: { staff_account_id: "asc" } });
+  /** includeDeleted: kèm cả cán bộ đã nghỉ việc (để xem lại hoặc khôi phục) */
+  async list(includeDeleted = false) {
+    const rows = await this.prisma.staff_account.findMany({
+      where: includeDeleted ? {} : { deleted_at: null },
+      include: withRoles,
+      orderBy: [{ deleted_at: "asc" }, { staff_account_id: "asc" }],
+    });
     return rows.map(toStaffDto);
   }
 
@@ -62,7 +67,14 @@ export class StaffService {
     if (!/^[A-Z0-9-]{2,30}$/.test(staffCode)) fail("INVALID_CODE", "Mã cán bộ chỉ gồm chữ in hoa, số và dấu gạch ngang.");
     if (fullName.length < 3) fail("NAME_REQUIRED", "Nhập họ tên đầy đủ.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("INVALID_EMAIL", "Email không hợp lệ.");
-    if (await this.prisma.staff_account.count({ where: { email } })) conflict("DUPLICATE_EMAIL", "Email đã được dùng cho tài khoản khác.");
+    const sameEmail = await this.prisma.staff_account.findFirst({ where: { email } });
+    if (sameEmail)
+      conflict(
+        "DUPLICATE_EMAIL",
+        sameEmail.deleted_at
+          ? `Email này thuộc cán bộ đã nghỉ việc (${sameEmail.full_name}). Bật “Hiện cán bộ đã nghỉ việc” rồi bấm “Khôi phục” nếu người này quay lại làm.`
+          : "Email đã được dùng cho tài khoản khác.",
+      );
     if (await this.prisma.staff_account.count({ where: { staff_code: staffCode } })) conflict("DUPLICATE_CODE", "Mã cán bộ đã tồn tại.");
     const ids = await this.roleIds(roles);
     const temporaryPassword = body.allowPassword === true ? tempPassword() : null;
@@ -133,6 +145,55 @@ export class StaffService {
       return u;
     });
     return toStaffDto(updated);
+  }
+
+  /** Không cho hệ thống rơi vào cảnh không còn quản trị nào đăng nhập được */
+  private async assertNotLastAdmin(staffId: number, roles: string[]) {
+    if (!roles.includes("ADMIN")) return;
+    const others = await this.prisma.staff_account.count({
+      where: { deleted_at: null, status: "ACTIVE", staff_account_id: { not: BigInt(staffId) }, staff_role: { some: { role: { role_code: "ADMIN" } } } },
+    });
+    if (!others) fail("LAST_ADMIN", "Đây là tài khoản Quản trị duy nhất còn hoạt động. Hãy cấp vai trò Quản trị cho người khác trước.");
+  }
+
+  /**
+   * Cho cán bộ nghỉ việc: KHÔNG xóa khỏi CSDL (giữ nguyên lịch sử thẩm định, nhật ký, người đăng thông báo).
+   * Đánh dấu deleted_at + status DISABLED -> không đăng nhập được, ẩn khỏi danh sách; các hồ sơ đang
+   * phụ trách mà chưa kết luận được trả về hàng chờ để cán bộ khác tiếp nhận.
+   */
+  async offboard(me: StaffUser, staffId: number, body: Record<string, unknown>) {
+    if (staffId === me.staffAccountId) fail("SELF_OFFBOARD", "Không thể tự cho mình nghỉ việc.");
+    const s = await this.prisma.staff_account.findFirst({ where: { staff_account_id: BigInt(staffId), deleted_at: null }, include: withRoles });
+    if (!s) notFound("Không tìm thấy tài khoản (hoặc cán bộ đã nghỉ việc).");
+    await this.assertNotLastAdmin(staffId, s.staff_role.map((r) => r.role.role_code));
+    const reason = str(body.reason).trim().slice(0, 200);
+    const released = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.application.updateMany({
+        where: { assigned_staff_id: s.staff_account_id, review_status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT"] } },
+        data: { assigned_staff_id: null },
+      });
+      await tx.staff_account.update({ where: { staff_account_id: s.staff_account_id }, data: { deleted_at: new Date(), status: "DISABLED" } });
+      await this.audit.record(
+        { type: "STAFF", id: me.staffAccountId },
+        "STAFF_OFFBOARD",
+        { table: "staff_account", id: s.staff_account_id },
+        `Cho nghỉ việc ${s.staff_code} (${s.full_name})${reason ? `: ${reason}` : ""}${r.count ? `; trả ${r.count} hồ sơ về hàng chờ` : ""}`,
+        tx,
+      );
+      return r.count;
+    });
+    return { success: true, releasedApplications: released };
+  }
+
+  /** Khôi phục cán bộ đã nghỉ việc (quay lại làm): giữ nguyên vai trò cũ */
+  async restore(me: StaffUser, staffId: number) {
+    const s = await this.prisma.staff_account.findFirst({ where: { staff_account_id: BigInt(staffId), deleted_at: { not: null } } });
+    if (!s) notFound("Không tìm thấy cán bộ đã nghỉ việc này.");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.staff_account.update({ where: { staff_account_id: s.staff_account_id }, data: { deleted_at: null, status: "ACTIVE", failed_login_count: 0, locked_until: null } });
+      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "STAFF_RESTORE", { table: "staff_account", id: s.staff_account_id }, `Khôi phục tài khoản ${s.staff_code} (${s.full_name})`, tx);
+    });
+    return { success: true };
   }
 
   async setStatus(me: StaffUser, staffId: number, status: string) {

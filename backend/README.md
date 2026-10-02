@@ -155,6 +155,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 - **Tài khoản cán bộ**:
   - Mật khẩu tạm (khi quản trị cấp tài khoản hoặc "Cấp lại mật khẩu") bắt buộc phải đổi ở lần đăng nhập đầu; trong lúc đó backend chặn mọi API khác (`PASSWORD_CHANGE_REQUIRED`).
   - Mật khẩu cán bộ: ≥ 8 ký tự, có chữ hoa, chữ thường, chữ số, không chứa tên email.
+  - Cán bộ nghỉ việc: "Cho nghỉ việc" chỉ ẩn và vô hiệu tài khoản (deleted_at), KHÔNG xóa dữ liệu, để giữ lịch sử thẩm định và nhật ký; hồ sơ đang phụ trách chưa kết luận được trả về hàng chờ. Có thể "Khôi phục" khi quay lại làm. Không cho nghỉ việc tài khoản Quản trị duy nhất.
   - Đăng nhập sai 5 lần liên tiếp thì khóa tạm 15 phút (cùng cấu hình `LOGIN_MAX_FAILED`, `LOGIN_LOCK_MINUTES` với thí sinh).
 - **Thông báo**: thông báo `PUBLISHED` ai cũng xem được (kể cả chưa đăng nhập); chỉ cán bộ tuyển sinh được soạn, đăng, gỡ. Mọi thao tác ghi nhật ký.
 - **Lỗi**: luôn trả về `{ error_code, message }` bằng tiếng Việt.
@@ -179,7 +180,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | POST/PATCH/PUT | `/admission-batches`, `/admission-batches/:id/status`, `/admission-batches/:id/majors`, `/admission-batch-majors/:id` | batch:manage |
 | PATCH | `/admission-batch-majors/:id/approve` | batch:approve |
 | GET / POST | `/score-appeals`, `/score-appeals/:id/resolve` | appeal:view / appeal:resolve |
-| GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id` (sửa họ tên), `/staff-accounts/:id/status`, `/staff-accounts/:id/reset-password` | account:manage |
+| GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id` (sửa họ tên), `/staff-accounts/:id/status`, `/staff-accounts/:id/reset-password`, `/staff-accounts/:id/offboard`, `/staff-accounts/:id/restore` | account:manage |
 | POST | `/auth/staff/change-password` | cán bộ (kể cả khi đang bị bắt đổi mật khẩu) |
 | GET | `/audit-logs` | audit:view |
 | GET/PATCH | `/candidates/me` | thí sinh |

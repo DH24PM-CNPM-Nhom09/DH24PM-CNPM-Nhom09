@@ -148,8 +148,8 @@ export class StaffController {
 
   @Get()
   @RequirePermission("account:manage")
-  list() {
-    return this.svc.list();
+  list(@Query() q: Q) {
+    return this.svc.list(q.includeDeleted === "true");
   }
 
   @Post()
@@ -174,6 +174,18 @@ export class StaffController {
   @RequirePermission("account:manage")
   updateInfo(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
     return this.svc.updateInfo(asStaff(user), id, body);
+  }
+
+  @Patch(":id/offboard")
+  @RequirePermission("account:manage")
+  offboard(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.offboard(asStaff(user), id, body);
+  }
+
+  @Patch(":id/restore")
+  @RequirePermission("account:manage")
+  restore(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.restore(asStaff(user), id);
   }
 
   @Patch(":id/reset-password")

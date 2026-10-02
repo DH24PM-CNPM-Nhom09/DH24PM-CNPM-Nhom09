@@ -14,6 +14,7 @@ export function toStaffDto(s: StaffWithRoles) {
     hasPassword: !!s.password_hash,
     mustChangePassword: s.must_change_password,
     status: s.status,
+    deletedAt: iso(s.deleted_at),
     roles: s.staff_role.map((r) => r.role.role_code),
   };
 }

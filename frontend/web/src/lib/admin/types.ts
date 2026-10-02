@@ -23,6 +23,8 @@ export interface StaffAccount {
   /** Đang dùng mật khẩu tạm do quản trị cấp -> phải đổi trước khi dùng hệ thống */
   mustChangePassword?: boolean;
   status: StaffStatus;
+  /** Có giá trị = cán bộ đã nghỉ việc (ẩn khỏi danh sách, không đăng nhập được, giữ lịch sử) */
+  deletedAt?: string | null;
   roles: RoleCode[];
 }
 

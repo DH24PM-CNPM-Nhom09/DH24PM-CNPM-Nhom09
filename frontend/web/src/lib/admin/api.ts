@@ -859,10 +859,47 @@ export async function resolveAppeal(appealId: number, decision: { changed: boole
 // ============================================================================
 // M1 — Tài khoản cán bộ (Admin)                  GET/POST/PATCH /staff-accounts
 // ============================================================================
-export async function listStaff(): Promise<StaffAccount[]> {
-  if (!USE_MOCK) return request<StaffAccount[]>("/staff-accounts");
+export async function listStaff(includeDeleted = false): Promise<StaffAccount[]> {
+  if (!USE_MOCK) return request<StaffAccount[]>(`/staff-accounts${includeDeleted ? "?includeDeleted=true" : ""}`);
   requirePermission("account:manage");
-  return delay(getDb().staff);
+  return delay(getDb().staff.filter((s) => includeDeleted || !s.deletedAt));
+}
+
+/** Cho cán bộ nghỉ việc: vô hiệu + ẩn tài khoản, KHÔNG xóa dữ liệu; hồ sơ đang phụ trách trả về hàng chờ */
+export async function offboardStaff(staffAccountId: number, reason: string): Promise<{ releasedApplications: number }> {
+  if (!USE_MOCK) return request<{ releasedApplications: number }>(`/staff-accounts/${staffAccountId}/offboard`, { method: "PATCH", body: JSON.stringify({ reason }) });
+  const me = requirePermission("account:manage");
+  const db = getDb();
+  const s = db.staff.find((x) => x.staffAccountId === staffAccountId && !x.deletedAt);
+  if (!s) fail("NOT_FOUND", "Không tìm thấy tài khoản.");
+  if (s.staffAccountId === me.staffAccountId) fail("SELF_OFFBOARD", "Không thể tự cho mình nghỉ việc.");
+  if (s.roles.includes("ADMIN") && !db.staff.some((x) => x.staffAccountId !== s.staffAccountId && !x.deletedAt && x.status === "ACTIVE" && x.roles.includes("ADMIN")))
+    fail("LAST_ADMIN", "Đây là tài khoản Quản trị duy nhất còn hoạt động. Hãy cấp vai trò Quản trị cho người khác trước.");
+  let released = 0;
+  db.applications.forEach((a) => {
+    if (a.assignedStaffId === staffAccountId && ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT"].includes(a.reviewStatus)) {
+      a.assignedStaffId = null;
+      released++;
+    }
+  });
+  s.deletedAt = new Date().toISOString();
+  s.status = "DISABLED";
+  audit(db, me.staffAccountId, "STAFF_OFFBOARD", "staff_account", staffAccountId, `Cho nghỉ việc ${s.staffCode} (${s.fullName})${reason ? `: ${reason}` : ""}`);
+  commit();
+  return delay({ releasedApplications: released });
+}
+
+export async function restoreStaff(staffAccountId: number) {
+  if (!USE_MOCK) return request(`/staff-accounts/${staffAccountId}/restore`, { method: "PATCH" });
+  const me = requirePermission("account:manage");
+  const db = getDb();
+  const s = db.staff.find((x) => x.staffAccountId === staffAccountId && x.deletedAt);
+  if (!s) fail("NOT_FOUND", "Không tìm thấy cán bộ đã nghỉ việc này.");
+  s.deletedAt = null;
+  s.status = "ACTIVE";
+  audit(db, me.staffAccountId, "STAFF_RESTORE", "staff_account", staffAccountId, `Khôi phục tài khoản ${s.staffCode} (${s.fullName})`);
+  commit();
+  return delay({ success: true });
 }
 
 export async function createStaff(dto: { staffCode: string; fullName: string; email: string; roles: RoleCode[]; allowPassword: boolean }): Promise<StaffAccount & { temporaryPassword?: string | null }> {
