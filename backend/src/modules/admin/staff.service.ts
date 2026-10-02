@@ -120,6 +120,21 @@ export class StaffService {
     return { temporaryPassword };
   }
 
+  /** Sửa thông tin hiển thị của cán bộ (họ tên). Email và mã cán bộ là định danh nên không đổi. */
+  async updateInfo(me: StaffUser, staffId: number, body: Record<string, unknown>) {
+    const fullName = str(body.fullName).trim().replace(/\s+/g, " ");
+    if (fullName.length < 2 || fullName.length > 255) fail("NAME_REQUIRED", "Họ tên cần từ 2 đến 255 ký tự.");
+    const s = await this.prisma.staff_account.findFirst({ where: { staff_account_id: BigInt(staffId), deleted_at: null }, include: withRoles });
+    if (!s) notFound("Không tìm thấy tài khoản.");
+    if (s.full_name === fullName) return toStaffDto(s);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.staff_account.update({ where: { staff_account_id: s.staff_account_id }, data: { full_name: fullName }, include: withRoles });
+      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "STAFF_UPDATE", { table: "staff_account", id: s.staff_account_id }, `${s.staff_code}: đổi tên “${s.full_name}” → “${fullName}”`, tx);
+      return u;
+    });
+    return toStaffDto(updated);
+  }
+
   async setStatus(me: StaffUser, staffId: number, status: string) {
     if (!["ACTIVE", "LOCKED", "DISABLED"].includes(status)) fail("VALIDATION", "Trạng thái không hợp lệ.");
     if (staffId === me.staffAccountId) fail("SELF_LOCKOUT", "Không thể khóa tài khoản đang đăng nhập.");

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import { IconPlus } from "@/components/admin/Icons";
 import { Btn, EmptyState, ErrorBox, fieldCls, Label, LoadingRows, Modal, PageHeader, StaffStatusBadge, useToast } from "@/components/admin/ui";
-import { createStaff, listStaff, resetStaffPassword, setStaffStatus, updateStaffRoles } from "@/lib/admin/api";
+import { createStaff, listStaff, refreshStaff, resetStaffPassword, setStaffStatus, updateStaffInfo, updateStaffRoles, USE_MOCK } from "@/lib/admin/api";
+import { readSession, writeSession } from "@/lib/admin/session";
 import { errorMessage } from "@/lib/admin/format";
 import { ALL_ROLES, PERMISSION_MATRIX, ROLE_DESCRIPTION, ROLE_LABEL } from "@/lib/admin/permissions";
 import type { RoleCode, StaffAccount } from "@/lib/admin/types";
@@ -44,6 +45,8 @@ function AccountsInner() {
   const [roles, setRoles] = useState<RoleCode[]>([]);
   const [lockTarget, setLockTarget] = useState<StaffAccount | null>(null);
   const [resetTarget, setResetTarget] = useState<StaffAccount | null>(null);
+  const [editTarget, setEditTarget] = useState<StaffAccount | null>(null);
+  const [editName, setEditName] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ staffCode: "", fullName: "", email: "", allowPassword: false, roles: ["CAN_BO_TUYEN_SINH"] as RoleCode[] });
   const [busy, setBusy] = useState(false);
@@ -111,6 +114,14 @@ function AccountsInner() {
                       <p className="font-semibold text-gray-900">
                         {s.fullName}
                         {s.staffAccountId === me.staffAccountId && <span className="ml-2 text-xs font-normal text-gray-400">(bạn)</span>}
+                        <button
+                          type="button"
+                          onClick={() => { setFormError(""); setEditTarget(s); setEditName(s.fullName); }}
+                          className="ml-2 rounded px-1.5 py-0.5 text-xs font-semibold text-accent hover:bg-accent-50"
+                          aria-label={`Sửa họ tên ${s.fullName}`}
+                        >
+                          Sửa tên
+                        </button>
                       </p>
                       <p className="text-[13px] text-gray-500">
                         <span className="font-mono">{s.staffCode}</span>, {s.email}
@@ -250,6 +261,53 @@ function AccountsInner() {
         <div className="mt-5">
           <RolePicker value={form.roles} onChange={(r) => setForm({ ...form, roles: r })} />
         </div>
+        {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
+      </Modal>
+      <Modal
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        title="Sửa họ tên"
+        description="Tên hiển thị trong hệ thống và nhật ký. Email đăng nhập và mã cán bộ không đổi."
+        footer={
+          <>
+            <Btn onClick={() => setEditTarget(null)}>Hủy</Btn>
+            <Btn
+              variant="navy"
+              loading={busy}
+              onClick={() =>
+                editTarget &&
+                run(
+                  async () => {
+                    const updated = await updateStaffInfo(editTarget.staffAccountId, editName);
+                    // Sửa tên chính mình -> cập nhật ngay tên ở thanh bên và lời chào
+                    if (editTarget.staffAccountId === me.staffAccountId) {
+                      const ss = readSession();
+                      if (ss) writeSession({ ...ss, staff: { ...ss.staff, fullName: updated.fullName } });
+                      if (!USE_MOCK) await refreshStaff().catch(() => undefined);
+                    }
+                    await reload(true);
+                  },
+                  "Đã cập nhật họ tên.",
+                  () => setEditTarget(null),
+                )
+              }
+            >
+              Lưu
+            </Btn>
+          </>
+        }
+      >
+        {editTarget && (
+          <div>
+            <Label htmlFor="edit-name" required>
+              Họ tên
+            </Label>
+            <input id="edit-name" className={fieldCls} maxLength={255} value={editName} onChange={(e) => setEditName(e.target.value)} />
+            <p className="mt-1.5 text-xs text-gray-500">
+              {editTarget.staffCode} · {editTarget.email}
+            </p>
+          </div>
+        )}
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
       </Modal>
       <Modal

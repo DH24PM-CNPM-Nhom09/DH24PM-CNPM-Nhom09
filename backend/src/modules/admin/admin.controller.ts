@@ -170,6 +170,12 @@ export class StaffController {
     return this.svc.setStatus(asStaff(user), id, str(body.status));
   }
 
+  @Patch(":id")
+  @RequirePermission("account:manage")
+  updateInfo(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.updateInfo(asStaff(user), id, body);
+  }
+
   @Patch(":id/reset-password")
   @RequirePermission("account:manage")
   resetPassword(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {

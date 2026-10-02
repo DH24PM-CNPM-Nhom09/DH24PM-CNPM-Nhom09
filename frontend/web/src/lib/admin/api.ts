@@ -919,6 +919,21 @@ export async function setStaffStatus(staffAccountId: number, status: StaffStatus
   return delay({ success: true });
 }
 
+/** Quản trị sửa họ tên cán bộ (email, mã cán bộ là định danh nên không đổi) */
+export async function updateStaffInfo(staffAccountId: number, fullName: string): Promise<StaffAccount> {
+  if (!USE_MOCK) return request<StaffAccount>(`/staff-accounts/${staffAccountId}`, { method: "PATCH", body: JSON.stringify({ fullName }) });
+  const me = requirePermission("account:manage");
+  const db = getDb();
+  const s = db.staff.find((x) => x.staffAccountId === staffAccountId);
+  if (!s) fail("NOT_FOUND", "Không tìm thấy tài khoản.");
+  const name = fullName.trim().replace(/\s+/g, " ");
+  if (name.length < 2) fail("NAME_REQUIRED", "Họ tên cần từ 2 đến 255 ký tự.");
+  audit(db, me.staffAccountId, "STAFF_UPDATE", "staff_account", staffAccountId, `${s.staffCode}: đổi tên “${s.fullName}” → “${name}”`);
+  s.fullName = name;
+  commit();
+  return delay(structuredClone(s));
+}
+
 /** Quản trị cấp lại mật khẩu tạm cho cán bộ (cán bộ bị bắt đổi ở lần đăng nhập tới) */
 export async function resetStaffPassword(staffAccountId: number): Promise<{ temporaryPassword: string }> {
   if (!USE_MOCK) return request<{ temporaryPassword: string }>(`/staff-accounts/${staffAccountId}/reset-password`, { method: "PATCH" });

@@ -179,7 +179,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | POST/PATCH/PUT | `/admission-batches`, `/admission-batches/:id/status`, `/admission-batches/:id/majors`, `/admission-batch-majors/:id` | batch:manage |
 | PATCH | `/admission-batch-majors/:id/approve` | batch:approve |
 | GET / POST | `/score-appeals`, `/score-appeals/:id/resolve` | appeal:view / appeal:resolve |
-| GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id/status`, `/staff-accounts/:id/reset-password` | account:manage |
+| GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id` (sửa họ tên), `/staff-accounts/:id/status`, `/staff-accounts/:id/reset-password` | account:manage |
 | POST | `/auth/staff/change-password` | cán bộ (kể cả khi đang bị bắt đổi mật khẩu) |
 | GET | `/audit-logs` | audit:view |
 | GET/PATCH | `/candidates/me` | thí sinh |

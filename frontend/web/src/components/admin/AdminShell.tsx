@@ -35,6 +35,7 @@ const NAV: { href: string; label: string; perm: Permission; icon: (p: { size?: n
 
 function initials(name: string) {
   const parts = name.replace(/^(PGS\.TS|TS\.|ThS\.)\s*/, "").trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
 }
 
