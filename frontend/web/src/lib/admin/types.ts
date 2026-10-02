@@ -127,6 +127,10 @@ export interface Payment {
   transactionCode: string | null;
   gatewayStatus: PaymentStatus;
   paidAt: string | null;
+  /** Số biên lai do Phòng Đào tạo cấp khi xác nhận đã thu */
+  receiptNo?: string | null;
+  /** Nội dung chuyển khoản thí sinh được hướng dẫn ghi: "<mã hồ sơ> <mã thí sinh>" */
+  transferContent?: string;
 }
 
 export type SupplementStatus = "PENDING" | "RESOLVED" | "EXPIRED";

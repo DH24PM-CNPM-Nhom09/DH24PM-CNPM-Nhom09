@@ -154,3 +154,9 @@ export const IconKey = (p: P) => (
     <path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2" />
   </Base>
 );
+export const IconWallet = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="6" width="18" height="13" rx="2" />
+    <path d="M3 10h18M16 15h2" />
+  </Base>
+);

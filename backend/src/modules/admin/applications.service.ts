@@ -314,6 +314,8 @@ export class ApplicationsService {
               transactionCode: pay.transaction_code,
               gatewayStatus: pay.gateway_status,
               paidAt: iso(pay.paid_at),
+              receiptNo: pay.receipt_no,
+              transferContent: `${a.application_code} ${id(a.candidate_id)}`,
             }
           : null,
         supplements: a.supplement_request.map((s) => ({
@@ -332,6 +334,88 @@ export class ApplicationsService {
       batchMajor: toBatchMajorDto(a.admission_batch_major),
       staffNames: await this.staffNames(),
     };
+  }
+
+  // ------------------------------------------------------------------ lệ phí
+  /**
+   * Cán bộ xác nhận đã nhận lệ phí (đối chiếu sao kê ngân hàng theo nội dung
+   * chuyển khoản "<mã hồ sơ> <mã thí sinh>"). Có xác nhận này hồ sơ mới được kết luận Đạt.
+   */
+  async confirmPayment(me: StaffUser, applicationId: number, body: { receiptNo?: unknown; transactionCode?: unknown; paidAt?: unknown }) {
+    const receiptNo = String(body.receiptNo ?? "").trim().slice(0, 50) || null;
+    const transactionCode = String(body.transactionCode ?? "").trim().slice(0, 100) || null;
+    const paidAt = body.paidAt ? new Date(String(body.paidAt)) : new Date();
+    if (Number.isNaN(paidAt.getTime()) || paidAt.getTime() > Date.now() + 60_000) fail("VALIDATION", "Ngày nộp tiền không hợp lệ.");
+    const a = await this.prisma.application.findFirst({
+      where: { application_id: BigInt(applicationId), ...this.base() },
+      include: { application_payment: { orderBy: { payment_id: "desc" } } },
+    });
+    if (!a) notFound("Không tìm thấy hồ sơ.");
+    if (a.application_payment.some((p) => p.gateway_status === "SUCCESS")) conflict("ALREADY_PAID", "Hồ sơ này đã được xác nhận nộp lệ phí.");
+    const pay = a.application_payment.find((p) => p.gateway_status === "PENDING");
+    if (!pay) fail("NO_PAYMENT", "Hồ sơ chưa phát sinh khoản lệ phí cần thu.", HttpStatus.CONFLICT);
+    if (transactionCode && (await this.prisma.application_payment.count({ where: { transaction_code: transactionCode } })))
+      conflict("DUPLICATE_TRANSACTION", "Mã giao dịch này đã được dùng để xác nhận cho hồ sơ khác.");
+    const amount = Number(pay.amount).toLocaleString("vi-VN");
+    await this.prisma.$transaction(async (tx) => {
+      const r = await tx.application_payment.updateMany({
+        where: { payment_id: pay.payment_id, gateway_status: "PENDING" },
+        data: { gateway_status: "SUCCESS", paid_at: paidAt, receipt_no: receiptNo, transaction_code: transactionCode },
+      });
+      if (!r.count) conflict("STALE_STATUS", "Khoản lệ phí vừa được người khác cập nhật. Tải lại trang.");
+      await this.audit.record(
+        { type: "STAFF", id: me.staffAccountId },
+        "PAYMENT_CONFIRM",
+        { table: "application_payment", id: pay.payment_id },
+        `${a.application_code}: xác nhận đã thu ${amount}đ${receiptNo ? `, biên lai ${receiptNo}` : ""}${transactionCode ? `, mã GD ${transactionCode}` : ""}`,
+        tx,
+      );
+      await this.audit.notifyCandidate(
+        id(a.candidate_id),
+        `Đã nhận lệ phí hồ sơ ${a.application_code}`,
+        `Phòng Đào tạo Sau đại học đã nhận lệ phí xét tuyển ${amount} đồng của hồ sơ ${a.application_code}${receiptNo ? ` (biên lai số ${receiptNo})` : ""}. Hồ sơ của bạn tiếp tục được thẩm định.`,
+        tx,
+      );
+    });
+    return { success: true };
+  }
+
+  /** Cấu hình lệ phí và tài khoản nhận chuyển khoản (bảng system_config) */
+  async paymentSettings() {
+    const keys = ["APPLICATION_FEE_THAC_SI", "APPLICATION_FEE_TIEN_SI", "PAYMENT_BANK_NAME", "PAYMENT_ACCOUNT_NO", "PAYMENT_ACCOUNT_NAME"];
+    const rows = await this.prisma.system_config.findMany({ where: { config_key: { in: keys } } });
+    const v = (k: string) => rows.find((r) => r.config_key === k)?.config_value?.trim() ?? "";
+    return {
+      feeThacSi: Number(v("APPLICATION_FEE_THAC_SI")) || 600_000,
+      feeTienSi: Number(v("APPLICATION_FEE_TIEN_SI")) || 1_000_000,
+      bankName: v("PAYMENT_BANK_NAME"),
+      accountNo: v("PAYMENT_ACCOUNT_NO"),
+      accountName: v("PAYMENT_ACCOUNT_NAME"),
+    };
+  }
+
+  async updatePaymentSettings(me: StaffUser, body: Record<string, unknown>) {
+    const fee = (x: unknown, label: string) => {
+      const n = Number(x);
+      if (!Number.isInteger(n) || n < 0 || n > 100_000_000) fail("VALIDATION", `${label} phải là số tiền hợp lệ (đồng).`);
+      return String(n);
+    };
+    const text = (x: unknown, max: number) => String(x ?? "").trim().replace(/\s+/g, " ").slice(0, max);
+    const accountNo = text(body.accountNo, 40).replace(/\s/g, "");
+    if (accountNo && !/^[0-9A-Za-z-]{4,40}$/.test(accountNo)) fail("VALIDATION", "Số tài khoản chỉ gồm chữ số (có thể có chữ cái, gạch ngang).");
+    const values: [string, string, string][] = [
+      ["APPLICATION_FEE_THAC_SI", fee(body.feeThacSi, "Lệ phí thạc sĩ"), "Lệ phí xét tuyển thạc sĩ (đồng)"],
+      ["APPLICATION_FEE_TIEN_SI", fee(body.feeTienSi, "Lệ phí tiến sĩ"), "Lệ phí xét tuyển tiến sĩ (đồng)"],
+      ["PAYMENT_BANK_NAME", text(body.bankName, 200), "Ngân hàng nhận lệ phí"],
+      ["PAYMENT_ACCOUNT_NO", accountNo, "Số tài khoản nhận lệ phí"],
+      ["PAYMENT_ACCOUNT_NAME", text(body.accountName, 200).toUpperCase(), "Tên chủ tài khoản nhận lệ phí"],
+    ];
+    await this.prisma.$transaction(async (tx) => {
+      for (const [k, val, desc] of values)
+        await tx.system_config.upsert({ where: { config_key: k }, create: { config_key: k, config_value: val, description: desc }, update: { config_value: val } });
+      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "PAYMENT_SETTINGS_UPDATE", { table: "system_config", id: null }, `Cập nhật lệ phí (ThS ${values[0][1]}đ, TS ${values[1][1]}đ) và tài khoản nhận`, tx);
+    });
+    return this.paymentSettings();
   }
 
   // ------------------------------------------------------------------ minh chứng

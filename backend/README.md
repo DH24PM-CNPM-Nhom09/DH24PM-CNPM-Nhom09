@@ -32,13 +32,14 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 4 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 5 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v4_backend.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v5_announcement.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v6_staff_security.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v7_payment_config.sql"
 ```
 
 Kiểm tra: CSDL `admission_db` có **42 bảng** (40 bảng gốc + `application_education` + `complaint`).
@@ -132,10 +133,11 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 
 ## Trước khi triển khai thật (bắt buộc)
 
-1. Tạo CSDL mới, chạy đủ các file SQL v3 → v6, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
+1. Tạo CSDL mới, chạy đủ các file SQL v3 → v7, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
 2. Quản trị vào **Tài khoản cán bộ** cấp tài khoản cho từng cán bộ bằng email công tác thật (nên chọn chỉ đăng nhập Google).
 3. `backend/.env`: `DEV_AUTH_BYPASS=false`, đổi `JWT_SECRET` thành chuỗi ngẫu nhiên dài, điền `GOOGLE_CLIENT_ID`, `SMTP_USER`, `SMTP_PASS`.
 4. Frontend `.env.local`: `NEXT_PUBLIC_DEMO_LOGIN=false` (ẩn khung tài khoản demo ở trang đăng nhập cán bộ).
+5. Cán bộ tuyển sinh vào **Lệ phí & thanh toán** điền mức lệ phí và tài khoản ngân hàng chính thức của Trường (để trống thì thí sinh được hướng dẫn nộp trực tiếp tại Phòng Đào tạo SĐH).
 
 ## Quy tắc nghiệp vụ backend đang chặn
 
@@ -148,6 +150,12 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
   - Chỉ nhận PDF, JPG, PNG, có kiểm tra chữ ký đầu tệp; tối đa 5MB mỗi tệp.
   - Lưu kèm SHA-256. Tổng 30MB mỗi hồ sơ do trigger của CSDL chặn, và thông báo của trigger được trả nguyên văn.
   - Nộp lại khi được yêu cầu bổ sung sẽ thay tệp không hợp lệ.
+- **Nộp hồ sơ (thí sinh)**:
+  - Phải đủ hồ sơ cá nhân (họ tên, ngày sinh, giới tính, CCCD, điện thoại, địa chỉ). Mỗi thí sinh chỉ có 1 hồ sơ đang xử lý; không nộp 2 hồ sơ cùng ngành trong 1 đợt.
+  - Hồ sơ đi qua bản nháp `DRAFT` (cán bộ không thấy), chỉ tạo/nộp được khi đợt đang mở và còn trong thời gian nhận hồ sơ. Mã hồ sơ dạng `<mã đợt>-<mã ngành>-<số thứ tự 5 chữ số>`.
+  - Minh chứng bắt buộc: thạc sĩ cần văn bằng + bảng điểm; tiến sĩ thêm đề cương nghiên cứu + thư giới thiệu và phải khai đề tài. Chọn giảng viên hướng dẫn thì khi nộp hệ thống tạo đề nghị gửi giảng viên.
+  - Khi nộp: phát sinh khoản lệ phí `PENDING` theo `APPLICATION_FEE_THAC_SI` / `APPLICATION_FEE_TIEN_SI`, gửi thông báo + email cho thí sinh kèm nội dung chuyển khoản `<mã hồ sơ> <mã thí sinh>`.
+- **Lệ phí**: cán bộ đối chiếu sao kê rồi bấm "Xác nhận đã thu" (ghi số biên lai, mã giao dịch; mã giao dịch không được trùng). Chưa có lệ phí `SUCCESS` thì không kết luận "Đạt" được.
 - **Phúc khảo**: đổi điểm thì trigger #3 sửa `exam_score` và trigger #4 tự tính lại `application_ranking`.
 - **Đăng ký thí sinh**: khai họ tên, ngày sinh, email, số điện thoại, mật khẩu (≥ 8 ký tự, có chữ và số). Tài khoản ở trạng thái `PENDING_VERIFY` cho tới khi nhập đúng mã gửi về email; chưa xác thực thì không đăng nhập được. Thông tin đăng ký được ghi luôn vào bảng `candidate` (hồ sơ cá nhân).
 - **Mã OTP** (đăng ký và quên mật khẩu): 6 số, chỉ lưu bản băm bcrypt, hết hạn sau 5 phút, mỗi lần chỉ 1 mã còn hiệu lực. Chờ 60 giây giữa 2 lần gửi, tối đa 5 lần/giờ; nhập sai 5 lần thì mã bị hủy.
@@ -176,6 +184,8 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | PATCH | `/applications/:id/review` | application:review |
 | PATCH | `/admin/application-documents/:id/verify` | application:review |
 | POST | `/admin/applications/bulk-start-review` | application:review |
+| PATCH | `/admin/applications/:id/payment/confirm` | application:review |
+| GET / PUT | `/admin/payment-settings` | application:view / batch:manage |
 | GET | `/admission-batches`, `/admission-batches/:id` | batch:view |
 | POST/PATCH/PUT | `/admission-batches`, `/admission-batches/:id/status`, `/admission-batches/:id/majors`, `/admission-batch-majors/:id` | batch:manage |
 | PATCH | `/admission-batch-majors/:id/approve` | batch:approve |
@@ -187,6 +197,8 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | GET | `/applications/me`, `/applications/me/documents`, `/applications/me/supervisor-request`, `/notifications/me` | thí sinh |
 | PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |
 | POST | `/applications/:id/documents` (multipart: `file`, `documentType`), `/applications/me/supplement`, `/complaints` | thí sinh |
+| GET | `/applications/me/full`, `/applications/me/checklist`, `/lecturers` | thí sinh |
+| POST/PUT/DELETE | `/applications/me/draft`, `/applications/me/proposal`, `/applications/me/documents/:id`, `/applications/me/submit`, `/applications/me/cancel` | thí sinh |
 | GET | `/health` (ngoài tiền tố) | công khai |
 
 ## Lệnh hữu ích
@@ -196,7 +208,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5, thông báo mẫu) — chỉ thêm, không xóa |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v7, thông báo mẫu) — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm

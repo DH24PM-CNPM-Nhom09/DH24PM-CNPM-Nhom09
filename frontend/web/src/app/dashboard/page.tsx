@@ -6,19 +6,20 @@ import AppLayout from "@/components/layout/AppLayout";
 import Card from "@/components/ui/Card";
 import Badge, { admissionStatusLabel, admissionStatusTone, reviewStatusLabel, reviewStatusTone } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import { getMyApplication, getMyProfile } from "@/lib/api";
+import { getMyFullApplication, getMyProfile } from "@/lib/api";
 import { CATEGORY_LABEL, CATEGORY_TONE, fmtDate, getAnnouncements, type Announcement } from "@/lib/announcements";
-import type { Application, Candidate } from "@/lib/types";
+import { DOC_LABEL, fmtMoney } from "@/lib/application";
+import type { Candidate, FullApplication } from "@/lib/types";
 
 export default function DashboardPage() {
-  const [app, setApp] = useState<Application | null>(null);
+  const [app, setApp] = useState<FullApplication | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [news, setNews] = useState<Announcement[] | null>(null);
 
   useEffect(() => {
-    Promise.all([getMyApplication(), getMyProfile()])
+    Promise.all([getMyFullApplication(), getMyProfile()])
       .then(([a, c]) => {
         setApp(a);
         setCandidate(c);
@@ -55,8 +56,8 @@ export default function DashboardPage() {
                 </p>
                 <p className="mt-1 text-lg font-extrabold text-gray-900">{app.applicationCode}</p>
                 <p className="mt-1 text-sm text-gray-500">
-                  {app.majorName} · {app.degreeLevel === "TIEN_SI" ? "Tiến sĩ" : "Thạc sĩ"} ·{" "}
-                  {app.batchName}
+                  {app.major.majorName} · {app.degreeLevel === "TIEN_SI" ? "Tiến sĩ" : "Thạc sĩ"} ·{" "}
+                  {app.batch.batchName}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -69,6 +70,17 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {app.reviewStatus === "DRAFT" && (
+              <div className="mt-4 rounded-input bg-gray-50 px-4 py-3 text-[13px] font-medium text-gray-700">
+                Hồ sơ đang ở dạng nháp, chưa được nộp. Hạn nộp: {new Date(app.batch.registrationEndAt).toLocaleString("vi-VN")}.
+                {app.missingDocuments.length > 0 && ` Còn thiếu: ${app.missingDocuments.map((t) => DOC_LABEL[t]).join(", ")}.`}
+              </div>
+            )}
+            {app.reviewStatus !== "DRAFT" && app.payment && app.payment.status !== "SUCCESS" && (
+              <div className="mt-4 rounded-input bg-warning-50 px-4 py-3 text-[13px] font-medium text-[#92400E]">
+                Bạn chưa nộp lệ phí xét tuyển {fmtMoney(app.payment.amount)}. Xem hướng dẫn chuyển khoản trong mục Hồ sơ xét tuyển.
+              </div>
+            )}
             {app.reviewStatus === "NEEDS_SUPPLEMENT" && (
               <div className="mt-4 rounded-input bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning">
                 Hồ sơ của bạn cần bổ sung thêm giấy tờ. Vui lòng kiểm tra chi tiết trong mục Hồ sơ
@@ -77,17 +89,25 @@ export default function DashboardPage() {
             )}
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link href="/application">
-                <Button variant="primary">Xem chi tiết hồ sơ</Button>
-              </Link>
+              {app.reviewStatus === "DRAFT" ? (
+                <Link href="/application/new">
+                  <Button variant="primary">Tiếp tục hoàn thiện hồ sơ</Button>
+                </Link>
+              ) : (
+                <Link href="/application">
+                  <Button variant="primary">Xem chi tiết hồ sơ</Button>
+                </Link>
+              )}
               {app.admissionStatus === "ADMITTED" && (
                 <Link href="/admission-confirm">
                   <Button variant="secondary">Xác nhận nhập học</Button>
                 </Link>
               )}
-              <Link href="/complaint">
-                <Button variant="outline">Gửi khiếu nại / phúc khảo</Button>
-              </Link>
+              {app.reviewStatus !== "DRAFT" && (
+                <Link href="/complaint">
+                  <Button variant="outline">Gửi khiếu nại / phúc khảo</Button>
+                </Link>
+              )}
             </div>
           </Card>
         ) : (

@@ -149,7 +149,19 @@ function ProfileInner() {
             <Card className="mt-4 p-6">
               <h2 className="text-base font-bold text-gray-900">Thông tin cá nhân</h2>
               <div className="mt-4">
-                {saved && <Alert tone="success">Đã lưu thông tin cá nhân.</Alert>}
+                {saved && (
+                  <Alert tone="success">
+                    Đã lưu thông tin cá nhân.
+                    {params.get("next") === "/application/new" && missing.length === 0 && (
+                      <>
+                        {" "}
+                        <Link href="/application/new" className="font-bold underline underline-offset-2">
+                          Tiếp tục tạo hồ sơ xét tuyển →
+                        </Link>
+                      </>
+                    )}
+                  </Alert>
+                )}
                 {error && <Alert tone="error">{error}</Alert>}
               </div>
               <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={handleSave}>

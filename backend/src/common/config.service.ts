@@ -11,6 +11,11 @@ export class SystemConfigService {
     const n = Number(row?.config_value);
     return Number.isFinite(n) && n > 0 ? n : fallback;
   }
+
+  async text(key: string, fallback = ""): Promise<string> {
+    const row = await this.prisma.system_config.findUnique({ where: { config_key: key } });
+    return row?.config_value?.trim() || fallback;
+  }
 }
 
 export const env = {

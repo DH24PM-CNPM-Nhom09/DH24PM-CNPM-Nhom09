@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import { IconAlert, IconCheck, IconChevronLeft, IconClock, IconFile } from "@/components/admin/Icons";
 import { Btn, DocBadge, ErrorBox, fieldCls, Label, Modal, Notice, Panel, ReviewBadge, Skeleton, useToast } from "@/components/admin/ui";
-import { fetchDocumentFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
+import { confirmPayment, fetchDocumentFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
 import { DEGREE_LABEL, DOCUMENT_LABEL, errorMessage, fmtDate, fmtDateTime, fmtMoney, fmtSize, PAYMENT_METHOD_LABEL, relativeDays, toLocalInput } from "@/lib/admin/format";
 import { activeSupplement, blockReason, isSupplementOverdue, type ReviewAction } from "@/lib/admin/stateMachine";
 import type { AdminDocument, ReviewStatus } from "@/lib/admin/types";
@@ -31,6 +31,7 @@ type Dialog =
   | { kind: "reject" }
   | { kind: "supplement" }
   | { kind: "expired" }
+  | { kind: "payment" }
   | { kind: "invalid"; doc: AdminDocument }
   | { kind: "preview"; doc: AdminDocument }
   | null;
@@ -84,7 +85,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <dt className="text-xs text-gray-500">{label}</dt>
-      <dd className="mt-0.5 text-sm font-medium text-gray-900">{children}</dd>
+      <dd className="mt-0.5 text-sm font-medium text-gray-900 [overflow-wrap:anywhere]">{children}</dd>
     </div>
   );
 }
@@ -156,6 +157,7 @@ function DetailInner() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [text, setText] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [txn, setTxn] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [docBusy, setDocBusy] = useState<number | null>(null);
@@ -198,6 +200,7 @@ function DetailInner() {
       setDeadline(toLocalInput(dl));
     } else {
       setText("");
+      setTxn("");
     }
   }
 
@@ -234,17 +237,45 @@ function DetailInner() {
   // Lệ phí + lịch sử: cột phải trên máy tính, cuối trang trên điện thoại
   const sidePanels = (
     <>
-      <Panel title="Lệ phí xét tuyển">
+      <Panel
+        title="Lệ phí xét tuyển"
+        action={
+          canReview && a.payment && a.payment.gatewayStatus !== "SUCCESS" ? (
+            <Btn size="sm" variant="success" onClick={() => open({ kind: "payment" })}>
+              <IconCheck size={14} /> Xác nhận đã thu
+            </Btn>
+          ) : undefined
+        }
+      >
         {a.payment ? (
           <dl className="grid grid-cols-2 gap-4">
             <Field label="Số tiền">{fmtMoney(a.payment.amount)}</Field>
             <Field label="Trạng thái">
-              {a.payment.gatewayStatus === "SUCCESS" ? <span className="text-[#166534]">Thành công</span> : <span className="text-[#92400E]">Chờ thanh toán</span>}
+              {a.payment.gatewayStatus === "SUCCESS" ? <span className="text-[#166534]">Đã nộp</span> : <span className="text-[#92400E]">Chờ thanh toán</span>}
             </Field>
             <Field label="Phương thức">{PAYMENT_METHOD_LABEL[a.payment.paymentMethod]}</Field>
-            <Field label="Mã giao dịch">
-              <span className="font-mono text-[13px]">{a.payment.transactionCode ?? "—"}</span>
-            </Field>
+            {a.payment.gatewayStatus === "SUCCESS" ? (
+              <Field label="Ngày nộp">{fmtDate(a.payment.paidAt)}</Field>
+            ) : (
+              <Field label="Mã giao dịch">
+                <span className="font-mono text-[13px]">{a.payment.transactionCode ?? "—"}</span>
+              </Field>
+            )}
+            {a.payment.gatewayStatus === "SUCCESS" && (
+              <>
+                <Field label="Số biên lai">{a.payment.receiptNo ?? "—"}</Field>
+                <Field label="Mã giao dịch">
+                  <span className="font-mono text-[13px]">{a.payment.transactionCode ?? "—"}</span>
+                </Field>
+              </>
+            )}
+            {a.payment.transferContent && a.payment.gatewayStatus !== "SUCCESS" && (
+              <div className="col-span-2">
+                <Field label="Nội dung chuyển khoản cần đối chiếu">
+                  <span className="break-all font-mono text-[13px]">{a.payment.transferContent}</span>
+                </Field>
+              </div>
+            )}
           </dl>
         ) : (
           <p className="text-sm text-gray-500">Thí sinh chưa phát sinh giao dịch lệ phí nào.</p>
@@ -574,6 +605,53 @@ function DetailInner() {
             Hạn bổ sung
           </Label>
           <input id="sup-deadline" type="datetime-local" className={fieldCls} value={deadline} min={toLocalInput(new Date())} onChange={(e) => setDeadline(e.target.value)} />
+        </div>
+        {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
+      </Modal>
+
+      <Modal
+        open={dialog?.kind === "payment"}
+        onClose={() => setDialog(null)}
+        title="Xác nhận đã thu lệ phí?"
+        description={
+          a.payment
+            ? `Đối chiếu sao kê: khoản ${fmtMoney(a.payment.amount)} có nội dung “${a.payment.transferContent ?? a.applicationCode}”. Sau khi xác nhận, thí sinh nhận được thông báo và hồ sơ đủ điều kiện kết luận đạt.`
+            : undefined
+        }
+        footer={
+          <>
+            <Btn onClick={() => setDialog(null)}>Hủy</Btn>
+            <Btn
+              variant="success"
+              loading={busy}
+              onClick={async () => {
+                setBusy(true);
+                setFormError("");
+                try {
+                  await confirmPayment(id, { receiptNo: text.trim(), transactionCode: txn.trim() });
+                  setDialog(null);
+                  toast("Đã xác nhận thu lệ phí. Đã gửi thông báo cho thí sinh.");
+                } catch (e) {
+                  setFormError(errorMessage(e));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Xác nhận đã thu
+            </Btn>
+          </>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="pay-receipt">Số biên lai</Label>
+            <input id="pay-receipt" className={fieldCls} value={text} maxLength={50} placeholder="VD: BL-2026-0001" onChange={(e) => setText(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="pay-txn">Mã giao dịch ngân hàng</Label>
+            <input id="pay-txn" className={fieldCls} value={txn} maxLength={100} placeholder="Không bắt buộc" onChange={(e) => setTxn(e.target.value)} />
+          </div>
         </div>
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
       </Modal>

@@ -528,6 +528,53 @@ export async function bulkStartReview(applicationIds: number[]) {
   return { done, skipped };
 }
 
+// ============================================================================
+// Lệ phí xét tuyển (chuyển khoản, cán bộ đối chiếu sao kê rồi xác nhận)
+// ============================================================================
+/** PATCH /admin/applications/{id}/payment/confirm   { receiptNo, transactionCode } */
+export async function confirmPayment(applicationId: number, data: { receiptNo?: string; transactionCode?: string }) {
+  if (!USE_MOCK)
+    return request<{ success: boolean }>(`/admin/applications/${applicationId}/payment/confirm`, { method: "PATCH", body: JSON.stringify(data) });
+  const me = requirePermission("application:review");
+  const db = getDb();
+  const app = db.applications.find((a) => a.applicationId === applicationId);
+  if (!app) fail("NOT_FOUND", "Không tìm thấy hồ sơ.");
+  if (!app.payment) fail("NO_PAYMENT", "Hồ sơ chưa phát sinh khoản lệ phí cần thu.");
+  if (app.payment.gatewayStatus === "SUCCESS") fail("ALREADY_PAID", "Hồ sơ này đã được xác nhận nộp lệ phí.");
+  app.payment.gatewayStatus = "SUCCESS";
+  app.payment.paidAt = new Date().toISOString();
+  app.payment.receiptNo = data.receiptNo?.trim() || null;
+  app.payment.transactionCode = data.transactionCode?.trim() || app.payment.transactionCode;
+  audit(db, me.staffAccountId, "PAYMENT_CONFIRM", "application_payment", app.payment.paymentId, `${app.applicationCode}: xác nhận đã thu lệ phí`);
+  notifyCandidate(db, app.candidate.candidateId, `Phòng Đào tạo Sau đại học đã nhận lệ phí xét tuyển của hồ sơ ${app.applicationCode}.`);
+  commit();
+  return delay({ success: true });
+}
+
+export interface PaymentSettings {
+  feeThacSi: number;
+  feeTienSi: number;
+  bankName: string;
+  accountNo: string;
+  accountName: string;
+}
+let mockPaymentSettings: PaymentSettings = { feeThacSi: 600000, feeTienSi: 1000000, bankName: "", accountNo: "", accountName: "" };
+
+/** GET /admin/payment-settings */
+export async function getPaymentSettings(): Promise<PaymentSettings> {
+  if (!USE_MOCK) return request<PaymentSettings>("/admin/payment-settings");
+  requirePermission("application:view");
+  return delay(mockPaymentSettings);
+}
+
+/** PUT /admin/payment-settings — mức lệ phí và tài khoản nhận chuyển khoản */
+export async function updatePaymentSettings(data: PaymentSettings): Promise<PaymentSettings> {
+  if (!USE_MOCK) return request<PaymentSettings>("/admin/payment-settings", { method: "PUT", body: JSON.stringify(data) });
+  requirePermission("batch:manage");
+  mockPaymentSettings = { ...data, accountNo: data.accountNo.replace(/\s/g, ""), accountName: data.accountName.trim().toUpperCase() };
+  return delay(mockPaymentSettings);
+}
+
 /** CHỈ CÓ Ở MOCK: giả lập thí sinh nộp bổ sung (thật sẽ do phân hệ Thí sinh gọi) */
 export async function simulateCandidateSupplement(applicationId: number) {
   if (!USE_MOCK) fail("NOT_SUPPORTED", "Chỉ dùng trong chế độ dữ liệu mẫu.");

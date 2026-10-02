@@ -83,6 +83,64 @@ export interface ApplicationDocument {
   fileName: string;
   fileSizeKb: number;
   verifyStatus: "PENDING" | "VALID" | "INVALID";
+  verifyNote?: string | null;
+  uploadedAt?: string;
+}
+
+export type DegreeLevel = "THAC_SI" | "TIEN_SI";
+
+/** Quá trình đào tạo khai trong hồ sơ (bảng application_education) */
+export interface EducationInput {
+  degreeLevel: "DAI_HOC" | "THAC_SI";
+  institutionName: string;
+  majorName: string;
+  graduationYear: number;
+  gpa: number | null;
+  gpaScale: 4 | 10;
+}
+
+export interface ResearchProposalInput {
+  researchTopic: string;
+  researchField: string;
+  preferredLecturerId: number | null;
+}
+
+export interface Lecturer {
+  lecturerId: number;
+  fullName: string;
+  facultyName: string | null;
+}
+
+/** Toàn bộ hồ sơ xét tuyển của thí sinh (GET /applications/me/full), kể cả bản nháp */
+export interface FullApplication {
+  applicationId: number;
+  applicationCode: string;
+  reviewStatus: ReviewStatus;
+  admissionStatus: AdmissionStatus;
+  createdAt: string;
+  submittedAt: string | null;
+  degreeLevel: DegreeLevel;
+  batch: { batchId: number; batchCode: string; batchName: string; status: string; registrationEndAt: string; examStartAt: string | null };
+  major: { batchMajorId: number; majorCode: string; majorName: string; facultyName: string | null };
+  education: (Omit<EducationInput, "gpaScale"> & { gpaScale: number }) | null;
+  proposal: (ResearchProposalInput & { lecturerName: string | null; supervisorStatus: SupervisorRequestStatus | null }) | null;
+  documents: ApplicationDocument[];
+  requiredDocuments: DocumentType[];
+  missingDocuments: DocumentType[];
+  payment: {
+    amount: number;
+    status: "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED" | "CANCELLED" | "EXPIRED";
+    method: string;
+    receiptNo: string | null;
+    paidAt: string | null;
+    transferContent: string;
+    bank: { bankName: string; accountNo: string; accountName: string };
+  } | null;
+  supplement: { content: string; deadline: string } | null;
+  history: { status: ReviewStatus; at: string; by: "CANDIDATE" | "STAFF" | "SYSTEM"; reason: string | null }[];
+  /** Còn sửa được (nháp và đợt còn hạn nhận hồ sơ) */
+  canEdit: boolean;
+  fee: number;
 }
 
 export interface SupervisorRequest {

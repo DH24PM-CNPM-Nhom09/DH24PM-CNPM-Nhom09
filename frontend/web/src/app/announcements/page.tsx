@@ -162,7 +162,7 @@ function BatchesTab({ loggedIn }: { loggedIn: boolean }) {
               <div className="flex flex-col items-end gap-2">
                 <span className={`rounded-full px-3 py-1 text-xs font-bold ${urgent ? "bg-danger-50 text-danger" : "bg-success-50 text-[#166534]"}`}>Hạn nộp: {left}</span>
                 <Link
-                  href={loggedIn ? "/application/new" : "/register"}
+                  href={loggedIn ? `/application/new?batch=${b.batchId}` : "/register"}
                   className="rounded-input bg-accent px-4 py-2 text-[13px] font-bold text-white hover:bg-accent-dark"
                 >
                   {loggedIn ? "Nộp hồ sơ đợt này" : "Đăng ký để nộp hồ sơ"}

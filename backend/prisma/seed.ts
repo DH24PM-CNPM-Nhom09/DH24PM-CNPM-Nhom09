@@ -4,7 +4,7 @@
 //   npm run db:seed        -> tạo tài khoản Quản trị đầu tiên (nếu chưa có cán bộ nào)
 //   npm run db:seed:demo   -> nạp bộ dữ liệu mẫu đầy đủ (chỉ chạy trên CSDL TRỐNG)
 // Không bao giờ xóa dữ liệu: gặp CSDL đã có dữ liệu thì dừng và báo.
-// Yêu cầu: đã chạy admission_db_v3.sql + migration_v4 + migration_v5 + migration_v6 (thư mục database/).
+// Yêu cầu: đã chạy admission_db_v3.sql + migration_v4 + migration_v5 + migration_v6 + migration_v7 (thư mục database/).
 // ============================================================================
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";

@@ -7,7 +7,7 @@
 //   NEXT_PUBLIC_USE_MOCK=false
 //   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
-import type { Application, ApplicationDocument, Candidate, CandidateNotification, OtpSent, RegisterPayload, SupervisorRequest } from "./types";
+import type { Application, ApplicationDocument, Candidate, CandidateNotification, EducationInput, FullApplication, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorRequest } from "./types";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -171,7 +171,7 @@ export async function getMyDocuments(): Promise<ApplicationDocument[]> {
   return request<ApplicationDocument[]>("/applications/me/documents");
 }
 
-export async function uploadDocument(applicationId: number, file: File, documentType: string) {
+export async function uploadDocument(applicationId: number, file: File, documentType: string): Promise<{ success: boolean; documentId?: number; duplicateWarning?: boolean }> {
   // Giới hạn đúng theo admission_db v3: 5MB/file, tổng <= 30MB/hồ sơ (kiểm tra
   // lại lần cuối ở Backend bằng trigger trg_document_size_limit — FE chỉ chặn sớm).
   const MAX_FILE_KB = 5120;
@@ -183,13 +183,138 @@ export async function uploadDocument(applicationId: number, file: File, document
   form.append("file", file);
   form.append("documentType", documentType);
   const token = getToken();
-  const res = await fetch(`${API_BASE}/applications/${applicationId}/documents`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-  if (!res.ok) throw await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/applications/${applicationId}/documents`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+  } catch {
+    throw { error_code: "NETWORK", message: "Không kết nối được máy chủ. Vui lòng kiểm tra mạng hoặc thử lại sau." };
+  }
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Tải tệp thất bại, vui lòng thử lại." }));
   return res.json();
+}
+
+// ---- Tạo / hoàn thiện / nộp hồ sơ (UC-DK-01..05) ----
+// Dữ liệu mẫu: giữ 1 hồ sơ trong bộ nhớ trình duyệt để demo đủ các bước khi chưa bật backend.
+let mockApp: FullApplication | null = null;
+function mockFull(): FullApplication {
+  if (!mockApp) throw { error_code: "NOT_FOUND", message: "Không có hồ sơ nháp nào." };
+  const have = new Set(mockApp.documents.map((d) => d.documentType));
+  mockApp.missingDocuments = mockApp.requiredDocuments.filter((t) => !have.has(t));
+  return structuredClone(mockApp);
+}
+
+export async function getMyFullApplication(): Promise<FullApplication | null> {
+  if (USE_MOCK) return delay(mockApp ? mockFull() : null);
+  return request<FullApplication | null>("/applications/me/full");
+}
+
+export async function getApplicationChecklist(): Promise<{ missingProfile: string[] }> {
+  if (USE_MOCK) return delay({ missingProfile: [] });
+  return request<{ missingProfile: string[] }>("/applications/me/checklist");
+}
+
+export async function getLecturers(): Promise<Lecturer[]> {
+  if (USE_MOCK)
+    return delay([
+      { lecturerId: 1, fullName: "PGS.TS Trần Văn Long", facultyName: "Khoa Công nghệ thông tin" },
+      { lecturerId: 2, fullName: "TS. Lê Thị Minh Thư", facultyName: "Khoa Công nghệ thông tin" },
+    ]);
+  return request<Lecturer[]>("/lecturers");
+}
+
+/** Bước 1+2: chọn ngành và khai quá trình đào tạo — tạo bản nháp lần đầu, các lần sau cập nhật */
+export async function saveApplicationDraft(payload: { batchMajorId: number; education: EducationInput }, mockInfo?: { batch: FullApplication["batch"]; major: FullApplication["major"]; degreeLevel: FullApplication["degreeLevel"] }): Promise<FullApplication> {
+  if (USE_MOCK) {
+    const degree = mockInfo?.degreeLevel ?? "THAC_SI";
+    const base: FullApplication = mockApp ?? {
+      applicationId: 1,
+      applicationCode: `${mockInfo?.batch.batchCode ?? "THS-2026"}-${mockInfo?.major.majorCode ?? "0000000"}-00001`,
+      reviewStatus: "DRAFT",
+      admissionStatus: "NONE",
+      createdAt: new Date().toISOString(),
+      submittedAt: null,
+      degreeLevel: degree,
+      batch: mockInfo!.batch,
+      major: mockInfo!.major,
+      education: null,
+      proposal: null,
+      documents: [],
+      requiredDocuments: degree === "TIEN_SI" ? ["VAN_BANG", "BANG_DIEM", "DE_CUONG_NCS", "THU_GIOI_THIEU"] : ["VAN_BANG", "BANG_DIEM"],
+      missingDocuments: [],
+      payment: null,
+      supplement: null,
+      history: [],
+      canEdit: true,
+      fee: degree === "TIEN_SI" ? 1000000 : 600000,
+    };
+    mockApp = { ...base, ...(mockInfo ?? {}), education: payload.education };
+    return delay(mockFull());
+  }
+  return request<FullApplication>("/applications/me/draft", { method: "POST", body: JSON.stringify(payload) });
+}
+
+/** Tải minh chứng cho hồ sơ nháp (dùng chung endpoint tải tệp) rồi trả về hồ sơ mới nhất */
+export async function uploadDraftDocument(applicationId: number, file: File, documentType: ApplicationDocument["documentType"]) {
+  const res = await uploadDocument(applicationId, file, documentType);
+  if (USE_MOCK && mockApp) {
+    mockApp.documents.push({ documentId: Date.now(), documentType, fileName: file.name, fileSizeKb: Math.max(1, Math.ceil(file.size / 1024)), verifyStatus: "PENDING", verifyNote: null, uploadedAt: new Date().toISOString() });
+  }
+  return res;
+}
+
+export async function deleteMyDocument(documentId: number) {
+  if (USE_MOCK) {
+    if (mockApp) mockApp.documents = mockApp.documents.filter((d) => d.documentId !== documentId);
+    return delay({ success: true });
+  }
+  return request<{ success: boolean }>(`/applications/me/documents/${documentId}`, { method: "DELETE" });
+}
+
+export async function saveResearchProposal(payload: ResearchProposalInput): Promise<FullApplication> {
+  if (USE_MOCK) {
+    if (mockApp) mockApp.proposal = { ...payload, lecturerName: payload.preferredLecturerId ? "PGS.TS Trần Văn Long" : null, supervisorStatus: null };
+    return delay(mockFull());
+  }
+  return request<FullApplication>("/applications/me/proposal", { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export async function submitMyApplication(): Promise<FullApplication> {
+  if (USE_MOCK) {
+    const a = mockFull();
+    if (a.missingDocuments.length) throw { error_code: "APPLICATION_INCOMPLETE", message: "Chưa nộp được hồ sơ. Còn thiếu minh chứng bắt buộc." };
+    const now = new Date().toISOString();
+    mockApp = {
+      ...a,
+      reviewStatus: "SUBMITTED",
+      submittedAt: now,
+      canEdit: false,
+      history: [{ status: "SUBMITTED", at: now, by: "CANDIDATE", reason: "Thí sinh nộp hồ sơ" }],
+      payment: { amount: a.fee, status: "PENDING", method: "BANK_TRANSFER", receiptNo: null, paidAt: null, transferContent: `${a.applicationCode} 1`, bank: { bankName: "", accountNo: "", accountName: "" } },
+    };
+    return delay(mockFull());
+  }
+  return request<FullApplication>("/applications/me/submit", { method: "POST", body: JSON.stringify({ agree: true }) });
+}
+
+export async function cancelMyDraft() {
+  if (USE_MOCK) {
+    mockApp = null;
+    return delay({ success: true });
+  }
+  return request<{ success: boolean }>("/applications/me/cancel", { method: "POST" });
+}
+
+/** Thí sinh báo đã nộp lại xong các minh chứng được yêu cầu bổ sung */
+export async function submitSupplement() {
+  if (USE_MOCK) {
+    if (mockApp) mockApp = { ...mockApp, reviewStatus: "UNDER_REVIEW", supplement: null };
+    return delay({ success: true });
+  }
+  return request<{ success: boolean }>("/applications/me/supplement", { method: "POST" });
 }
 
 // ---- GVHD (bậc Tiến sĩ) ----

@@ -18,6 +18,7 @@ import { BatchesService } from "./modules/admin/batches.service";
 import { StaffService } from "./modules/admin/staff.service";
 import { AuthController } from "./modules/auth/auth.controller";
 import { AuthService } from "./modules/auth/auth.service";
+import { ApplicationFlowService } from "./modules/candidate/application-flow.service";
 import { CandidateController } from "./modules/candidate/candidate.controller";
 import { CandidateService } from "./modules/candidate/candidate.service";
 import { HealthController } from "./modules/health/health.controller";
@@ -61,6 +62,7 @@ import { PrismaModule } from "./prisma/prisma.service";
     StaffService,
     AuditLogsService,
     CandidateService,
+    ApplicationFlowService,
     AnnouncementsService,
     NotificationDispatcher,
   ],

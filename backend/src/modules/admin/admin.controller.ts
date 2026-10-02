@@ -63,6 +63,24 @@ export class ApplicationsController {
     return this.svc.verifyDocument(asStaff(user), id, str(body.verifyStatus), body.reason as string | undefined);
   }
 
+  @Patch("admin/applications/:id/payment/confirm")
+  @RequirePermission("application:review")
+  confirmPayment(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.confirmPayment(asStaff(user), id, body);
+  }
+
+  @Get("admin/payment-settings")
+  @RequirePermission("application:view")
+  paymentSettings() {
+    return this.svc.paymentSettings();
+  }
+
+  @Put("admin/payment-settings")
+  @RequirePermission("batch:manage")
+  updatePaymentSettings(@CurrentUser() user: AuthUser, @Body() body: B) {
+    return this.svc.updatePaymentSettings(asStaff(user), body);
+  }
+
   /** Xem tệp minh chứng (PDF/ảnh) — frontend tải bằng fetch có kèm token rồi hiển thị */
   @Get("admin/application-documents/:id/file")
   @RequirePermission("application:view")
