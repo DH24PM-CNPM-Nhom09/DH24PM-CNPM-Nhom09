@@ -22,6 +22,14 @@ export class PublicController {
     return this.svc.publicDetail(id);
   }
 
+  /** Cấu hình công khai cho frontend: Google Client ID (không phải bí mật) để hiện nút Đăng nhập Google thật */
+  @Public()
+  @Get("auth-config")
+  authConfig() {
+    const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || null;
+    return { googleClientId, googleDemo: !googleClientId && String(process.env.DEV_AUTH_BYPASS ?? "").toLowerCase() === "true" };
+  }
+
   @Public()
   @Get("open-batches")
   openBatches() {

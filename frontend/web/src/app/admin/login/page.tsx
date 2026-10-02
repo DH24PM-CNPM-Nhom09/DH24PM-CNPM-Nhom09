@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { GoogleMark } from "@/components/admin/Icons";
+import GoogleSignIn from "@/components/auth/GoogleSignIn";
 import { Btn, fieldCls, Label } from "@/components/admin/ui";
 import { DEMO_PASSWORD, demoAccounts, staffLogin, staffLoginWithGoogle, USE_MOCK } from "@/lib/admin/api";
 import { errorMessage } from "@/lib/admin/format";
@@ -37,6 +38,19 @@ function LoginForm() {
     setLoading("password");
     try {
       await staffLogin(email, password);
+      router.replace(target);
+    } catch (err) {
+      setError(errorMessage(err));
+      setLoading(null);
+    }
+  }
+
+  /** Đăng nhập Google thật: idToken do Google Identity Services trả về khi cán bộ chọn tài khoản */
+  async function googleReal(idToken: string) {
+    setError("");
+    setLoading("google");
+    try {
+      await staffLoginWithGoogle(idToken);
       router.replace(target);
     } catch (err) {
       setError(errorMessage(err));
@@ -134,9 +148,21 @@ function LoginForm() {
             hoặc
             <div className="h-px flex-1 bg-gray-200" />
           </div>
-          <Btn className="w-full" onClick={google} loading={loading === "google"}>
-            <GoogleMark /> Đăng nhập với Google
-          </Btn>
+          {USE_MOCK ? (
+            <Btn className="w-full" onClick={google} loading={loading === "google"}>
+              <GoogleMark /> Đăng nhập với Google
+            </Btn>
+          ) : (
+            <GoogleSignIn
+              onCredential={googleReal}
+              onError={setError}
+              fallback={
+                <Btn className="w-full" onClick={google} loading={loading === "google"}>
+                  <GoogleMark /> Đăng nhập với Google (bản demo: nhập email công tác trước)
+                </Btn>
+              }
+            />
+          )}
 
           {demos.length > 0 && (
             <div className="mt-8 rounded-card border border-dashed border-gray-300 bg-white p-4">

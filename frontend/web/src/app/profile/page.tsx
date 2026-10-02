@@ -26,7 +26,8 @@ function fmtDate(iso?: string) {
 
 function ProfileInner() {
   const params = useSearchParams();
-  const welcome = params.get("welcome") === "1";
+  const welcome = params.get("welcome");
+  const googleName = params.get("name");
   const [profile, setProfile] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -36,7 +37,8 @@ function ProfileInner() {
 
   useEffect(() => {
     getMyProfile()
-      .then(setProfile)
+      // Lần đầu đăng nhập Google: điền sẵn họ tên lấy từ tài khoản Google
+      .then((p) => setProfile(!p.fullName && googleName ? { ...p, fullName: googleName } : p))
       .catch((e) => setLoadError(errMsg(e, "Không tải được hồ sơ cá nhân.")))
       .finally(() => setLoading(false));
   }, []);
@@ -78,10 +80,17 @@ function ProfileInner() {
         <h1 className="text-2xl font-extrabold text-gray-900">Hồ sơ cá nhân</h1>
         <p className="mt-1 text-sm text-gray-500">Thông tin dùng để lập hồ sơ xét tuyển và liên hệ với bạn. Vui lòng khai đúng như trên giấy tờ tùy thân.</p>
 
-        {welcome && (
+        {welcome === "1" && (
           <div className="mt-6">
             <Alert tone="success">
               Tài khoản đã được kích hoạt. Thông tin bạn khai khi đăng ký đã được điền sẵn bên dưới; hãy bổ sung số CCCD, giới tính và địa chỉ để có thể tạo hồ sơ xét tuyển.
+            </Alert>
+          </div>
+        )}
+        {welcome === "google" && (
+          <div className="mt-6">
+            <Alert tone="success">
+              Chào mừng bạn! Đây là lần đầu bạn đăng nhập bằng Google. Hãy khai ngày sinh, số điện thoại, CCCD và địa chỉ rồi bấm “Lưu thay đổi” để hoàn tất hồ sơ cá nhân.
             </Alert>
           </div>
         )}

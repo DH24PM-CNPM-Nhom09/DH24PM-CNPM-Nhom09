@@ -8,7 +8,8 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import OtpInput from "@/components/ui/OtpInput";
 import { Alert, DevOtpNotice, errMsg, maskEmail, PasswordChecklist, PasswordInput, passwordIssues, ResendButton } from "@/components/auth/AuthBits";
-import { registerAccount, resendRegistrationOtp, verifyRegistration } from "@/lib/api";
+import { loginWithGoogle, registerAccount, resendRegistrationOtp, verifyRegistration } from "@/lib/api";
+import GoogleSignIn from "@/components/auth/GoogleSignIn";
 import type { RegisterPayload } from "@/lib/types";
 
 type Errors = Partial<Record<keyof RegisterPayload | "confirm" | "agree", string>>;
@@ -242,6 +243,8 @@ function RegisterInner() {
         </Button>
       </form>
 
+      <GoogleRegister />
+
       <p className="mt-8 text-center text-sm text-gray-500">
         Đã có tài khoản?{" "}
         <Link href="/login" className="font-semibold text-accent hover:underline">
@@ -249,6 +252,38 @@ function RegisterInner() {
         </Link>
       </p>
     </AuthLayout>
+  );
+}
+
+/** Đăng ký nhanh bằng Google: chỉ hiện khi backend đã cấu hình GOOGLE_CLIENT_ID */
+function GoogleRegister() {
+  const router = useRouter();
+  const [error, setError] = useState("");
+  return (
+    <>
+      <GoogleSignIn
+        text="signup_with"
+        fallback={null}
+        onError={setError}
+        header={
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-200" />
+            <span className="text-xs font-semibold text-gray-400">HOẶC</span>
+            <div className="h-px flex-1 bg-gray-200" />
+          </div>
+        }
+        onCredential={async (idToken) => {
+          setError("");
+          try {
+            const res = await loginWithGoogle(idToken);
+            router.push(res.needsProfile ? `/profile?welcome=google${res.googleName ? `&name=${encodeURIComponent(res.googleName)}` : ""}` : "/dashboard");
+          } catch (e) {
+            setError(errMsg(e, "Đăng ký bằng Google thất bại."));
+          }
+        }}
+      />
+      {error && <p className="mt-3 text-center text-xs font-medium text-danger">{error}</p>}
+    </>
   );
 }
 

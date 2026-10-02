@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { AuditService } from "../../common/audit.service";
 import { env, SystemConfigService } from "../../common/config.service";
@@ -32,20 +33,20 @@ export class AuthService {
    * "mock-google-id-token" (token giả frontend thí sinh đang gửi) để demo khi
    * chưa cấu hình Google Client ID.
    */
-  private async googleEmail(idToken: string, fallbackDevEmail?: string): Promise<{ email: string; name: string | null }> {
+  private async googleEmail(idToken: string, fallbackDevEmail?: string): Promise<{ email: string; name: string | null; verifiedByGoogle: boolean }> {
     const token = (idToken ?? "").trim();
     if (!token) fail("INVALID_TOKEN", "Thiếu Google ID token.");
     if (env.devBypass()) {
-      if (token.startsWith("dev:")) return { email: token.slice(4).toLowerCase(), name: null };
-      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(token)) return { email: token.toLowerCase(), name: null };
-      if (token === "mock-google-id-token" && fallbackDevEmail) return { email: fallbackDevEmail, name: null };
+      if (token.startsWith("dev:")) return { email: token.slice(4).toLowerCase(), name: null, verifiedByGoogle: false };
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(token)) return { email: token.toLowerCase(), name: null, verifiedByGoogle: false };
+      if (token === "mock-google-id-token" && fallbackDevEmail) return { email: fallbackDevEmail, name: null, verifiedByGoogle: false };
     }
     if (!env.googleClientId()) fail("GOOGLE_NOT_CONFIGURED", "Máy chủ chưa cấu hình GOOGLE_CLIENT_ID để đăng nhập bằng Google.", HttpStatus.SERVICE_UNAVAILABLE);
     try {
       const ticket = await this.google.verifyIdToken({ idToken: token, audience: env.googleClientId() });
       const p = ticket.getPayload();
       if (!p?.email || !p.email_verified) fail("GOOGLE_EMAIL_UNVERIFIED", "Email Google chưa được xác thực.");
-      return { email: p.email.toLowerCase(), name: p.name ?? null };
+      return { email: p.email.toLowerCase(), name: p.name ?? null, verifiedByGoogle: true };
     } catch (e) {
       if (e && typeof e === "object" && "errorCode" in e) throw e;
       fail("INVALID_TOKEN", "Google ID token không hợp lệ hoặc đã hết hạn.", HttpStatus.UNAUTHORIZED);
@@ -96,17 +97,37 @@ export class AuthService {
   }
 
   async candidateGoogle(idToken: string) {
-    const { email } = await this.googleEmail(idToken, DEMO_CANDIDATE_EMAIL);
-    let account = await this.prisma.candidate_account.findFirst({ where: { email, deleted_at: null } });
+    const { email, name, verifiedByGoogle } = await this.googleEmail(idToken, DEMO_CANDIDATE_EMAIL);
+    let account = await this.prisma.candidate_account.findFirst({ where: { email, deleted_at: null }, include: { candidate: true } });
     if (!account) {
-      // Lần đầu đăng nhập Google: tạo tài khoản; hồ sơ cá nhân (bảng candidate) khai sau
-      account = await this.prisma.candidate_account.create({ data: { username: email, email, status: "ACTIVE" } });
+      // Lần đầu đăng nhập Google: tạo tài khoản; hồ sơ cá nhân (bảng candidate) khai sau ở trang Hồ sơ cá nhân
+      account = await this.prisma.candidate_account.create({ data: { username: email, email, status: "ACTIVE" }, include: { candidate: true } });
     } else if (account.status === "LOCKED" && (!account.locked_until || account.locked_until > new Date())) {
       fail("ACCOUNT_LOCKED", "Tài khoản đang bị khóa tạm thời. Vui lòng thử lại sau.", HttpStatus.FORBIDDEN);
     } else if (account.status !== "ACTIVE") {
-      account = await this.prisma.candidate_account.update({ where: { account_id: account.account_id }, data: { status: "ACTIVE" } });
+      // Google đã xác thực email -> kích hoạt luôn tài khoản đang chờ nhập mã
+      account = await this.prisma.candidate_account.update({ where: { account_id: account.account_id }, data: { status: "ACTIVE" }, include: { candidate: true } });
     }
-    return { accessToken: await this.candidateToken(account.account_id) };
+    if (verifiedByGoogle) await this.markEmailVerified(account.account_id);
+    return {
+      accessToken: await this.candidateToken(account.account_id),
+      // Chưa có hồ sơ cá nhân -> frontend đưa sang trang Hồ sơ cá nhân, điền sẵn tên lấy từ Google
+      needsProfile: !account.candidate,
+      googleName: name,
+    };
+  }
+
+  /**
+   * Ghi nhận email đã được xác thực (Google xác nhận chủ tài khoản) bằng một dòng otp_verification
+   * REGISTER đã dùng — cùng cách đánh dấu với đăng ký bằng mã, để hệ thống được phép gửi email thông báo.
+   */
+  private async markEmailVerified(accountId: bigint) {
+    const done = await this.prisma.otp_verification.count({ where: { account_id: accountId, purpose: "REGISTER", verified_at: { not: null } } });
+    if (done) return;
+    const now = new Date();
+    await this.prisma.otp_verification.create({
+      data: { account_id: accountId, purpose: "REGISTER", otp_code_hash: await bcrypt.hash(randomUUID(), 10), sent_count: 0, expires_at: now, verified_at: now },
+    });
   }
 
   private findCandidateAccount(emailOrPhone: string) {

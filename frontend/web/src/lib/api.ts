@@ -61,9 +61,9 @@ function delay<T>(data: T, ms = 400): Promise<T> {
 export async function loginWithGoogle(googleIdToken: string) {
   if (USE_MOCK) {
     if (typeof window !== "undefined") localStorage.setItem("access_token", "mock-token");
-    return delay({ accessToken: "mock-token" });
+    return delay({ accessToken: "mock-token", needsProfile: false, googleName: null as string | null });
   }
-  const res = await request<{ accessToken: string }>("/auth/google", {
+  const res = await request<{ accessToken: string; needsProfile?: boolean; googleName?: string | null }>("/auth/google", {
     method: "POST",
     body: JSON.stringify({ idToken: googleIdToken }),
   });

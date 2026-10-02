@@ -108,8 +108,24 @@ Sau đó tắt rồi chạy lại `npm run dev` ở frontend (Next.js chỉ đ�
 | http://localhost:3000/login | bấm "Đăng nhập với Google" | Thí sinh demo `thisinh.demo@gmail.com`, có 1 hồ sơ đang chờ bổ sung |
 | http://localhost:3000/register | tự đăng ký bằng Gmail thật | Nhận mã 6 số qua email (hoặc xem trên màn hình nếu chưa cấu hình Gmail) |
 
-Đăng nhập Google của thí sinh chạy ở **chế độ phát triển** (`DEV_AUTH_BYPASS=true`): frontend đang gửi token giả `mock-google-id-token`, backend coi đó là tài khoản thí sinh demo.
-Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, điền `GOOGLE_CLIENT_ID`, đặt `DEV_AUTH_BYPASS=false`, và cho frontend gửi `id_token` thật (chỗ `TODO` trong `src/app/login/page.tsx`).
+### Bước 3c — Đăng nhập Google thật (hiện cửa sổ chọn tài khoản Google)
+
+Chưa cấu hình: nút hiện chữ "(bản demo)" và vào thẳng tài khoản thí sinh mẫu `thisinh.demo@gmail.com`.
+Để dùng Google thật (áp dụng cho cả thí sinh và cán bộ):
+
+1. Vào https://console.cloud.google.com, tạo dự án mới (ví dụ "Tuyen sinh SDH").
+2. Mở **Google Auth Platform** (APIs & Services > OAuth consent screen), bấm **Get started**: đặt tên ứng dụng, email hỗ trợ, chọn **External**, đồng ý điều khoản.
+3. Mục **Audience**: bấm **Publish app** (chỉ dùng quyền cơ bản email/tên nên không cần Google duyệt), hoặc thêm Gmail người thử ở **Test users**.
+4. Mục **Clients** > **Create client** > loại **Web application**. Ở **Authorized JavaScript origins** thêm `http://localhost:3000` và `http://localhost`. Bấm **Create**.
+5. Chép **Client ID** (dạng `xxxx.apps.googleusercontent.com`) vào `backend/.env`:
+   ```
+   GOOGLE_CLIENT_ID="xxxx.apps.googleusercontent.com"
+   ```
+   Không cần Client secret. Frontend tự lấy Client ID từ backend (`GET /public/auth-config`), không phải sửa `.env.local`.
+6. Khởi động lại backend. Trang đăng nhập hiện nút Google chuẩn; bấm vào sẽ ra cửa sổ chọn tài khoản.
+
+Thí sinh đăng nhập Google lần đầu sẽ được đưa tới trang Hồ sơ cá nhân (điền sẵn họ tên từ Google) để khai ngày sinh, CCCD… Cán bộ chỉ đăng nhập Google được nếu email Google trùng email công tác đã được cấp tài khoản.
+Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các token giả.
 
 ---
 
@@ -138,6 +154,7 @@ Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, đi�
 | POST | `/auth/staff/login`, `/auth/staff/google` | công khai |
 | GET | `/auth/staff/me` | cán bộ |
 | POST | `/auth/register`, `/auth/register/verify`, `/auth/register/resend` | công khai (thí sinh) |
+| GET | `/public/auth-config` (Google Client ID cho frontend) | công khai |
 | POST | `/auth/google`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password` | công khai (thí sinh) |
 | GET | `/public/announcements`, `/public/announcements/:id`, `/public/open-batches` | công khai |
 | GET/POST/PUT/PATCH | `/admin/announcements`, `/admin/announcements/:id`, `/admin/announcements/:id/status` | announcement:manage |
