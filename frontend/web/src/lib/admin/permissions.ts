@@ -20,7 +20,9 @@ export type Permission =
   | "appeal:resolve"
   | "account:manage"
   | "audit:view"
-  | "announcement:manage";
+  | "announcement:manage"
+  | "candidate:view" // xem danh sách & thông tin tài khoản thí sinh
+  | "candidate:manage"; // khóa / mở khóa tài khoản thí sinh
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -33,12 +35,13 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "appeal:resolve",
     "audit:view",
     "announcement:manage",
+    "candidate:view",
   ],
   HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve"],
   LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view"],
   // Admin là quản trị KỸ THUẬT: cấp tài khoản, phân quyền, xem nhật ký — không
   // tham gia thẩm định hồ sơ (tách bạch trách nhiệm theo tài liệu Vai trò người dùng).
-  ADMIN: ["dashboard:view", "batch:view", "account:manage", "audit:view"],
+  ADMIN: ["dashboard:view", "batch:view", "account:manage", "audit:view", "candidate:view", "candidate:manage"],
 };
 
 export const ROLE_LABEL: Record<RoleCode, string> = {

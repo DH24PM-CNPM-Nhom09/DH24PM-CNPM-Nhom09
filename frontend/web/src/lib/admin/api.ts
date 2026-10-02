@@ -577,6 +577,170 @@ export async function updatePaymentSettings(data: PaymentSettings): Promise<Paym
   return delay(mockPaymentSettings);
 }
 
+// ============================================================================
+// Tài khoản thí sinh                         GET /admin/candidates …
+// ============================================================================
+export type CandidateAccountStatus = "ACTIVE" | "PENDING_VERIFY" | "LOCKED";
+export interface CandidateAccountRow {
+  accountId: number;
+  candidateId: number | null;
+  fullName: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+  idNumberMasked: string | null;
+  status: CandidateAccountStatus;
+  hasPassword: boolean;
+  tempLockedUntil: string | null;
+  createdAt: string;
+  profileComplete: boolean;
+  application: { applicationId: number; applicationCode: string; reviewStatus: ReviewStatus; majorName: string } | null;
+}
+export interface CandidateAccountQuery {
+  q?: string;
+  status?: CandidateAccountStatus | "";
+  profile?: "missing" | "done" | "";
+  application?: "yes" | "no" | "";
+  sort?: "newest" | "oldest";
+  page?: number;
+  pageSize?: number;
+}
+export interface CandidateAccountPage {
+  page: number;
+  pageSize: number;
+  total: number;
+  counts: Record<"ALL" | CandidateAccountStatus, number>;
+  items: CandidateAccountRow[];
+}
+export interface CandidateAccountDetail {
+  account: {
+    accountId: number;
+    email: string | null;
+    phoneNumber: string | null;
+    status: CandidateAccountStatus;
+    hasPassword: boolean;
+    emailVerified: boolean;
+    createdAt: string;
+    failedLoginCount: number;
+    tempLockedUntil: string | null;
+  };
+  profile: { candidateId: number; fullName: string; dob: string | null; gender: "NAM" | "NU" | "KHAC" | null; idNumber: string | null; address: string | null; nationality: string } | null;
+  applications: {
+    applicationId: number;
+    applicationCode: string;
+    batchName: string;
+    majorName: string;
+    degreeLevel: DegreeLevel;
+    reviewStatus: ReviewStatus;
+    admissionStatus: string;
+    isCancelled: boolean;
+    createdAt: string;
+    submittedAt: string | null;
+    paymentStatus: string | null;
+  }[];
+  complaints: { complaintId: number; type: string; status: string; createdAt: string }[];
+  lockHistory: { action: string; detail: string | null; by: string; at: string }[];
+}
+
+const qs = (o: object) => {
+  const p = new URLSearchParams();
+  Object.entries(o).forEach(([k, v]) => v !== undefined && v !== "" && v !== null && p.set(k, String(v)));
+  return p.toString();
+};
+
+// Dữ liệu mẫu: lấy thí sinh từ các hồ sơ mẫu; trạng thái khóa giữ trong bộ nhớ
+const mockLocked = new Set<number>();
+function mockCandidates(): CandidateAccountRow[] {
+  const seen = new Map<number, CandidateAccountRow>();
+  getDb().applications.forEach((a) => {
+    const c = a.candidate;
+    if (seen.has(c.candidateId)) return;
+    seen.set(c.candidateId, {
+      accountId: c.candidateId,
+      candidateId: c.candidateId,
+      fullName: c.fullName,
+      email: c.email,
+      phoneNumber: c.phoneNumber,
+      idNumberMasked: c.idNumber ? `${"•".repeat(c.idNumber.length - 3)}${c.idNumber.slice(-3)}` : null,
+      status: mockLocked.has(c.candidateId) ? "LOCKED" : "ACTIVE",
+      hasPassword: false,
+      tempLockedUntil: null,
+      createdAt: a.submittedAt,
+      profileComplete: Boolean(c.dob && c.gender && c.idNumber && c.address && c.phoneNumber),
+      application: { applicationId: a.applicationId, applicationCode: a.applicationCode, reviewStatus: a.reviewStatus, majorName: "" },
+    });
+  });
+  return Array.from(seen.values());
+}
+
+export async function listCandidateAccounts(query: CandidateAccountQuery): Promise<CandidateAccountPage> {
+  if (!USE_MOCK) return request<CandidateAccountPage>(`/admin/candidates?${qs(query)}`);
+  requirePermission("candidate:view");
+  const text = (query.q ?? "").toLowerCase();
+  const base = mockCandidates().filter((r) => !text || [r.fullName, r.email, r.phoneNumber, r.application?.applicationCode].some((v) => v?.toLowerCase().includes(text)));
+  const rows = base.filter((r) => !query.status || r.status === query.status);
+  const counts = { ALL: base.length, ACTIVE: base.filter((r) => r.status === "ACTIVE").length, PENDING_VERIFY: 0, LOCKED: base.filter((r) => r.status === "LOCKED").length };
+  const page = query.page ?? 1,
+    size = query.pageSize ?? 20;
+  return delay({ page, pageSize: size, total: rows.length, counts, items: rows.slice((page - 1) * size, page * size) });
+}
+
+export async function getCandidateAccount(accountId: number): Promise<CandidateAccountDetail> {
+  if (!USE_MOCK) return request<CandidateAccountDetail>(`/admin/candidates/${accountId}`);
+  requirePermission("candidate:view");
+  const app = getDb().applications.find((a) => a.candidate.candidateId === accountId);
+  if (!app) fail("NOT_FOUND", "Không tìm thấy tài khoản thí sinh.");
+  const c = app.candidate;
+  return delay({
+    account: { accountId, email: c.email, phoneNumber: c.phoneNumber, status: mockLocked.has(accountId) ? "LOCKED" : "ACTIVE", hasPassword: false, emailVerified: true, createdAt: app.submittedAt, failedLoginCount: 0, tempLockedUntil: null },
+    profile: { candidateId: c.candidateId, fullName: c.fullName, dob: c.dob, gender: c.gender, idNumber: c.idNumber, address: c.address, nationality: "Việt Nam" },
+    applications: [{ applicationId: app.applicationId, applicationCode: app.applicationCode, batchName: "", majorName: "", degreeLevel: "THAC_SI", reviewStatus: app.reviewStatus, admissionStatus: app.admissionStatus, isCancelled: app.isCancelled, createdAt: app.submittedAt, submittedAt: app.submittedAt, paymentStatus: app.payment?.gatewayStatus ?? null }],
+    complaints: [],
+    lockHistory: [],
+  });
+}
+
+/** PATCH /admin/candidates/{id}/lock   { reason } */
+export async function lockCandidateAccount(accountId: number, reason: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/candidates/${accountId}/lock`, { method: "PATCH", body: JSON.stringify({ reason }) });
+  const me = requirePermission("candidate:manage");
+  if (reason.trim().length < 5) fail("REASON_REQUIRED", "Nhập lý do khóa (ít nhất 5 ký tự).");
+  mockLocked.add(accountId);
+  const db = getDb();
+  audit(db, me.staffAccountId, "CANDIDATE_LOCK", "candidate_account", accountId, `Khóa tài khoản thí sinh #${accountId}: ${reason.trim()}`);
+  commit();
+  emitDataChange();
+  return delay({ success: true });
+}
+
+export async function unlockCandidateAccount(accountId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/candidates/${accountId}/unlock`, { method: "PATCH" });
+  const me = requirePermission("candidate:manage");
+  mockLocked.delete(accountId);
+  const db = getDb();
+  audit(db, me.staffAccountId, "CANDIDATE_UNLOCK", "candidate_account", accountId, `Mở khóa tài khoản thí sinh #${accountId}`);
+  commit();
+  emitDataChange();
+  return delay({ success: true });
+}
+
+/** Tải tệp CSV danh sách thí sinh theo bộ lọc (mở bằng Excel) */
+export async function exportCandidateAccounts(query: CandidateAccountQuery): Promise<Blob> {
+  if (USE_MOCK) {
+    const rows = mockCandidates();
+    const csv = "\uFEFF" + ["Họ và tên,Email,Điện thoại", ...rows.map((r) => [r.fullName, r.email, r.phoneNumber].map((v) => `"${v ?? ""}"`).join(","))].join("\r\n");
+    return new Blob([csv], { type: "text/csv;charset=utf-8" });
+  }
+  const token = readSession()?.accessToken;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/admin/candidates/export?${qs({ ...query, page: undefined, pageSize: undefined })}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    fail("NETWORK", `Không kết nối được máy chủ (${API_BASE}). Kiểm tra backend đã chạy chưa.`);
+  }
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không xuất được danh sách." }));
+  return res.blob();
+}
+
 /** CHỈ CÓ Ở MOCK: giả lập thí sinh nộp bổ sung (thật sẽ do phân hệ Thí sinh gọi) */
 export async function simulateCandidateSupplement(applicationId: number) {
   if (!USE_MOCK) fail("NOT_SUPPORTED", "Chỉ dùng trong chế độ dữ liệu mẫu.");

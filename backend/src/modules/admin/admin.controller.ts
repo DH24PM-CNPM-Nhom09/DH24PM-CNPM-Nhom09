@@ -6,6 +6,7 @@ import { AppealsService } from "./appeals.service";
 import { ApplicationsService } from "./applications.service";
 import { AuditLogsService } from "./audit-logs.service";
 import { BatchesService } from "./batches.service";
+import { CandidateAccountsService } from "./candidates.service";
 import { StaffService } from "./staff.service";
 
 type Q = Record<string, string | undefined>;
@@ -222,5 +223,46 @@ export class AuditLogsController {
   @RequirePermission("audit:view")
   list(@Query() q: Q) {
     return this.svc.list(q);
+  }
+}
+
+// ============================================================ Tài khoản thí sinh (phía cán bộ)
+@Controller("admin/candidates")
+export class CandidateAccountsController {
+  constructor(private readonly svc: CandidateAccountsService) {}
+
+  @Get()
+  @RequirePermission("candidate:view")
+  list(@Query() q: Q) {
+    return this.svc.list(q);
+  }
+
+  /** Tệp CSV (mở bằng Excel) theo bộ lọc đang chọn */
+  @Get("export")
+  @RequirePermission("candidate:view")
+  async export(@CurrentUser() user: AuthUser, @Query() q: Q, @Res() res: Response) {
+    const csv = await this.svc.exportCsv(asStaff(user), q);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="danh-sach-thi-sinh.csv"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(csv);
+  }
+
+  @Get(":id")
+  @RequirePermission("candidate:view")
+  detail(@Param("id", ParseIntPipe) id: number) {
+    return this.svc.detail(id);
+  }
+
+  @Patch(":id/lock")
+  @RequirePermission("candidate:manage")
+  lock(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.lock(asStaff(user), id, body.reason);
+  }
+
+  @Patch(":id/unlock")
+  @RequirePermission("candidate:manage")
+  unlock(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.unlock(asStaff(user), id);
   }
 }

@@ -165,6 +165,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
   - Mật khẩu cán bộ: ≥ 8 ký tự, có chữ hoa, chữ thường, chữ số, không chứa tên email.
   - Cán bộ nghỉ việc: "Cho nghỉ việc" chỉ ẩn và vô hiệu tài khoản (deleted_at), KHÔNG xóa dữ liệu, để giữ lịch sử thẩm định và nhật ký; hồ sơ đang phụ trách chưa kết luận được trả về hàng chờ. Có thể "Khôi phục" khi quay lại làm. Không cho nghỉ việc tài khoản Quản trị duy nhất.
   - Đăng nhập sai 5 lần liên tiếp thì khóa tạm 15 phút (cùng cấu hình `LOGIN_MAX_FAILED`, `LOGIN_LOCK_MINUTES` với thí sinh).
+- **Tài khoản thí sinh (phía cán bộ)**: cán bộ tuyển sinh và quản trị xem danh sách, thông tin cá nhân, hồ sơ của từng thí sinh và xuất CSV (ghi nhật ký); CCCD trong danh sách chỉ hiện 3 số cuối. Chỉ quản trị được khóa/mở khóa: tài khoản bị khóa không đăng nhập được bằng mật khẩu lẫn Google, phiên đang mở bị chặn ngay, "quên mật khẩu" không mở khóa được; hồ sơ đã nộp giữ nguyên. Không xóa tài khoản thí sinh.
 - **Thông báo**: thông báo `PUBLISHED` ai cũng xem được (kể cả chưa đăng nhập); chỉ cán bộ tuyển sinh được soạn, đăng, gỡ. Mọi thao tác ghi nhật ký.
 - **Lỗi**: luôn trả về `{ error_code, message }` bằng tiếng Việt.
 
@@ -193,6 +194,8 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | GET/POST/PUT/PATCH | `/staff-accounts`, `/staff-accounts/:id/roles`, `/staff-accounts/:id` (sửa họ tên), `/staff-accounts/:id/status`, `/staff-accounts/:id/reset-password`, `/staff-accounts/:id/offboard`, `/staff-accounts/:id/restore` | account:manage |
 | POST | `/auth/staff/change-password` | cán bộ (kể cả khi đang bị bắt đổi mật khẩu) |
 | GET | `/audit-logs` | audit:view |
+| GET | `/admin/candidates`, `/admin/candidates/:id`, `/admin/candidates/export` | candidate:view |
+| PATCH | `/admin/candidates/:id/lock`, `/admin/candidates/:id/unlock` | candidate:manage |
 | GET/PATCH | `/candidates/me` | thí sinh |
 | GET | `/applications/me`, `/applications/me/documents`, `/applications/me/supervisor-request`, `/notifications/me` | thí sinh |
 | PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |

@@ -13,6 +13,8 @@ import { toStaffDto } from "../admin/mappers";
 
 const DEMO_CANDIDATE_EMAIL = "thisinh.demo@gmail.com";
 
+const LOCKED_BY_STAFF = "Tài khoản đã bị khóa. Liên hệ Phòng Đào tạo Sau đại học, Trường Đại học An Giang để được hỗ trợ.";
+
 @Injectable()
 export class AuthService {
   private google = new OAuth2Client();
@@ -143,8 +145,8 @@ export class AuthService {
     if (!account) {
       // Lần đầu đăng nhập Google: tạo tài khoản; hồ sơ cá nhân (bảng candidate) khai sau ở trang Hồ sơ cá nhân
       account = await this.prisma.candidate_account.create({ data: { username: email, email, status: "ACTIVE" }, include: { candidate: true } });
-    } else if (account.status === "LOCKED" && (!account.locked_until || account.locked_until > new Date())) {
-      fail("ACCOUNT_LOCKED", "Tài khoản đang bị khóa tạm thời. Vui lòng thử lại sau.", HttpStatus.FORBIDDEN);
+    } else if (account.status === "LOCKED") {
+      fail("ACCOUNT_LOCKED", LOCKED_BY_STAFF, HttpStatus.FORBIDDEN);
     } else if (account.status !== "ACTIVE") {
       // Google đã xác thực email -> kích hoạt luôn tài khoản đang chờ nhập mã
       account = await this.prisma.candidate_account.update({ where: { account_id: account.account_id }, data: { status: "ACTIVE" }, include: { candidate: true } });
@@ -184,6 +186,7 @@ export class AuthService {
     const account = await this.findCandidateAccount(emailOrPhone);
     const wrong: () => never = () => fail("INVALID_CREDENTIALS", "Thông tin đăng nhập không đúng.", HttpStatus.UNAUTHORIZED);
     if (!account) wrong();
+    if (account.status === "LOCKED") fail("ACCOUNT_LOCKED", LOCKED_BY_STAFF, HttpStatus.FORBIDDEN);
     if (account.locked_until && account.locked_until > new Date())
       fail("ACCOUNT_LOCKED", `Tài khoản bị khóa tạm đến ${account.locked_until.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} do đăng nhập sai nhiều lần.`, HttpStatus.FORBIDDEN);
     if (!account.password_hash) fail("ERR_PASSWORD_LOGIN_DISABLED", "Tài khoản này chỉ đăng nhập bằng Google.", HttpStatus.FORBIDDEN);
@@ -312,7 +315,8 @@ export class AuthService {
     if (!emailOrPhone?.trim()) fail("VALIDATION", "Nhập email hoặc số điện thoại đã đăng ký.");
     const account = await this.findCandidateAccount(emailOrPhone);
     const generic = { sent: true, resendAfterSeconds: await this.otp.resendSeconds() };
-    if (!account || !account.email) return generic;
+    // Tài khoản bị cán bộ khóa: không gửi mã (đặt lại mật khẩu không được dùng để tự mở khóa)
+    if (!account || !account.email || account.status === "LOCKED") return generic;
     if (this.mail.configured && !(await this.emailVerified(account.account_id))) {
       this.logger.warn(`Bỏ qua gửi mã đặt lại mật khẩu tới ${account.email}: email chưa được xác thực (tài khoản dữ liệu mẫu).`);
       return generic;
@@ -333,7 +337,7 @@ export class AuthService {
       this.prisma.candidate_account.update({
         where: { account_id: account.account_id },
         // Nhập đúng mã gửi qua email cũng chứng minh sở hữu email -> kích hoạt nếu đang chờ xác thực
-        data: { password_hash: await bcrypt.hash(newPassword, 10), failed_login_count: 0, locked_until: null, status: "ACTIVE" },
+        data: { password_hash: await bcrypt.hash(newPassword, 10), failed_login_count: 0, locked_until: null, status: account.status === "LOCKED" ? "LOCKED" : "ACTIVE" },
       }),
     ]);
     return { success: true };

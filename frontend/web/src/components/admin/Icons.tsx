@@ -160,3 +160,15 @@ export const IconWallet = (p: P) => (
     <path d="M3 10h18M16 15h2" />
   </Base>
 );
+export const IconIdCard = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="9" cy="11" r="2" />
+    <path d="M6.5 16c.6-1.4 1.5-2 2.5-2s1.9.6 2.5 2M14 10h4M14 13h3" />
+  </Base>
+);
+export const IconDownload = (p: P) => (
+  <Base {...p}>
+    <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+  </Base>
+);

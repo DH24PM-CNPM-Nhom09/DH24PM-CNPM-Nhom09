@@ -109,7 +109,7 @@ export class AuthGuard implements CanActivate {
         include: { candidate: true },
       });
       if (!account) unauthorized();
-      if (account.status === "LOCKED") fail("ACCOUNT_LOCKED", "Tài khoản đang bị khóa.", 401);
+      if (account.status === "LOCKED") fail("ACCOUNT_LOCKED", "Tài khoản đã bị khóa. Liên hệ Phòng Đào tạo Sau đại học để được hỗ trợ.", 401);
       req.user = {
         type: "CANDIDATE",
         accountId: Number(account.account_id),
