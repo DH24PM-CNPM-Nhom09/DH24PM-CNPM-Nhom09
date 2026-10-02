@@ -13,13 +13,18 @@ export default function DashboardPage() {
   const [app, setApp] = useState<Application | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([getMyApplication(), getMyProfile()]).then(([a, c]) => {
-      setApp(a);
-      setCandidate(c);
-      setLoading(false);
-    });
+    Promise.all([getMyApplication(), getMyProfile()])
+      .then(([a, c]) => {
+        setApp(a);
+        setCandidate(c);
+      })
+      .catch((e: any) =>
+        setError(e?.message ?? "Không tải được dữ liệu. Kiểm tra backend (cổng 4000) đã chạy chưa."),
+      )
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -34,6 +39,8 @@ export default function DashboardPage() {
 
         {loading ? (
           <div className="mt-6 h-40 animate-pulse rounded-card bg-gray-100" />
+        ) : error ? (
+          <Card className="mt-6 p-6 text-sm font-medium text-danger">{error}</Card>
         ) : app ? (
           <Card className="mt-6 p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">

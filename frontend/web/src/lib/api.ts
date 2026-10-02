@@ -27,6 +27,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options.headers,
     },
   });
+  // Token cũ/hết hạn (ví dụ "mock-token" còn sót từ chế độ dữ liệu mẫu) -> xóa và về trang đăng nhập
+  if (res.status === 401 && token && typeof window !== "undefined") {
+    localStorage.removeItem("access_token");
+    if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Đã có lỗi xảy ra" }));
     throw body;
