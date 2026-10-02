@@ -147,11 +147,15 @@ model announcement {
   published_at        DateTime?        @db.DateTime(0)
   created_by_staff_id BigInt?          @db.UnsignedBigInt
   created_at          DateTime         @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  category            String           @default("TUYEN_SINH") @db.VarChar(20)
+  is_pinned           Boolean          @default(false)
+  updated_at          DateTime?        @db.DateTime(0)
   admission_batch     admission_batch? @relation(fields: [batch_id], references: [batch_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_announcement_batch")
   staff_account       staff_account?   @relation(fields: [created_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_announcement_staff")
 
   @@index([batch_id], map: "fk_announcement_batch")
   @@index([created_by_staff_id], map: "fk_announcement_staff")
+  @@index([status, published_at], map: "idx_announcement_status_published")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -309,7 +313,7 @@ model candidate {
   gender            String?           @db.VarChar(10)
   id_number         String?           @unique(map: "id_number") @db.VarChar(20)
   address           String?           @db.Text
-  nationality       String            @default("Viá»‡t Nam") @db.VarChar(50)
+  nationality       String            @default("Việt Nam") @db.VarChar(50)
   deleted_at        DateTime?         @db.DateTime(0)
   application       application[]
   candidate_account candidate_account @relation(fields: [account_id], references: [account_id], onUpdate: Restrict, map: "fk_candidate_account")

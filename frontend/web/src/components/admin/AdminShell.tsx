@@ -8,7 +8,7 @@ import { can as canRoles, ROLE_LABEL, type Permission } from "@/lib/admin/permis
 import { useStaffSession, writeSession } from "@/lib/admin/session";
 import { getDb } from "@/lib/admin/store";
 import type { StaffAccount } from "@/lib/admin/types";
-import { IconCalendar, IconDashboard, IconFolder, IconList, IconLogout, IconMenu, IconRefresh, IconScale, IconShield, IconUsers, IconX } from "./Icons";
+import { IconCalendar, IconDashboard, IconFolder, IconList, IconLogout, IconMegaphone, IconMenu, IconRefresh, IconScale, IconShield, IconUsers, IconX } from "./Icons";
 import { Btn, Modal, ToastProvider, useToast } from "./ui";
 
 interface AdminCtx {
@@ -28,6 +28,7 @@ const NAV: { href: string; label: string; perm: Permission; icon: (p: { size?: n
   { href: "/admin/applications", label: "Hồ sơ xét tuyển", perm: "application:view", icon: IconFolder },
   { href: "/admin/batches", label: "Đợt tuyển sinh", perm: "batch:view", icon: IconCalendar },
   { href: "/admin/appeals", label: "Phúc khảo", perm: "appeal:view", icon: IconScale },
+  { href: "/admin/announcements", label: "Thông báo", perm: "announcement:manage", icon: IconMegaphone },
   { href: "/admin/accounts", label: "Tài khoản cán bộ", perm: "account:manage", icon: IconUsers },
   { href: "/admin/audit-log", label: "Nhật ký hệ thống", perm: "audit:view", icon: IconList },
 ];

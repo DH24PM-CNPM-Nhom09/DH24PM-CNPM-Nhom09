@@ -16,7 +16,8 @@ export type Permission =
   | "appeal:view"
   | "appeal:resolve"
   | "account:manage"
-  | "audit:view";
+  | "audit:view"
+  | "announcement:manage";
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -28,6 +29,7 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "appeal:view",
     "appeal:resolve",
     "audit:view",
+    "announcement:manage",
   ],
   HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve"],
   LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view"],

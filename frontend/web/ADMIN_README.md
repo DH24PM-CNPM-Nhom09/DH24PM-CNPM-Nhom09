@@ -2,7 +2,7 @@
 
 Cổng dành cho cán bộ: tiếp nhận và thẩm định hồ sơ, cấu hình đợt tuyển sinh, xử lý phúc khảo, quản lý tài khoản. Chạy chung project Next.js với phân hệ Thí sinh, nằm dưới đường dẫn `/admin`.
 
-Phần này **chỉ thêm file mới**, không sửa file nào của phân hệ Thí sinh:
+Mã của phân hệ Quản lý nằm riêng ở các thư mục dưới đây. Phân hệ Thí sinh dùng chung `src/lib/announcements.ts` (thông báo) với cổng Quản lý:
 
 ```
 src/app/admin/            các trang /admin/...
@@ -21,7 +21,7 @@ Mở `http://localhost:3000/admin/login` và bấm một trong 4 tài khoản de
 
 | Vai trò | Email demo | Thấy được gì |
 |---|---|---|
-| Cán bộ tuyển sinh | canbo@agu.edu.vn | Thẩm định hồ sơ, cấu hình đợt, phúc khảo, nhật ký |
+| Cán bộ tuyển sinh | canbo@agu.edu.vn | Thẩm định hồ sơ, cấu hình đợt, đăng thông báo, phúc khảo, nhật ký |
 | Hội đồng tuyển sinh | hoidong@agu.edu.vn | Xem hồ sơ (chỉ đọc), xử lý phúc khảo |
 | Lãnh đạo khoa/viện | lanhdao@agu.edu.vn | Phê duyệt chỉ tiêu ngành, xem tiến độ, nhật ký |
 | Quản trị hệ thống | quantri@agu.edu.vn | Cấp tài khoản, phân quyền, khóa/mở khóa, nhật ký |
@@ -97,6 +97,12 @@ Xóa file `.env.local` là quay về dữ liệu mẫu trong trình duyệt. Tà
 | updateStaffRoles | PUT | `/staff-accounts/{id}/roles` |
 | setStaffStatus | PATCH | `/staff-accounts/{id}/status` |
 | listAuditLogs | GET | `/audit-logs?q&actorType&page&pageSize` |
+| adminListAnnouncements | GET | `/admin/announcements?status&category&q` |
+| adminCreateAnnouncement | POST | `/admin/announcements` |
+| adminUpdateAnnouncement | PUT | `/admin/announcements/{id}` |
+| adminSetAnnouncementStatus | PATCH | `/admin/announcements/{id}/status` |
+
+Các hàm thông báo nằm ở `src/lib/announcements.ts` (dùng chung với cổng Thí sinh: `getAnnouncements`, `getAnnouncement`, `getOpenBatches` gọi `/public/...`).
 
 Dữ liệu trả về đúng kiểu trong `src/lib/admin/types.ts` (tên trường = cột `admission_db` v3 dạng camelCase). Lỗi theo format chung `{ error_code, message }`.
 

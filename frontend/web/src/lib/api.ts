@@ -7,7 +7,7 @@
 //   NEXT_PUBLIC_USE_MOCK=false
 //   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
-import type { Application, ApplicationDocument, Candidate, SupervisorRequest } from "./types";
+import type { Application, ApplicationDocument, Candidate, CandidateNotification, OtpSent, RegisterPayload, SupervisorRequest } from "./types";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -17,20 +17,34 @@ function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+export function isLoggedIn(): boolean {
+  return Boolean(getToken());
+}
+
+function saveToken(token: string) {
+  if (typeof window !== "undefined") localStorage.setItem("access_token", token);
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw { error_code: "NETWORK", message: "Không kết nối được máy chủ. Vui lòng kiểm tra mạng hoặc thử lại sau." };
+  }
   // Token cũ/hết hạn (ví dụ "mock-token" còn sót từ chế độ dữ liệu mẫu) -> xóa và về trang đăng nhập
   if (res.status === 401 && token && typeof window !== "undefined") {
     localStorage.removeItem("access_token");
-    if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+    if (!window.location.pathname.startsWith("/login"))
+      window.location.href = `/login?expired=1&next=${encodeURIComponent(window.location.pathname)}`;
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Đã có lỗi xảy ra" }));
@@ -58,9 +72,42 @@ export async function loginWithGoogle(googleIdToken: string) {
   return res;
 }
 
-export async function requestPasswordResetOtp(emailOrPhone: string) {
-  if (USE_MOCK) return delay({ sent: true });
-  return request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ emailOrPhone }) });
+// ---- Đăng ký tài khoản + xác thực email bằng mã OTP ----
+export async function registerAccount(payload: RegisterPayload): Promise<OtpSent> {
+  if (USE_MOCK) return delay({ email: payload.email.trim().toLowerCase(), emailSent: false, expiresInMinutes: 5, resendAfterSeconds: 60, devOtp: "123456" });
+  return request<OtpSent>("/auth/register", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function verifyRegistration(email: string, otp: string) {
+  if (USE_MOCK) {
+    if (otp !== "123456") throw { error_code: "OTP_INVALID", message: "Mã xác thực không đúng (dữ liệu mẫu: 123456)." };
+    saveToken("mock-token");
+    return delay({ accessToken: "mock-token" });
+  }
+  const res = await request<{ accessToken: string }>("/auth/register/verify", { method: "POST", body: JSON.stringify({ email, otp }) });
+  saveToken(res.accessToken);
+  return res;
+}
+
+export async function resendRegistrationOtp(email: string): Promise<OtpSent> {
+  if (USE_MOCK) return delay({ email, emailSent: false, expiresInMinutes: 5, resendAfterSeconds: 60, devOtp: "123456" });
+  return request<OtpSent>("/auth/register/resend", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+/** Đăng nhập bằng email hoặc số điện thoại + mật khẩu */
+export async function loginWithPassword(emailOrPhone: string, password: string) {
+  if (USE_MOCK) {
+    saveToken("mock-token");
+    return delay({ accessToken: "mock-token" });
+  }
+  const res = await request<{ accessToken: string }>("/auth/login", { method: "POST", body: JSON.stringify({ emailOrPhone, password }) });
+  saveToken(res.accessToken);
+  return res;
+}
+
+export async function requestPasswordResetOtp(emailOrPhone: string): Promise<OtpSent> {
+  if (USE_MOCK) return delay({ resendAfterSeconds: 60, devOtp: "123456" });
+  return request<OtpSent>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ emailOrPhone }) });
 }
 
 export async function resetPassword(emailOrPhone: string, otp: string, newPassword: string) {
@@ -83,6 +130,9 @@ export async function getMyProfile(): Promise<Candidate> {
       address: "123 Trần Hưng Đạo, P. Mỹ Xuyên, Long Xuyên, An Giang",
       email: "nguyenvana@gmail.com",
       phoneNumber: "0909000456",
+      nationality: "Việt Nam",
+      accountCreatedAt: "2026-08-20T03:00:00Z",
+      hasPassword: true,
     });
   }
   return request<Candidate>("/candidates/me");
@@ -160,4 +210,25 @@ export async function getMySupervisorRequest(): Promise<SupervisorRequest | null
 export async function submitComplaint(payload: { type: string; applicationCode: string; content: string }) {
   if (USE_MOCK) return delay({ success: true });
   return request("/complaints", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// ---- Thông báo cá nhân (kết quả xử lý hồ sơ, yêu cầu bổ sung...) ----
+export async function getMyNotifications(): Promise<CandidateNotification[]> {
+  if (USE_MOCK) {
+    return delay([
+      { notificationId: 2, title: "Hồ sơ cần bổ sung", content: "Chứng chỉ ngoại ngữ chưa rõ nét. Vui lòng tải bản scan rõ hơn trước hạn.", createdAt: new Date(Date.now() - 86_400_000).toISOString(), readAt: null },
+      { notificationId: 1, title: "Đã tiếp nhận hồ sơ", content: "Hồ sơ HS2027-00458 đã được cán bộ tiếp nhận thẩm định.", createdAt: new Date(Date.now() - 4 * 86_400_000).toISOString(), readAt: new Date().toISOString() },
+    ]);
+  }
+  return request<CandidateNotification[]>("/notifications/me");
+}
+
+export async function markNotificationRead(notificationId: number) {
+  if (USE_MOCK) return delay({ updated: 1 });
+  return request<{ updated: number }>(`/notifications/${notificationId}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead() {
+  if (USE_MOCK) return delay({ updated: 0 });
+  return request<{ updated: number }>("/notifications/me/read-all", { method: "PATCH" });
 }

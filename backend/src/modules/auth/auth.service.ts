@@ -1,11 +1,12 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { randomInt } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { AuditService } from "../../common/audit.service";
 import { env, SystemConfigService } from "../../common/config.service";
-import { fail } from "../../common/errors";
+import { AppError, conflict, fail } from "../../common/errors";
+import { MailService } from "../../common/mail.service";
+import { OtpService } from "../../common/otp.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toStaffDto } from "../admin/mappers";
 
@@ -14,12 +15,15 @@ const DEMO_CANDIDATE_EMAIL = "thisinh.demo@gmail.com";
 @Injectable()
 export class AuthService {
   private google = new OAuth2Client();
+  private readonly logger = new Logger("Auth");
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
     private readonly config: SystemConfigService,
+    private readonly otp: OtpService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -132,59 +136,159 @@ export class AuthService {
       wrong();
     }
     await this.prisma.candidate_account.update({ where: { account_id: account.account_id }, data: { failed_login_count: 0, locked_until: null } });
+    if (account.status === "PENDING_VERIFY")
+      // detail = email để frontend chuyển sang bước nhập mã (người dùng đã nhập đúng mật khẩu)
+      throw new AppError("ACCOUNT_NOT_VERIFIED", `Tài khoản chưa xác thực email. Nhập mã đã gửi tới ${maskEmail(account.email)} để kích hoạt.`, HttpStatus.FORBIDDEN, account.email ?? undefined);
     return { accessToken: await this.candidateToken(account.account_id) };
   }
 
-  /** UC-CC-02: gửi OTP đặt lại mật khẩu. Luôn trả lời giống nhau để không lộ tài khoản có tồn tại hay không. */
+  // ======================================================================== Đăng ký (UC-TS-01)
+  /**
+   * Bước 1: thí sinh tự khai họ tên, ngày sinh, email, số điện thoại, mật khẩu.
+   * Tạo tài khoản ở trạng thái PENDING_VERIFY kèm hồ sơ cá nhân (bảng candidate),
+   * rồi gửi mã 6 số về email. Đăng ký lại bằng email chưa xác thực thì cập nhật thông tin và gửi mã mới.
+   */
+  async register(body: Record<string, unknown>) {
+    const fullName = String(body.fullName ?? "").trim().replace(/\s+/g, " ");
+    const email = String(body.email ?? "").trim().toLowerCase();
+    const phone = String(body.phoneNumber ?? "").replace(/[\s.-]/g, "");
+    const password = String(body.password ?? "");
+    const dobRaw = String(body.dob ?? "");
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? new Date(dobRaw + "T00:00:00Z") : new Date(NaN);
+
+    if (fullName.length < 4 || !/^[\p{L} ]+$/u.test(fullName)) fail("VALIDATION", "Họ và tên chỉ gồm chữ cái và khoảng trắng, ví dụ: Nguyễn Văn An.");
+    if (Number.isNaN(dob.getTime())) fail("VALIDATION", "Ngày sinh không hợp lệ.");
+    const age = (Date.now() - dob.getTime()) / (365.25 * 86_400_000);
+    if (age < 18 || age > 80) fail("VALIDATION", "Ngày sinh không hợp lệ: thí sinh phải từ 18 tuổi trở lên.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 255) fail("VALIDATION", "Email không hợp lệ.");
+    if (!/^0\d{9}$/.test(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))
+      fail("WEAK_PASSWORD", "Mật khẩu cần ít nhất 8 ký tự, gồm cả chữ và số.");
+
+    const existing = await this.prisma.candidate_account.findFirst({ where: { email }, include: { candidate: true } });
+    if (existing && (existing.status !== "PENDING_VERIFY" || existing.deleted_at))
+      conflict("EMAIL_EXISTS", "Email này đã có tài khoản. Hãy đăng nhập, hoặc chọn “Quên mật khẩu” nếu không nhớ mật khẩu.");
+    const phoneOwner = await this.prisma.candidate_account.findFirst({ where: { phone_number: phone } });
+    if (phoneOwner && phoneOwner.account_id !== existing?.account_id)
+      conflict("DUPLICATE_PHONE", "Số điện thoại này đã được dùng cho tài khoản khác.");
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const accountId = await this.prisma.$transaction(async (tx) => {
+      if (existing) {
+        await tx.candidate_account.update({ where: { account_id: existing.account_id }, data: { phone_number: phone, password_hash: passwordHash } });
+        if (existing.candidate)
+          await tx.candidate.update({ where: { candidate_id: existing.candidate.candidate_id }, data: { full_name: fullName, dob } });
+        else await tx.candidate.create({ data: { account_id: existing.account_id, full_name: fullName, dob, nationality: "Việt Nam" } });
+        return existing.account_id;
+      }
+      const acc = await tx.candidate_account.create({
+        data: { username: email, email, phone_number: phone, password_hash: passwordHash, status: "PENDING_VERIFY" },
+      });
+      await tx.candidate.create({ data: { account_id: acc.account_id, full_name: fullName, dob, nationality: "Việt Nam" } });
+      return acc.account_id;
+    });
+    return this.sendRegisterOtp(accountId, email);
+  }
+
+  /** Gửi lại mã xác thực đăng ký */
+  async resendRegister(emailRaw: string) {
+    const email = (emailRaw ?? "").trim().toLowerCase();
+    const account = await this.prisma.candidate_account.findFirst({ where: { email, deleted_at: null } });
+    if (!account) fail("NOT_FOUND", "Không tìm thấy đăng ký nào với email này. Vui lòng đăng ký lại.", HttpStatus.NOT_FOUND);
+    if (account.status !== "PENDING_VERIFY") fail("ALREADY_VERIFIED", "Tài khoản đã được xác thực. Bạn có thể đăng nhập.");
+    return this.sendRegisterOtp(account.account_id, email);
+  }
+
+  private async sendRegisterOtp(accountId: bigint, email: string) {
+    const { otp, minutes, resendAfterSeconds } = await this.otp.issue(accountId, "REGISTER");
+    const emailSent = await this.deliverOtp(email, otp, "REGISTER", minutes);
+    return {
+      email,
+      emailSent,
+      expiresInMinutes: minutes,
+      resendAfterSeconds,
+      // Chỉ khi CHƯA cấu hình SMTP và đang ở chế độ phát triển: trả mã để thử được
+      ...(!emailSent && env.devBypass() ? { devOtp: otp } : {}),
+    };
+  }
+
+  /** Bước 2: nhập mã đúng -> kích hoạt tài khoản và đăng nhập luôn */
+  async verifyRegister(emailRaw: string, code: string) {
+    const email = (emailRaw ?? "").trim().toLowerCase();
+    const account = await this.prisma.candidate_account.findFirst({ where: { email, deleted_at: null }, include: { candidate: true } });
+    if (!account) fail("NOT_FOUND", "Không tìm thấy đăng ký nào với email này.", HttpStatus.NOT_FOUND);
+    if (account.status !== "PENDING_VERIFY") fail("ALREADY_VERIFIED", "Tài khoản đã được xác thực. Bạn có thể đăng nhập.");
+    const otpId = await this.otp.check(account.account_id, "REGISTER", String(code ?? "").trim());
+    await this.prisma.$transaction(async (tx) => {
+      await tx.otp_verification.update({ where: { otp_id: otpId }, data: { verified_at: new Date() } });
+      await tx.candidate_account.update({ where: { account_id: account.account_id }, data: { status: "ACTIVE", failed_login_count: 0, locked_until: null } });
+      if (account.candidate)
+        await this.audit.record(
+          { type: "CANDIDATE", id: Number(account.candidate.candidate_id) },
+          "CANDIDATE_REGISTER",
+          { table: "candidate_account", id: account.account_id },
+          `Đăng ký tài khoản và xác thực email ${email}`,
+          tx,
+        );
+    });
+    return { accessToken: await this.candidateToken(account.account_id) };
+  }
+
+  // ======================================================================== Quên mật khẩu (UC-CC-02)
+  /**
+   * Email của tài khoản đã được xác thực chưa: tự đăng ký và nhập đúng mã, hoặc
+   * đăng nhập bằng Google thật (khi tắt DEV_AUTH_BYPASS). Tài khoản dữ liệu mẫu
+   * dùng địa chỉ bịa nên KHÔNG BAO GIỜ được gửi email thật.
+   */
+  async emailVerified(accountId: bigint) {
+    if (!env.devBypass()) return true;
+    return (await this.prisma.otp_verification.count({ where: { account_id: accountId, purpose: "REGISTER", verified_at: { not: null } } })) > 0;
+  }
+
+  /** Luôn trả lời giống nhau để không lộ tài khoản có tồn tại hay không */
   async forgotPassword(emailOrPhone: string) {
     if (!emailOrPhone?.trim()) fail("VALIDATION", "Nhập email hoặc số điện thoại đã đăng ký.");
     const account = await this.findCandidateAccount(emailOrPhone);
-    if (!account) return { sent: true };
-    const now = new Date();
-    const previous = await this.prisma.otp_verification.findFirst({
-      where: { account_id: account.account_id, purpose: "RESET_PASSWORD", verified_at: null },
-      orderBy: { otp_id: "desc" },
-    });
-    const maxResend = await this.config.int("OTP_MAX_RESEND", 5);
-    const sentCount = previous && previous.expires_at.getTime() > now.getTime() - 3_600_000 ? previous.sent_count + 1 : 1;
-    if (sentCount > maxResend) fail("OTP_TOO_MANY", "Bạn đã yêu cầu mã quá nhiều lần. Vui lòng thử lại sau 1 giờ.", HttpStatus.TOO_MANY_REQUESTS);
-    // Mỗi mục đích chỉ 1 OTP còn hiệu lực: vô hiệu mã cũ trước khi tạo mã mới
-    await this.prisma.otp_verification.updateMany({
-      where: { account_id: account.account_id, purpose: "RESET_PASSWORD", verified_at: null, expires_at: { gt: now } },
-      data: { expires_at: now },
-    });
-    const otp = String(randomInt(0, 1_000_000)).padStart(6, "0");
-    const minutes = await this.config.int("OTP_EXPIRE_MINUTES", 5);
-    await this.prisma.otp_verification.create({
-      data: {
-        account_id: account.account_id,
-        purpose: "RESET_PASSWORD",
-        otp_code_hash: await bcrypt.hash(otp, 10),
-        sent_count: sentCount,
-        expires_at: new Date(now.getTime() + minutes * 60_000),
-      },
-    });
-    // TODO khi có dịch vụ email/SMS: gửi otp qua kênh tương ứng. Hiện ghi vào hàng đợi thông báo.
-    return env.devBypass() ? { sent: true, devOtp: otp } : { sent: true };
+    const generic = { sent: true, resendAfterSeconds: await this.otp.resendSeconds() };
+    if (!account || !account.email) return generic;
+    if (this.mail.configured && !(await this.emailVerified(account.account_id))) {
+      this.logger.warn(`Bỏ qua gửi mã đặt lại mật khẩu tới ${account.email}: email chưa được xác thực (tài khoản dữ liệu mẫu).`);
+      return generic;
+    }
+    const { otp, minutes } = await this.otp.issue(account.account_id, "RESET_PASSWORD");
+    const emailSent = await this.deliverOtp(account.email, otp, "RESET_PASSWORD", minutes);
+    return { ...generic, ...(!emailSent && env.devBypass() ? { devOtp: otp } : {}) };
   }
 
   async resetPassword(emailOrPhone: string, otp: string, newPassword: string) {
-    if (!newPassword || newPassword.length < 8) fail("WEAK_PASSWORD", "Mật khẩu mới cần ít nhất 8 ký tự.");
+    if (!newPassword || newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword))
+      fail("WEAK_PASSWORD", "Mật khẩu mới cần ít nhất 8 ký tự, gồm cả chữ và số.");
     const account = await this.findCandidateAccount(emailOrPhone);
-    const invalid: () => never = () => fail("OTP_INVALID", "Mã OTP không đúng hoặc đã hết hạn.");
-    if (!account) invalid();
-    const row = await this.prisma.otp_verification.findFirst({
-      where: { account_id: account.account_id, purpose: "RESET_PASSWORD", verified_at: null, expires_at: { gt: new Date() } },
-      orderBy: { otp_id: "desc" },
-    });
-    if (!row || !(await bcrypt.compare(String(otp ?? ""), row.otp_code_hash))) invalid();
+    if (!account) fail("OTP_INVALID", "Mã xác thực không đúng hoặc đã hết hạn.");
+    const otpId = await this.otp.check(account.account_id, "RESET_PASSWORD", String(otp ?? "").trim());
     await this.prisma.$transaction([
-      this.prisma.otp_verification.update({ where: { otp_id: row.otp_id }, data: { verified_at: new Date() } }),
+      this.prisma.otp_verification.update({ where: { otp_id: otpId }, data: { verified_at: new Date() } }),
       this.prisma.candidate_account.update({
         where: { account_id: account.account_id },
+        // Nhập đúng mã gửi qua email cũng chứng minh sở hữu email -> kích hoạt nếu đang chờ xác thực
         data: { password_hash: await bcrypt.hash(newPassword, 10), failed_login_count: 0, locked_until: null, status: "ACTIVE" },
       }),
     ]);
     return { success: true };
   }
+
+  /** Gửi mã qua email; trả false nếu chưa cấu hình SMTP (mã được in ra cửa sổ backend) */
+  private async deliverOtp(email: string, otp: string, purpose: "REGISTER" | "RESET_PASSWORD", minutes: number) {
+    try {
+      return await this.mail.sendOtp(email, otp, purpose, minutes);
+    } catch {
+      fail("MAIL_FAILED", "Không gửi được email xác thực lúc này. Vui lòng thử lại sau ít phút.", HttpStatus.BAD_GATEWAY);
+    }
+  }
+}
+
+function maskEmail(email: string | null) {
+  if (!email) return "email đã đăng ký";
+  const [user, domain] = email.split("@");
+  return `${user.slice(0, 2)}${"*".repeat(Math.max(1, user.length - 2))}@${domain}`;
 }

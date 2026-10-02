@@ -43,6 +43,27 @@ export class AuthController {
   }
 
   @Public()
+  @Post("register")
+  @HttpCode(200)
+  register(@Body() body: Record<string, unknown>) {
+    return this.auth.register(body);
+  }
+
+  @Public()
+  @Post("register/verify")
+  @HttpCode(200)
+  verifyRegister(@Body() body: Record<string, unknown>) {
+    return this.auth.verifyRegister(str(body.email), str(body.otp));
+  }
+
+  @Public()
+  @Post("register/resend")
+  @HttpCode(200)
+  resendRegister(@Body() body: Record<string, unknown>) {
+    return this.auth.resendRegister(str(body.email));
+  }
+
+  @Public()
   @Post("forgot-password")
   @HttpCode(200)
   forgot(@Body() body: Record<string, unknown>) {

@@ -97,4 +97,12 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   SUPPLEMENT_OVERDUE_SCAN: "Quét hạn bổ sung",
   APPEAL_RESOLVE: "Xử lý phúc khảo",
   EXAM_FINISHED: "Kết thúc thi",
+  CANDIDATE_REGISTER: "Thí sinh đăng ký tài khoản",
+  COMPLAINT_SUBMIT: "Thí sinh gửi khiếu nại",
+  ANNOUNCEMENT_CREATE: "Soạn thông báo",
+  ANNOUNCEMENT_PUBLISH: "Đăng thông báo",
+  ANNOUNCEMENT_PUBLISHED: "Đăng thông báo",
+  ANNOUNCEMENT_UPDATE: "Sửa thông báo",
+  ANNOUNCEMENT_ARCHIVED: "Gỡ thông báo",
+  ANNOUNCEMENT_DRAFT: "Chuyển thông báo về nháp",
 };

@@ -1,17 +1,18 @@
 # Backend — Hệ thống Quản lý Tuyển sinh Sau đại học
 
-NestJS 10 + Prisma 6 + MariaDB, viết bám CSDL `admission_db` v3 của nhóm, kèm `migration_v4_backend.sql` (chỉ thêm, không xóa gì).
+NestJS 10 + Prisma 6 + MariaDB, viết bám CSDL `admission_db` v3 của nhóm, kèm `migration_v4_backend.sql` và `migration_v5_announcement.sql` (chỉ thêm, không xóa gì).
 Phục vụ cả hai phân hệ: **Quản lý** (`/admin` trên web) và **Thí sinh**.
 
 Đã chạy thử toàn bộ trên **MariaDB 10.4.32**, đúng bản đi kèm XAMPP 8.x.
 
 ```
 backend/
-  database/        admission_db_v3.sql (bản gốc của nhóm) + migration_v4_backend.sql
+  database/        admission_db_v3.sql (bản gốc của nhóm) + migration_v4_backend.sql + migration_v5_announcement.sql
   prisma/          schema.prisma (sinh từ CSDL bằng prisma db pull), seed.ts, demo/
   src/
-    common/        xác thực JWT + phân quyền, lỗi chuẩn, state machine, nhật ký
-    modules/auth       M1 — đăng nhập cán bộ / thí sinh, OTP quên mật khẩu
+    common/        xác thực JWT + phân quyền, lỗi chuẩn, state machine, nhật ký, gửi email (SMTP), OTP
+    modules/auth       M1 — đăng ký thí sinh + xác thực email bằng OTP, đăng nhập cán bộ / thí sinh, quên mật khẩu
+    modules/announcements  Thông báo tuyển sinh / quy định (công khai) + cán bộ soạn, đăng, gỡ
     modules/admin      M2, M3, M4, M5 (phúc khảo), M8 — API phân hệ Quản lý
     modules/candidate  API phân hệ Thí sinh
   uploads/         tệp minh chứng thí sinh nộp (không đưa lên git)
@@ -31,11 +32,12 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 2 lệnh:
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 3 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v4_backend.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v5_announcement.sql"
 ```
 
 Kiểm tra: CSDL `admission_db` có **42 bảng** (40 bảng gốc + `application_education` + `complaint`).
@@ -59,6 +61,29 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
+> **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
+> lệnh này chạy migration v5, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+
+### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
+
+Chưa làm bước này hệ thống vẫn chạy: mã xác thực được in ra cửa sổ backend và hiện trên màn hình đăng ký để thử.
+Để gửi mail thật, dùng một tài khoản Gmail làm hộp thư gửi:
+
+1. Bật **Xác minh 2 bước** cho tài khoản Gmail đó: https://myaccount.google.com/signinoptions/twosv
+2. Tạo **Mật khẩu ứng dụng** tại https://myaccount.google.com/apppasswords (đặt tên, ví dụ "Tuyen sinh"). Google hiện 1 dãy 16 ký tự.
+3. Thêm vào file `.env` của backend:
+   ```
+   SMTP_USER="tenban@gmail.com"
+   SMTP_PASS="abcd efgh ijkl mnop"
+   ```
+4. Tắt backend (Ctrl+C) và chạy lại `npm run dev`. Cửa sổ backend báo `Đã bật gửi email qua smtp.gmail.com…` là xong.
+
+Lưu ý:
+- `SMTP_PASS` là mật khẩu ứng dụng, **không phải** mật khẩu đăng nhập Gmail. Không đưa file `.env` lên GitHub (đã có trong `.gitignore`).
+- Thư gửi tới: thí sinh **tự đăng ký và đã nhập đúng mã**. Tài khoản trong dữ liệu mẫu dùng địa chỉ bịa nên không bao giờ nhận mail.
+- Thông báo xử lý hồ sơ (tiếp nhận, yêu cầu bổ sung, kết quả…) được gửi email khoảng 20 giây sau thao tác của cán bộ.
+- Gmail cá nhân gửi được khoảng 500 thư/ngày, đủ cho demo và thử nghiệm.
+
 ### Bước 4 — Cho frontend gọi backend thật
 
 Tạo file `frontend/web/.env.local` với nội dung:
@@ -81,6 +106,7 @@ Sau đó tắt rồi chạy lại `npm run dev` ở frontend (Next.js chỉ đ�
 | | lanhdao@agu.edu.vn | Lãnh đạo khoa/viện |
 | | quantri@agu.edu.vn | Quản trị hệ thống |
 | http://localhost:3000/login | bấm "Đăng nhập với Google" | Thí sinh demo `thisinh.demo@gmail.com`, có 1 hồ sơ đang chờ bổ sung |
+| http://localhost:3000/register | tự đăng ký bằng Gmail thật | Nhận mã 6 số qua email (hoặc xem trên màn hình nếu chưa cấu hình Gmail) |
 
 Đăng nhập Google của thí sinh chạy ở **chế độ phát triển** (`DEV_AUTH_BYPASS=true`): frontend đang gửi token giả `mock-google-id-token`, backend coi đó là tài khoản thí sinh demo.
 Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, điền `GOOGLE_CLIENT_ID`, đặt `DEV_AUTH_BYPASS=false`, và cho frontend gửi `id_token` thật (chỗ `TODO` trong `src/app/login/page.tsx`).
@@ -99,7 +125,10 @@ Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, đi�
   - Lưu kèm SHA-256. Tổng 30MB mỗi hồ sơ do trigger của CSDL chặn, và thông báo của trigger được trả nguyên văn.
   - Nộp lại khi được yêu cầu bổ sung sẽ thay tệp không hợp lệ.
 - **Phúc khảo**: đổi điểm thì trigger #3 sửa `exam_score` và trigger #4 tự tính lại `application_ranking`.
-- **Đăng nhập thí sinh bằng mật khẩu**: sai 5 lần thì khóa 15 phút (chỉnh trong `system_config`). OTP quên mật khẩu được băm bcrypt, hết hạn sau 5 phút, mỗi lần chỉ 1 mã còn hiệu lực.
+- **Đăng ký thí sinh**: khai họ tên, ngày sinh, email, số điện thoại, mật khẩu (≥ 8 ký tự, có chữ và số). Tài khoản ở trạng thái `PENDING_VERIFY` cho tới khi nhập đúng mã gửi về email; chưa xác thực thì không đăng nhập được. Thông tin đăng ký được ghi luôn vào bảng `candidate` (hồ sơ cá nhân).
+- **Mã OTP** (đăng ký và quên mật khẩu): 6 số, chỉ lưu bản băm bcrypt, hết hạn sau 5 phút, mỗi lần chỉ 1 mã còn hiệu lực. Chờ 60 giây giữa 2 lần gửi, tối đa 5 lần/giờ; nhập sai 5 lần thì mã bị hủy.
+- **Đăng nhập thí sinh bằng mật khẩu** (email hoặc số điện thoại): sai 5 lần thì khóa 15 phút (chỉnh trong `system_config`).
+- **Thông báo**: thông báo `PUBLISHED` ai cũng xem được (kể cả chưa đăng nhập); chỉ cán bộ tuyển sinh được soạn, đăng, gỡ. Mọi thao tác ghi nhật ký.
 - **Lỗi**: luôn trả về `{ error_code, message }` bằng tiếng Việt.
 
 ## Danh sách API (tiền tố `/api/v1`)
@@ -108,7 +137,10 @@ Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, đi�
 |---|---|---|
 | POST | `/auth/staff/login`, `/auth/staff/google` | công khai |
 | GET | `/auth/staff/me` | cán bộ |
+| POST | `/auth/register`, `/auth/register/verify`, `/auth/register/resend` | công khai (thí sinh) |
 | POST | `/auth/google`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password` | công khai (thí sinh) |
+| GET | `/public/announcements`, `/public/announcements/:id`, `/public/open-batches` | công khai |
+| GET/POST/PUT/PATCH | `/admin/announcements`, `/admin/announcements/:id`, `/admin/announcements/:id/status` | announcement:manage |
 | GET | `/admin/lookups`, `/admin/dashboard` | dashboard:view |
 | GET | `/admin/applications`, `/admin/applications/:id`, `/admin/application-documents/:id/file` | application:view |
 | PATCH | `/applications/:id/review` | application:review |
@@ -122,6 +154,7 @@ Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, đi�
 | GET | `/audit-logs` | audit:view |
 | GET/PATCH | `/candidates/me` | thí sinh |
 | GET | `/applications/me`, `/applications/me/documents`, `/applications/me/supervisor-request`, `/notifications/me` | thí sinh |
+| PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |
 | POST | `/applications/:id/documents` (multipart: `file`, `documentType`), `/applications/me/supplement`, `/complaints` | thí sinh |
 | GET | `/health` (ngoài tiền tố) | công khai |
 
@@ -132,6 +165,7 @@ Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, đi�
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5, thông báo mẫu) — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm
@@ -139,5 +173,5 @@ Muốn dùng Google thật: tạo OAuth Client ID ở Google Cloud Console, đi�
 - **M5 (phần còn lại):** xếp phòng thi, số báo danh, lịch phỏng vấn, nhập điểm.
 - **M6:** điểm chuẩn, xếp hạng, danh sách dự bị, công bố kết quả 2 cấp duyệt.
 - **M7:** quyết định trúng tuyển, xác nhận nhập học, nộp bản chính.
-- **Gửi email/SMS thật:** thông báo kênh EMAIL hiện nằm ở trạng thái `PENDING` trong bảng `notification`.
+- **Gửi SMS:** chưa có; mã xác thực và thông báo chỉ gửi qua email.
 - **Màn hình cán bộ xử lý khiếu nại chung:** bảng `complaint` đã có và thí sinh gửi được.

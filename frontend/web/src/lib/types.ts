@@ -36,6 +36,34 @@ export interface Candidate {
   address: string | null;
   email: string | null;
   phoneNumber: string | null;
+  nationality?: string;
+  accountCreatedAt?: string;
+  hasPassword?: boolean;
+}
+
+export interface CandidateNotification {
+  notificationId: number;
+  title: string | null;
+  content: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
+/** Kết quả gửi mã xác thực. devOtp chỉ có khi backend CHƯA cấu hình gửi email (chế độ phát triển) */
+export interface OtpSent {
+  email?: string;
+  emailSent?: boolean;
+  expiresInMinutes?: number;
+  resendAfterSeconds?: number;
+  devOtp?: string;
+}
+
+export interface RegisterPayload {
+  fullName: string;
+  dob: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
 }
 
 export interface Application {

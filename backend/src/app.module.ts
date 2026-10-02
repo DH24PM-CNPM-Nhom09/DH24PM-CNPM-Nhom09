@@ -5,6 +5,11 @@ import { JwtModule } from "@nestjs/jwt";
 import { AuditModule } from "./common/audit.service";
 import { AuthGuard } from "./common/auth";
 import { SystemConfigModule } from "./common/config.service";
+import { MailModule } from "./common/mail.service";
+import { NotificationDispatcher } from "./common/notification-dispatcher";
+import { OtpModule } from "./common/otp.service";
+import { AdminAnnouncementsController, PublicController } from "./modules/announcements/announcements.controller";
+import { AnnouncementsService } from "./modules/announcements/announcements.service";
 import { AppealsController, ApplicationsController, AuditLogsController, BatchesController, StaffController } from "./modules/admin/admin.controller";
 import { AppealsService } from "./modules/admin/appeals.service";
 import { ApplicationsService } from "./modules/admin/applications.service";
@@ -32,6 +37,8 @@ import { PrismaModule } from "./prisma/prisma.service";
     PrismaModule,
     AuditModule,
     SystemConfigModule,
+    MailModule,
+    OtpModule,
   ],
   controllers: [
     HealthController,
@@ -42,6 +49,8 @@ import { PrismaModule } from "./prisma/prisma.service";
     StaffController,
     AuditLogsController,
     CandidateController,
+    PublicController,
+    AdminAnnouncementsController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
@@ -52,6 +61,8 @@ import { PrismaModule } from "./prisma/prisma.service";
     StaffService,
     AuditLogsService,
     CandidateService,
+    AnnouncementsService,
+    NotificationDispatcher,
   ],
 })
 export class AppModule {}

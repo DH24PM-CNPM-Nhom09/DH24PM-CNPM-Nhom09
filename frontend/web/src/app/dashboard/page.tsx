@@ -7,6 +7,7 @@ import Card from "@/components/ui/Card";
 import Badge, { admissionStatusLabel, admissionStatusTone, reviewStatusLabel, reviewStatusTone } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { getMyApplication, getMyProfile } from "@/lib/api";
+import { CATEGORY_LABEL, CATEGORY_TONE, fmtDate, getAnnouncements, type Announcement } from "@/lib/announcements";
 import type { Application, Candidate } from "@/lib/types";
 
 export default function DashboardPage() {
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [news, setNews] = useState<Announcement[] | null>(null);
 
   useEffect(() => {
     Promise.all([getMyApplication(), getMyProfile()])
@@ -25,6 +27,9 @@ export default function DashboardPage() {
         setError(e?.message ?? "Không tải được dữ liệu. Kiểm tra backend (cổng 4000) đã chạy chưa."),
       )
       .finally(() => setLoading(false));
+    getAnnouncements({ pageSize: 4 })
+      .then((r) => setNews(r.items))
+      .catch(() => setNews([]));
   }, []);
 
   return (
@@ -88,9 +93,14 @@ export default function DashboardPage() {
         ) : (
           <Card className="mt-6 p-8 text-center">
             <p className="text-sm text-gray-500">Bạn chưa tạo hồ sơ xét tuyển nào.</p>
-            <Link href="/application/new">
-              <Button className="mt-4">Tạo hồ sơ xét tuyển</Button>
-            </Link>
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              <Link href="/announcements?tab=batches">
+                <Button variant="outline">Xem các đợt đang mở</Button>
+              </Link>
+              <Link href="/application/new">
+                <Button>Tạo hồ sơ xét tuyển</Button>
+              </Link>
+            </div>
           </Card>
         )}
 
@@ -116,6 +126,30 @@ export default function DashboardPage() {
             <Link href="/gvhd" className="mt-2 block text-sm font-semibold text-accent hover:underline">
               Xem trạng thái →
             </Link>
+          </Card>
+        </div>
+
+        <div className="mt-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-gray-900">Thông báo mới</h2>
+            <Link href="/announcements" className="text-[13px] font-semibold text-accent hover:underline">
+              Xem tất cả →
+            </Link>
+          </div>
+          <Card className="mt-3 divide-y divide-gray-100">
+            {news === null ? (
+              <div className="h-40 animate-pulse bg-gray-50" />
+            ) : news.length === 0 ? (
+              <p className="p-5 text-sm text-gray-500">Chưa có thông báo nào.</p>
+            ) : (
+              news.map((a) => (
+                <Link key={a.announcementId} href={`/announcements/${a.announcementId}`} className="flex flex-col gap-1 px-5 py-3.5 hover:bg-gray-50 sm:flex-row sm:items-center sm:gap-3">
+                  <span className={`w-fit shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${CATEGORY_TONE[a.category]}`}>{CATEGORY_LABEL[a.category]}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-800">{a.title}</span>
+                  <span className="shrink-0 text-xs text-gray-400">{fmtDate(a.publishedAt)}</span>
+                </Link>
+              ))
+            )}
           </Card>
         </div>
       </div>

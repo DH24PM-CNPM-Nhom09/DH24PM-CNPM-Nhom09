@@ -4,13 +4,14 @@
 //   npm run db:seed        -> tạo tài khoản Quản trị đầu tiên (nếu chưa có cán bộ nào)
 //   npm run db:seed:demo   -> nạp bộ dữ liệu mẫu đầy đủ (chỉ chạy trên CSDL TRỐNG)
 // Không bao giờ xóa dữ liệu: gặp CSDL đã có dữ liệu thì dừng và báo.
-// Yêu cầu: đã chạy admission_db_v3.sql + migration_v4_backend.sql.
+// Yêu cầu: đã chạy admission_db_v3.sql + migration_v4_backend.sql + migration_v5_announcement.sql.
 // ============================================================================
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { seedAnnouncements } from "./announcements-seed";
 import { createSeedDb } from "./demo/mockData";
 
 const prisma = new PrismaClient();
@@ -353,6 +354,9 @@ async function seedDemo() {
       created_at: new Date(l.createdAt),
     })),
   });
+
+  const nAnn = await seedAnnouncements(prisma);
+  if (nAnn) console.log(`✓ Đã nạp ${nAnn} thông báo tuyển sinh / quy định mẫu.`);
 
   console.log("\n✓ Đã nạp dữ liệu mẫu. Tài khoản đăng nhập (mật khẩu chung: " + DEMO_PASSWORD + "):");
   console.log("  Cán bộ tuyển sinh  canbo@agu.edu.vn");

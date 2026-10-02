@@ -63,4 +63,14 @@ export class CandidateController {
   notifications(@CurrentUser() user: AuthUser) {
     return this.svc.notifications(asCandidate(user));
   }
+
+  @Patch("notifications/me/read-all")
+  readAll(@CurrentUser() user: AuthUser) {
+    return this.svc.markRead(asCandidate(user), null);
+  }
+
+  @Patch("notifications/:id/read")
+  read(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.markRead(asCandidate(user), id);
+  }
 }

@@ -45,7 +45,7 @@ export class AuditService {
 
   /**
    * Gửi thông báo cho thí sinh: tạo bản ghi kênh SYSTEM (hiện trong cổng thí sinh)
-   * và EMAIL (hàng đợi gửi mail — hiện chưa nối SMTP nên để PENDING).
+   * và EMAIL (hàng đợi PENDING — NotificationDispatcher gửi qua SMTP sau khi transaction lưu xong).
    */
   async notifyCandidate(candidateId: number, title: string, content: string, db: Tx = this.prisma) {
     await this.assertActor(db, "CANDIDATE", candidateId);

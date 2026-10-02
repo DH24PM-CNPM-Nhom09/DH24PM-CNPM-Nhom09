@@ -142,3 +142,9 @@ export function GoogleMark({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+export const IconMegaphone = (p: P) => (
+  <Base {...p}>
+    <path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+  </Base>
+);

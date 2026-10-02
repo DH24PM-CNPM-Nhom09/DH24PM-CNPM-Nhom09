@@ -57,6 +57,9 @@ export class CandidateService {
       address: c?.address ?? null,
       email: account.email,
       phoneNumber: account.phone_number,
+      nationality: c?.nationality ?? "Việt Nam",
+      accountCreatedAt: isoReq(account.created_at),
+      hasPassword: Boolean(account.password_hash),
     };
   }
 
@@ -267,5 +270,21 @@ export class CandidateService {
       take: 50,
     });
     return rows.map((n) => ({ notificationId: id(n.notification_id), title: n.title, content: n.content, createdAt: isoReq(n.created_at), readAt: iso(n.read_at) }));
+  }
+
+  /** Đánh dấu đã đọc 1 thông báo (notificationId) hoặc tất cả (null) */
+  async markRead(me: CandidateUser, notificationId: number | null) {
+    if (!me.candidateId) return { updated: 0 };
+    const r = await this.prisma.notification.updateMany({
+      where: {
+        recipient_type: "CANDIDATE",
+        recipient_id: BigInt(me.candidateId),
+        channel: "SYSTEM",
+        read_at: null,
+        ...(notificationId !== null ? { notification_id: BigInt(notificationId) } : {}),
+      },
+      data: { read_at: new Date() },
+    });
+    return { updated: r.count };
   }
 }
