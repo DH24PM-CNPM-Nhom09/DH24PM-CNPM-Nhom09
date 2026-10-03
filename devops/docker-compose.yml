@@ -18,16 +18,17 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    restart: unless-stopped
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+  # backend:
+  #   restart: unless-stopped
+  #   depends_on:
+  #     mariadb:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  # TODO: mo lai phan nay khi co Backend/Dockerfile (can hoi Backend dev: image/build, port, entry point)
 
 volumes:
   mariadb_data:
