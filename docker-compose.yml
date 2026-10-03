@@ -1,8 +1,78 @@
+# ============================================================================
+# Chạy cả hệ thống bằng Docker: MariaDB + backend (NestJS) + frontend (Next.js)
+#   1. copy .env.example .env   rồi sửa mật khẩu / JWT_SECRET trong .env
+#   2. docker compose up -d --build
+#   3. Lần đầu: docker compose exec backend npm run db:seed        (tạo tài khoản quản trị)
+#      hoặc     docker compose exec backend npm run db:seed:demo   (dữ liệu mẫu để demo)
+#   Frontend: http://localhost:3000   Backend: http://localhost:4000/api/v1   Health: /health
+# CSDL được tạo tự động từ backend/database (v3 → v11) khi volume db_data còn trống.
+# ============================================================================
+name: tuyensinh-sdh
+
 services:
-  backend:
+  db:
+    build:
+      context: .
+      dockerfile: docker/db/Dockerfile
     restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Đặt DB_ROOT_PASSWORD trong file .env}
+      MARIADB_DATABASE: admission_db
+      MARIADB_USER: ${DB_USER:-tuyensinh}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Đặt DB_PASSWORD trong file .env}
+    volumes:
+      - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://${DB_USER:-tuyensinh}:${DB_PASSWORD}@db:3306/admission_db
+      JWT_SECRET: ${JWT_SECRET:?Đặt JWT_SECRET (chuỗi ngẫu nhiên dài) trong file .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGINS: ${FRONTEND_URL:-http://localhost:3000}
+      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Tuyển sinh Sau đại học - ĐH An Giang}
+      AUTO_JOB_MINUTES: ${AUTO_JOB_MINUTES:-15}
+      AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-60}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend/web
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${BACKEND_PUBLIC_URL:-http://localhost:4000}/api/v1
+        NEXT_PUBLIC_DEMO_LOGIN: ${DEMO_LOGIN:-false}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  db_data:
+  uploads:
