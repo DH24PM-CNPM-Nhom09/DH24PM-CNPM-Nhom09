@@ -1,5 +1,6 @@
 "use client";
 
+import BrandMark from "@/components/BrandMark";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
@@ -93,7 +94,7 @@ function LoginForm() {
     <div className="flex min-h-screen flex-col bg-gray-50 lg:flex-row">
       <div className="flex flex-col justify-between bg-navy-900 px-6 py-8 text-white lg:w-[44%] lg:px-14 lg:py-14">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-lg font-extrabold">TS</div>
+          <BrandMark size={44} onDark />
           <div className="leading-tight">
             <p className="text-sm font-bold">Tuyển Sinh Sau Đại Học</p>
             <p className="text-xs text-white/60">Trường Đại học An Giang, ĐHQG-HCM</p>

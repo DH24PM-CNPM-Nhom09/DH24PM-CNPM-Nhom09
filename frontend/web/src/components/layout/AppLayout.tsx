@@ -1,5 +1,6 @@
 "use client";
 
+import BrandMark from "@/components/BrandMark";
 import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -65,8 +66,11 @@ export default function AppLayout({ children, allowGuest = false }: { children: 
 
   const Brand = (
     <Link href={guest ? "/announcements" : "/dashboard"} className="flex items-center gap-2.5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-sm font-extrabold text-white">TS</div>
-      <span className="hidden text-sm font-bold text-gray-900 sm:inline">Tuyển Sinh Sau Đại Học</span>
+      <BrandMark size={38} />
+      <span className="hidden leading-tight sm:block">
+        <span className="block text-sm font-bold text-gray-900">Tuyển Sinh Sau Đại Học</span>
+        <span className="block text-[11px] font-medium text-gray-500">Trường Đại học An Giang · ĐHQG-HCM</span>
+      </span>
     </Link>
   );
 

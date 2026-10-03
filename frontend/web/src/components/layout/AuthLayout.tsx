@@ -1,3 +1,4 @@
+import BrandMark from "@/components/BrandMark";
 import { ReactNode } from "react";
 
 export default function AuthLayout({
@@ -17,9 +18,7 @@ export default function AuthLayout({
         <div className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-white/5" />
 
         <div className="relative flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-lg font-extrabold">
-            TS
-          </div>
+          <BrandMark size={44} onDark />
           <div>
             <p className="text-sm font-bold leading-tight">Tuyển Sinh Sau Đại Học</p>
             <p className="text-xs text-white/60">Trường Đại học An Giang, ĐHQG-HCM</p>

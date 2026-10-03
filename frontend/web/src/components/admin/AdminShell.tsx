@@ -1,5 +1,6 @@
 "use client";
 
+import BrandMark from "@/components/BrandMark";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -112,7 +113,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const sidebar = (
     <div className="flex h-full flex-col bg-navy-900 text-white">
       <div className="flex items-center gap-3 px-5 pb-6 pt-6">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-[15px] font-extrabold">TS</div>
+        <BrandMark size={40} onDark />
         <div className="leading-tight">
           <p className="text-sm font-bold">Cổng Quản lý</p>
           <p className="text-xs text-white/60">Tuyển sinh Sau đại học</p>
