@@ -287,6 +287,7 @@ export class ApplicationsService {
         isCancelled: a.is_cancelled,
         submittedAt: iso(a.submitted_at),
         assignedStaffId: num(a.assigned_staff_id),
+        language: { option: a.language_option, note: a.language_note },
         candidate: {
           candidateId: id(c.candidate_id),
           fullName: c.full_name,
@@ -321,6 +322,13 @@ export class ApplicationsService {
               gatewayStatus: pay.gateway_status,
               paidAt: iso(pay.paid_at),
               receiptNo: pay.receipt_no,
+              feeDetail: (() => {
+                try {
+                  return pay.fee_detail ? (JSON.parse(pay.fee_detail) as { code: string; label: string; amount: number }[]) : null;
+                } catch {
+                  return null;
+                }
+              })(),
               transferContent: transferNote(a.application_code),
             }
           : null,
@@ -388,12 +396,16 @@ export class ApplicationsService {
 
   /** Cấu hình lệ phí và tài khoản nhận chuyển khoản (bảng system_config) */
   async paymentSettings() {
-    const keys = ["APPLICATION_FEE_THAC_SI", "APPLICATION_FEE_TIEN_SI", "PAYMENT_BANK_BIN", "PAYMENT_BANK_NAME", "PAYMENT_ACCOUNT_NO", "PAYMENT_ACCOUNT_NAME"];
+    const keys = ["FEE_REGISTRATION", "APPLICATION_FEE_THAC_SI", "APPLICATION_FEE_TIEN_SI", "FEE_ENGLISH_TEST", "FEE_SUPPLEMENT_CREDIT", "FEE_APPEAL", "PAYMENT_BANK_BIN", "PAYMENT_BANK_NAME", "PAYMENT_ACCOUNT_NO", "PAYMENT_ACCOUNT_NAME"];
     const rows = await this.prisma.system_config.findMany({ where: { config_key: { in: keys } } });
     const v = (k: string) => rows.find((r) => r.config_key === k)?.config_value?.trim() ?? "";
     return {
-      feeThacSi: Number(v("APPLICATION_FEE_THAC_SI")) || 600_000,
+      feeRegistration: Number(v("FEE_REGISTRATION")) || 100_000,
+      feeThacSi: Number(v("APPLICATION_FEE_THAC_SI")) || 360_000,
       feeTienSi: Number(v("APPLICATION_FEE_TIEN_SI")) || 1_000_000,
+      feeEnglishTest: Number(v("FEE_ENGLISH_TEST")) || 120_000,
+      feeSupplementCredit: Number(v("FEE_SUPPLEMENT_CREDIT")) || 490_000,
+      feeAppeal: Number(v("FEE_APPEAL")) || 360_000,
       bankBin: v("PAYMENT_BANK_BIN"),
       bankName: v("PAYMENT_BANK_NAME"),
       accountNo: v("PAYMENT_ACCOUNT_NO"),
@@ -413,8 +425,12 @@ export class ApplicationsService {
     const bankBin = text(body.bankBin, 6);
     if (bankBin && !/^\d{6}$/.test(bankBin)) fail("VALIDATION", "Mã ngân hàng (BIN) gồm 6 chữ số.");
     const values: [string, string, string][] = [
-      ["APPLICATION_FEE_THAC_SI", fee(body.feeThacSi, "Lệ phí thạc sĩ"), "Lệ phí xét tuyển thạc sĩ (đồng)"],
-      ["APPLICATION_FEE_TIEN_SI", fee(body.feeTienSi, "Lệ phí tiến sĩ"), "Lệ phí xét tuyển tiến sĩ (đồng)"],
+      ["FEE_REGISTRATION", fee(body.feeRegistration, "Lệ phí đăng ký dự tuyển"), "Lệ phí đăng ký dự tuyển (đồng/hồ sơ)"],
+      ["APPLICATION_FEE_THAC_SI", fee(body.feeThacSi, "Lệ phí xét tuyển thạc sĩ"), "Lệ phí xét tuyển thạc sĩ (đồng/hồ sơ)"],
+      ["APPLICATION_FEE_TIEN_SI", fee(body.feeTienSi, "Lệ phí xét tuyển tiến sĩ"), "Lệ phí xét tuyển tiến sĩ (đồng/hồ sơ)"],
+      ["FEE_ENGLISH_TEST", fee(body.feeEnglishTest, "Lệ phí thi tiếng Anh"), "Lệ phí đăng ký thi đánh giá năng lực tiếng Anh (đồng/thí sinh)"],
+      ["FEE_SUPPLEMENT_CREDIT", fee(body.feeSupplementCredit, "Học phí bổ sung kiến thức"), "Học phí học bổ sung kiến thức (đồng/tín chỉ)"],
+      ["FEE_APPEAL", fee(body.feeAppeal, "Lệ phí phúc khảo"), "Lệ phí phúc khảo hồ sơ (đồng/hồ sơ)"],
       ["PAYMENT_BANK_BIN", bankBin, "Mã BIN ngân hàng nhận lệ phí (NAPAS), dùng tạo mã VietQR"],
       ["PAYMENT_BANK_NAME", text(body.bankName, 200), "Ngân hàng nhận lệ phí"],
       ["PAYMENT_ACCOUNT_NO", accountNo, "Số tài khoản nhận lệ phí"],
@@ -423,7 +439,7 @@ export class ApplicationsService {
     await this.prisma.$transaction(async (tx) => {
       for (const [k, val, desc] of values)
         await tx.system_config.upsert({ where: { config_key: k }, create: { config_key: k, config_value: val, description: desc }, update: { config_value: val } });
-      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "PAYMENT_SETTINGS_UPDATE", { table: "system_config", id: null }, `Cập nhật lệ phí (ThS ${values[0][1]}đ, TS ${values[1][1]}đ) và tài khoản nhận`, tx);
+      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "PAYMENT_SETTINGS_UPDATE", { table: "system_config", id: null }, `Cập nhật lệ phí (đăng ký ${values[0][1]}đ, xét tuyển ThS ${values[1][1]}đ, TS ${values[2][1]}đ, thi tiếng Anh ${values[3][1]}đ) và tài khoản nhận`, tx);
     });
     return this.paymentSettings();
   }

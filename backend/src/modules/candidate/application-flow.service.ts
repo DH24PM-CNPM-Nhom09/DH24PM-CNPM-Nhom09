@@ -10,22 +10,10 @@ import { dec, id, iso, isoReq, num, parseReviewStatus, str, transferNote } from 
 import { PrismaService } from "../../prisma/prisma.service";
 import { ApplicationsService } from "../admin/applications.service";
 
-type Degree = "THAC_SI" | "TIEN_SI";
+import { DOC_LABEL, LANGUAGE_LABEL, LANGUAGE_OPTIONS, OPTIONAL_DOCS, requiredDocs, type Degree, type LanguageOption } from "../../common/documents";
 
-/** Minh chứng bắt buộc theo bậc (tham khảo yêu cầu hồ sơ trong thông báo tuyển sinh) */
-export const REQUIRED_DOCS: Record<Degree, string[]> = {
-  THAC_SI: ["VAN_BANG", "BANG_DIEM"],
-  TIEN_SI: ["VAN_BANG", "BANG_DIEM", "DE_CUONG_NCS", "THU_GIOI_THIEU"],
-};
-const DOC_LABEL: Record<string, string> = {
-  VAN_BANG: "Văn bằng",
-  BANG_DIEM: "Bảng điểm",
-  CHUNG_CHI_NGOAI_NGU: "Chứng chỉ ngoại ngữ",
-  DE_CUONG_NCS: "Đề cương nghiên cứu",
-  THU_GIOI_THIEU: "Thư giới thiệu",
-  CONG_BO_KHOA_HOC: "Công bố khoa học",
-  KHAC: "Giấy tờ khác",
-};
+type FeeItem = { code: string; label: string; amount: number };
+
 /** Hồ sơ còn đang xử lý: mỗi thí sinh chỉ có 1 hồ sơ như vậy tại một thời điểm */
 const IN_PROGRESS = ["DRAFT", "SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT"];
 
@@ -72,8 +60,40 @@ export class ApplicationFlowService {
     return miss;
   }
 
-  private async fee(degree: string) {
-    return this.config.int(degree === "TIEN_SI" ? "APPLICATION_FEE_TIEN_SI" : "APPLICATION_FEE_THAC_SI", degree === "TIEN_SI" ? 1_000_000 : 600_000);
+  /**
+   * Các khoản thu khi nộp hồ sơ (mục 6.4 thông báo tuyển sinh): đăng ký dự tuyển + xét tuyển,
+   * cộng lệ phí thi đánh giá năng lực tiếng Anh nếu thí sinh đăng ký dự thi.
+   */
+  private async feeItems(degree: Degree, languageOption: string | null): Promise<FeeItem[]> {
+    const items: FeeItem[] = [
+      { code: "REGISTRATION", label: "Lệ phí đăng ký dự tuyển", amount: await this.config.int("FEE_REGISTRATION", 100_000) },
+      {
+        code: "REVIEW",
+        label: `Lệ phí xét tuyển ${degree === "TIEN_SI" ? "tiến sĩ" : "thạc sĩ"}`,
+        amount: await this.config.int(degree === "TIEN_SI" ? "APPLICATION_FEE_TIEN_SI" : "APPLICATION_FEE_THAC_SI", degree === "TIEN_SI" ? 1_000_000 : 360_000),
+      },
+    ];
+    if (languageOption === "TEST") items.push({ code: "ENGLISH_TEST", label: "Lệ phí đăng ký thi đánh giá năng lực tiếng Anh", amount: await this.config.int("FEE_ENGLISH_TEST", 120_000) });
+    return items;
+  }
+
+  /** Các khoản có thể phát sinh sau (chỉ để thí sinh biết trước) */
+  private async otherFees() {
+    return {
+      supplementCredit: await this.config.int("FEE_SUPPLEMENT_CREDIT", 490_000),
+      appeal: await this.config.int("FEE_APPEAL", 360_000),
+      englishTest: await this.config.int("FEE_ENGLISH_TEST", 120_000),
+    };
+  }
+
+  private parseFeeDetail(json: string | null): FeeItem[] | null {
+    if (!json) return null;
+    try {
+      const v = JSON.parse(json) as FeeItem[];
+      return Array.isArray(v) ? v.filter((x) => x && typeof x.amount === "number") : null;
+    } catch {
+      return null;
+    }
   }
 
   private async load(candidateId: number, where: Prisma.applicationWhereInput = {}) {
@@ -109,6 +129,8 @@ export class ApplicationFlowService {
     const sup = a.supplement_request.find((r) => r.status === "PENDING") ?? null;
     const prop = a.research_proposal;
     const supReq = prop?.supervisor_request[0] ?? null;
+    // Đã nộp: lấy đúng các khoản đã chốt lúc nộp; còn nháp: tính theo cấu hình hiện tại
+    const feeItems = (pay && this.parseFeeDetail(pay.fee_detail)) ?? (await this.feeItems(degree, a.language_option));
     const bank = {
       bankBin: await this.config.text("PAYMENT_BANK_BIN"),
       bankName: await this.config.text("PAYMENT_BANK_NAME"),
@@ -162,8 +184,10 @@ export class ApplicationFlowService {
           }
         : null,
       documents: docs,
-      requiredDocuments: REQUIRED_DOCS[degree],
-      missingDocuments: REQUIRED_DOCS[degree].filter((t) => !have.has(t)),
+      requiredDocuments: requiredDocs(degree, a.language_option),
+      optionalDocuments: OPTIONAL_DOCS.filter((t) => !requiredDocs(degree, a.language_option).includes(t)),
+      missingDocuments: requiredDocs(degree, a.language_option).filter((t) => !have.has(t)),
+      language: { option: a.language_option, note: a.language_note, requiredLevel: degree === "TIEN_SI" ? "bậc 4/6 (B2)" : "bậc 3/6 (B1)" },
       payment: pay
         ? {
             amount: dec(pay.amount),
@@ -180,7 +204,9 @@ export class ApplicationFlowService {
         .map((h) => ({ status: parseReviewStatus(h.new_status), at: isoReq(h.changed_at), by: h.changed_by_type, reason: h.reason }))
         .filter((h, i, arr) => h.status && (i === 0 || h.status !== arr[i - 1].status)),
       canEdit: a.review_status === "DRAFT" && b.status === "OPEN" && new Date() <= b.registration_end_at,
-      fee: await this.fee(degree),
+      feeItems,
+      fee: feeItems.reduce((t, x) => t + x.amount, 0),
+      otherFees: await this.otherFees(),
     };
   }
 
@@ -331,6 +357,19 @@ export class ApplicationFlowService {
     return this.toFull((await this.loadDraft(candidateId))!);
   }
 
+  // ------------------------------------------------------------------ ngoại ngữ (mục 7 thông báo)
+  async saveLanguage(me: CandidateUser, body: Record<string, unknown>) {
+    const candidateId = this.requireProfile(me);
+    const a = await this.loadDraft(candidateId);
+    const option = str(body.option) as LanguageOption;
+    if (!LANGUAGE_OPTIONS.includes(option)) fail("VALIDATION", "Chọn một trong ba trường hợp ngoại ngữ.");
+    const note = str(body.note).trim().replace(/\s+/g, " ").slice(0, 500) || null;
+    if (option === "EXEMPT" && (note ?? "").length < 5) fail("VALIDATION", "Ghi rõ lý do được miễn (ví dụ: có bằng đại học ngành ngôn ngữ Anh).");
+    await this.prisma.application.update({ where: { application_id: a.application_id }, data: { language_option: option, language_note: option === "TEST" ? null : note } });
+    await this.audit.record({ type: "CANDIDATE", id: candidateId }, "APPLICATION_LANGUAGE", { table: "application", id: a.application_id }, `${a.application_code}: ${LANGUAGE_LABEL[option]}${note && option !== "TEST" ? ` (${note})` : ""}`);
+    return this.toFull((await this.loadDraft(candidateId))!);
+  }
+
   // ------------------------------------------------------------------ bước 4: nộp
   async submit(me: CandidateUser, body: Record<string, unknown>) {
     const candidateId = this.requireProfile(me);
@@ -343,17 +382,22 @@ export class ApplicationFlowService {
     const missProfile = await this.missingProfile(candidateId);
     if (missProfile.length) problems.push(`Hồ sơ cá nhân còn thiếu: ${missProfile.join(", ")}`);
     if (!a.application_education) problems.push("Chưa khai quá trình đào tạo");
+    if (!a.language_option) problems.push("Chưa khai thông tin ngoại ngữ (có chứng chỉ / được miễn / đăng ký dự thi)");
+    else if (a.language_option === "EXEMPT" && (a.language_note ?? "").trim().length < 5) problems.push("Chưa ghi rõ lý do được miễn ngoại ngữ");
     const have = new Set(a.application_document.map((d) => d.document_type));
-    const missDocs = REQUIRED_DOCS[degree].filter((t) => !have.has(t));
+    const missDocs = requiredDocs(degree, a.language_option).filter((t) => !have.has(t));
     if (missDocs.length) problems.push(`Còn thiếu minh chứng: ${missDocs.map((t) => DOC_LABEL[t]).join(", ")}`);
     if (degree === "TIEN_SI" && !a.research_proposal) problems.push("Chưa khai thông tin đề tài nghiên cứu");
     if (problems.length) fail("APPLICATION_INCOMPLETE", `Chưa nộp được hồ sơ. ${problems.join(". ")}.`);
 
-    const amount = await this.fee(degree);
+    const items = await this.feeItems(degree, a.language_option);
+    const amount = items.reduce((t, x) => t + x.amount, 0);
     await this.prisma.$transaction(async (tx) => {
       await this.apps.changeStatus(tx, id(a.application_id), "DRAFT", "SUBMITTED", { type: "CANDIDATE" }, "Thí sinh nộp hồ sơ", { submitted_at: new Date() });
       if (!a.application_payment.length)
-        await tx.application_payment.create({ data: { application_id: a.application_id, amount: new Prisma.Decimal(amount), payment_method: "BANK_TRANSFER", gateway_status: "PENDING" } });
+        await tx.application_payment.create({
+          data: { application_id: a.application_id, amount: new Prisma.Decimal(amount), payment_method: "BANK_TRANSFER", gateway_status: "PENDING", fee_detail: JSON.stringify(items) },
+        });
       // Bậc tiến sĩ: gửi yêu cầu hướng dẫn tới giảng viên đã chọn
       if (a.research_proposal?.preferred_lecturer_id && !a.research_proposal.supervisor_request.length)
         await tx.supervisor_request.create({ data: { proposal_id: a.research_proposal.proposal_id, lecturer_id: a.research_proposal.preferred_lecturer_id } });
@@ -362,7 +406,7 @@ export class ApplicationFlowService {
         candidateId,
         `Đã nhận hồ sơ ${a.application_code}`,
         `Hồ sơ ${a.application_code} (${a.admission_batch_major.admission_major.major_name}, ${a.admission_batch_major.admission_batch.batch_name}) đã được nộp thành công.\n` +
-          `Vui lòng nộp lệ phí xét tuyển ${amount.toLocaleString("vi-VN")} đồng theo hướng dẫn trên cổng thông tin, ghi nội dung chuyển khoản: ${transferNote(a.application_code)} (có mã QR trên cổng thông tin, quét bằng app ngân hàng là điền sẵn).\n` +
+          `Vui lòng nộp lệ phí ${amount.toLocaleString("vi-VN")} đồng (${items.map((x) => `${x.label.toLowerCase()} ${x.amount.toLocaleString("vi-VN")}đ`).join(" + ")}) theo hướng dẫn trên cổng thông tin, ghi nội dung chuyển khoản: ${transferNote(a.application_code)} (có mã QR trên cổng thông tin, quét bằng app ngân hàng là điền sẵn).\n` +
           `Cán bộ tuyển sinh sẽ tiếp nhận và thẩm định hồ sơ; kết quả được thông báo qua cổng và email.`,
         tx,
       );

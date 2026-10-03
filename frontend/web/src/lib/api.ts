@@ -7,7 +7,7 @@
 //   NEXT_PUBLIC_USE_MOCK=false
 //   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
-import type { Application, ApplicationDocument, Candidate, CandidateNotification, EducationInput, FullApplication, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorRequest } from "./types";
+import type { Application, ApplicationDocument, Candidate, CandidateNotification, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorRequest } from "./types";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -243,13 +243,20 @@ export async function saveApplicationDraft(payload: { batchMajorId: number; educ
       education: null,
       proposal: null,
       documents: [],
-      requiredDocuments: degree === "TIEN_SI" ? ["VAN_BANG", "BANG_DIEM", "DE_CUONG_NCS", "THU_GIOI_THIEU"] : ["VAN_BANG", "BANG_DIEM"],
+      requiredDocuments: ["DON_DANG_KY", "SO_YEU_LY_LICH", "LY_LICH_CHUYEN_MON", "ANH_THE", "VAN_BANG", "BANG_DIEM", "CCCD", ...(degree === "TIEN_SI" ? (["DE_CUONG_NCS", "THU_GIOI_THIEU"] as const) : [])],
+      optionalDocuments: ["GIAY_GIOI_THIEU", "CHUNG_CHI_NGOAI_NGU", "CHUNG_CHI_AI", "GIAY_UU_TIEN", "CONG_NHAN_VAN_BANG", "CONG_BO_KHOA_HOC", "KHAC"],
       missingDocuments: [],
+      language: { option: null, note: null, requiredLevel: degree === "TIEN_SI" ? "bậc 4/6 (B2)" : "bậc 3/6 (B1)" },
       payment: null,
       supplement: null,
       history: [],
       canEdit: true,
-      fee: degree === "TIEN_SI" ? 1000000 : 600000,
+      fee: degree === "TIEN_SI" ? 1100000 : 460000,
+      feeItems: [
+        { code: "REGISTRATION", label: "Lệ phí đăng ký dự tuyển", amount: 100000 },
+        { code: "REVIEW", label: `Lệ phí xét tuyển ${degree === "TIEN_SI" ? "tiến sĩ" : "thạc sĩ"}`, amount: degree === "TIEN_SI" ? 1000000 : 360000 },
+      ],
+      otherFees: { supplementCredit: 490000, appeal: 360000, englishTest: 120000 },
     };
     mockApp = { ...base, ...(mockInfo ?? {}), education: payload.education };
     return delay(mockFull());
@@ -272,6 +279,21 @@ export async function deleteMyDocument(documentId: number) {
     return delay({ success: true });
   }
   return request<{ success: boolean }>(`/applications/me/documents/${documentId}`, { method: "DELETE" });
+}
+
+/** Ngoại ngữ: có chứng chỉ / được miễn (kèm lý do) / đăng ký dự thi */
+export async function saveLanguageChoice(option: LanguageOption, note: string): Promise<FullApplication> {
+  if (USE_MOCK) {
+    if (mockApp) {
+      mockApp.language = { ...mockApp.language, option, note: option === "TEST" ? null : note };
+      mockApp.feeItems = mockApp.feeItems.filter((f) => f.code !== "ENGLISH_TEST").concat(option === "TEST" ? [{ code: "ENGLISH_TEST", label: "Lệ phí đăng ký thi đánh giá năng lực tiếng Anh", amount: 120000 }] : []);
+      mockApp.fee = mockApp.feeItems.reduce((t, f) => t + f.amount, 0);
+      const base = ["DON_DANG_KY", "SO_YEU_LY_LICH", "LY_LICH_CHUYEN_MON", "ANH_THE", "VAN_BANG", "BANG_DIEM", "CCCD"] as FullApplication["requiredDocuments"];
+      mockApp.requiredDocuments = [...base, ...(mockApp.degreeLevel === "TIEN_SI" ? (["DE_CUONG_NCS", "THU_GIOI_THIEU"] as const) : []), ...(option === "CERTIFICATE" ? (["CHUNG_CHI_NGOAI_NGU"] as const) : [])];
+    }
+    return delay(mockFull());
+  }
+  return request<FullApplication>("/applications/me/language", { method: "PUT", body: JSON.stringify({ option, note }) });
 }
 
 export async function saveResearchProposal(payload: ResearchProposalInput): Promise<FullApplication> {

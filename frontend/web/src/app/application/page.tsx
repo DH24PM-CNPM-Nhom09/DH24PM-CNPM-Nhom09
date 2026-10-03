@@ -13,7 +13,7 @@ import DocSlot from "@/components/application/DocSlot";
 import VietQrCode from "@/components/payment/VietQrCode";
 import { getMyFullApplication, submitSupplement, uploadDocument } from "@/lib/api";
 import { fmtDate, fmtDateTime, timeLeft } from "@/lib/announcements";
-import { checkFile, DEGREE_LABEL, DOC_LABEL, EDU_LABEL, fmtMoney, fmtSize, HISTORY_LABEL, VERIFY_LABEL } from "@/lib/application";
+import { checkFile, DEGREE_LABEL, DOC_LABEL, EDU_LABEL, fmtMoney, fmtSize, HISTORY_LABEL, LANGUAGE_OPTION_TEXT, VERIFY_LABEL } from "@/lib/application";
 import type { ApplicationDocument, DocumentType, FullApplication } from "@/lib/types";
 
 const SUPERVISOR_LABEL = { PENDING: "Chờ giảng viên phản hồi", ACCEPTED: "Giảng viên đã nhận hướng dẫn", REJECTED: "Giảng viên từ chối" } as const;
@@ -246,7 +246,7 @@ function StatusInner() {
       {app.payment && (
         <Card className="mt-5 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <h2 className="text-base font-bold text-gray-900">Lệ phí xét tuyển</h2>
+            <h2 className="text-base font-bold text-gray-900">Lệ phí dự tuyển</h2>
             <Badge tone={paid ? "success" : "warning"}>{paid ? "Đã nộp" : "Chờ nộp"}</Badge>
           </div>
           {paid ? (
@@ -260,6 +260,9 @@ function StatusInner() {
               <p className="mt-2 text-sm text-gray-600">
                 Số tiền: <span className="text-lg font-extrabold text-gray-900">{fmtMoney(app.payment.amount)}</span>
               </p>
+              {app.feeItems.length > 1 && (
+                <p className="mt-1 text-xs text-gray-500">Gồm: {app.feeItems.map((f) => `${f.label.replace(/^Lệ phí /, "")} ${fmtMoney(f.amount)}`).join(" + ")}</p>
+              )}
               {hasBank && bank ? (
                 <div className="mt-4 flex flex-col gap-5 rounded-input bg-gray-50 p-4 sm:flex-row sm:items-start">
                   {bank.bankBin && (
@@ -295,7 +298,7 @@ function StatusInner() {
                 </div>
               ) : (
                 <div className="mt-4 rounded-input bg-gray-50 p-4 text-sm text-gray-700">
-                  Nộp lệ phí trực tiếp tại Phòng Đào tạo Sau đại học, Trường Đại học An Giang, và báo mã hồ sơ{" "}
+                  Nộp lệ phí trực tiếp tại Phòng Đào tạo Sau đại học, Trường Đại học An Giang (ĐHQG-HCM), và báo mã hồ sơ{" "}
                   <span className="font-mono font-semibold">{app.applicationCode}</span>. Thông tin tài khoản nhận chuyển khoản sẽ được cập nhật tại đây khi Nhà trường công bố.
                 </div>
               )}
@@ -309,13 +312,24 @@ function StatusInner() {
 
       {/* Thông tin đăng ký */}
       <Card className="mt-5 p-5 sm:p-6">
-        <h2 className="text-base font-bold text-gray-900">Thông tin đăng ký</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-bold text-gray-900">Thông tin đăng ký</h2>
+          <Link href="/application/print" target="_blank" className="text-[13px] font-semibold text-accent hover:underline">
+            In đơn đăng ký dự tuyển
+          </Link>
+        </div>
         <dl className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           <Row label="Đợt tuyển sinh">{app.batch.batchName}</Row>
           <Row label="Ngành dự tuyển">
             {app.major.majorName} ({DEGREE_LABEL[app.degreeLevel]})
           </Row>
           <Row label="Ngày nộp">{fmtDateTime(app.submittedAt)}</Row>
+          {app.language.option && (
+            <Row label="Ngoại ngữ">
+              {LANGUAGE_OPTION_TEXT[app.language.option].title}
+              {app.language.note && <span className="block text-xs font-medium text-gray-500">{app.language.note}</span>}
+            </Row>
+          )}
           {app.education && (
             <Row label="Tốt nghiệp">
               {EDU_LABEL[app.education.degreeLevel]} {app.education.majorName}, {app.education.institutionName} ({app.education.graduationYear}), điểm TB {app.education.gpa ?? "—"}/{app.education.gpaScale}

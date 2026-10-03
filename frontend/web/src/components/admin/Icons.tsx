@@ -172,3 +172,9 @@ export const IconDownload = (p: P) => (
     <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
   </Base>
 );
+export const IconBook = (p: P) => (
+  <Base {...p}>
+    <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5z" />
+    <path d="M4 19a2 2 0 0 1 2-2h13M9 7h6" />
+  </Base>
+);

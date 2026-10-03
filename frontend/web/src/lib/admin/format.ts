@@ -52,13 +52,28 @@ export function errorMessage(e: unknown, fallback = "Đã có lỗi xảy ra, vu
 }
 
 export const DOCUMENT_LABEL: Record<string, string> = {
-  VAN_BANG: "Văn bằng tốt nghiệp",
+  DON_DANG_KY: "Đơn đăng ký dự tuyển",
+  SO_YEU_LY_LICH: "Sơ yếu lý lịch",
+  LY_LICH_CHUYEN_MON: "Lý lịch chuyên môn",
+  ANH_THE: "Ảnh 3x4",
+  VAN_BANG: "Bằng tốt nghiệp",
   BANG_DIEM: "Bảng điểm",
+  CCCD: "Căn cước công dân",
   CHUNG_CHI_NGOAI_NGU: "Chứng chỉ ngoại ngữ",
+  CHUNG_CHI_AI: "Chứng chỉ AI",
   DE_CUONG_NCS: "Đề cương nghiên cứu",
-  THU_GIOI_THIEU: "Thư giới thiệu",
+  THU_GIOI_THIEU: "Thư giới thiệu (nhà khoa học)",
+  GIAY_GIOI_THIEU: "Giấy giới thiệu cơ quan / giảng viên",
+  GIAY_UU_TIEN: "Giấy xác nhận đối tượng ưu tiên",
+  CONG_NHAN_VAN_BANG: "Công nhận văn bằng nước ngoài",
   CONG_BO_KHOA_HOC: "Công bố khoa học",
   KHAC: "Giấy tờ khác",
+};
+
+export const LANGUAGE_OPTION_LABEL: Record<string, string> = {
+  CERTIFICATE: "Đã có chứng chỉ ngoại ngữ đạt chuẩn",
+  EXEMPT: "Thuộc diện miễn đánh giá năng lực ngoại ngữ",
+  TEST: "Đăng ký dự thi đánh giá năng lực tiếng Anh",
 };
 
 export const DEGREE_LABEL: Record<string, string> = { THAC_SI: "Thạc sĩ", TIEN_SI: "Tiến sĩ" };
@@ -121,4 +136,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   DOCUMENT_DELETE: "Thí sinh xóa minh chứng",
   PAYMENT_CONFIRM: "Xác nhận đã thu lệ phí",
   PAYMENT_SETTINGS_UPDATE: "Cập nhật lệ phí & tài khoản nhận",
+  APPLICATION_LANGUAGE: "Thí sinh khai ngoại ngữ",
+  MAJOR_CREATE: "Thêm ngành đào tạo",
+  MAJOR_UPDATE: "Sửa ngành đào tạo",
 };

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { AuditService } from "../../common/audit.service";
+import { DOC_TYPES } from "../../common/documents";
 import type { CandidateUser } from "../../common/auth";
 import { env, SystemConfigService } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
@@ -10,7 +11,6 @@ import { id, iso, isoReq, str, ymd } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ApplicationsService } from "../admin/applications.service";
 
-const DOC_TYPES = ["VAN_BANG", "BANG_DIEM", "CHUNG_CHI_NGOAI_NGU", "DE_CUONG_NCS", "THU_GIOI_THIEU", "CONG_BO_KHOA_HOC", "KHAC"];
 const ALLOWED_MIME: Record<string, string> = { "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png" };
 const COMPLAINT_TYPES = ["PHUC_KHAO_DIEM", "KHIEU_NAI_KET_QUA", "KHIEU_NAI_HO_SO", "KHAC"];
 

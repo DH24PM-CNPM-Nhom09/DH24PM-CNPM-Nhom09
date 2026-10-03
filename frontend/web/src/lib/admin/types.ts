@@ -129,8 +129,10 @@ export interface Payment {
   paidAt: string | null;
   /** Số biên lai do Phòng Đào tạo cấp khi xác nhận đã thu */
   receiptNo?: string | null;
-  /** Nội dung chuyển khoản thí sinh được hướng dẫn ghi: "<mã hồ sơ> <mã thí sinh>" */
+  /** Nội dung chuyển khoản thí sinh được hướng dẫn ghi (mã hồ sơ bỏ dấu gạch) */
   transferContent?: string;
+  /** Các khoản đã chốt lúc nộp hồ sơ */
+  feeDetail?: { code: string; label: string; amount: number }[] | null;
 }
 
 export type SupplementStatus = "PENDING" | "RESOLVED" | "EXPIRED";
@@ -168,6 +170,8 @@ export interface AdminApplication {
   submittedAt: string;
   /** Cán bộ đang phụ trách thẩm định (người bấm "Tiếp nhận") */
   assignedStaffId: number | null;
+  /** Ngoại ngữ thí sinh khai: CERTIFICATE / EXEMPT / TEST (mục 7 thông báo) */
+  language?: { option: string | null; note: string | null };
   documents: AdminDocument[];
   /** null = thí sinh chưa phát sinh giao dịch lệ phí nào */
   payment: Payment | null;

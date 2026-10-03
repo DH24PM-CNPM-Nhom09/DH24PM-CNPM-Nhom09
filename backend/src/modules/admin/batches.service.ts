@@ -164,6 +164,7 @@ export class BatchesService {
     if (batch.status !== "DRAFT") fail("INVALID_STATE", "Chỉ thêm ngành khi đợt đang ở trạng thái Nháp.");
     const major = await this.prisma.admission_major.findFirst({ where: { major_id: BigInt(majorId), deleted_at: null } });
     if (!major) notFound("Không tìm thấy ngành.");
+    if (major.status !== "ACTIVE") fail("MAJOR_INACTIVE", "Ngành này đang ngừng tuyển sinh trong Danh mục ngành.");
     if (major.degree_level !== batch.degree_level) fail("DEGREE_MISMATCH", "Ngành không cùng bậc đào tạo với đợt.");
     if (!Number.isInteger(quota) || quota <= 0) fail("INVALID_QUOTA", "Chỉ tiêu phải là số nguyên dương.");
     if (await this.prisma.admission_batch_major.count({ where: { batch_id: batch.batch_id, major_id: major.major_id } })) conflict("DUPLICATE", "Ngành đã có trong đợt.");

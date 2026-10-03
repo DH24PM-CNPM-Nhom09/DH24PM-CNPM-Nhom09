@@ -7,7 +7,7 @@ import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import { IconAlert, IconCheck, IconChevronLeft, IconClock, IconFile } from "@/components/admin/Icons";
 import { Btn, DocBadge, ErrorBox, fieldCls, Label, Modal, Notice, Panel, ReviewBadge, Skeleton, useToast } from "@/components/admin/ui";
 import { confirmPayment, fetchDocumentFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
-import { DEGREE_LABEL, DOCUMENT_LABEL, errorMessage, fmtDate, fmtDateTime, fmtMoney, fmtSize, PAYMENT_METHOD_LABEL, relativeDays, toLocalInput } from "@/lib/admin/format";
+import { DEGREE_LABEL, DOCUMENT_LABEL, errorMessage, LANGUAGE_OPTION_LABEL, fmtDate, fmtDateTime, fmtMoney, fmtSize, PAYMENT_METHOD_LABEL, relativeDays, toLocalInput } from "@/lib/admin/format";
 import { activeSupplement, blockReason, isSupplementOverdue, type ReviewAction } from "@/lib/admin/stateMachine";
 import type { AdminDocument, ReviewStatus } from "@/lib/admin/types";
 import { useAsync } from "@/lib/admin/useAsync";
@@ -249,7 +249,12 @@ function DetailInner() {
       >
         {a.payment ? (
           <dl className="grid grid-cols-2 gap-4">
-            <Field label="Số tiền">{fmtMoney(a.payment.amount)}</Field>
+            <Field label="Số tiền">
+              {fmtMoney(a.payment.amount)}
+              {a.payment.feeDetail && a.payment.feeDetail.length > 1 && (
+                <span className="mt-0.5 block text-xs font-normal text-gray-500">{a.payment.feeDetail.map((f) => `${f.label.replace(/^Lệ phí /, "")}: ${fmtMoney(f.amount)}`).join("; ")}</span>
+              )}
+            </Field>
             <Field label="Trạng thái">
               {a.payment.gatewayStatus === "SUCCESS" ? <span className="text-[#166534]">Đã nộp</span> : <span className="text-[#92400E]">Chờ thanh toán</span>}
             </Field>
@@ -400,6 +405,11 @@ function DetailInner() {
                   </>
                 )}
               </Field>
+            </dl>
+            <h3 className="mb-3 mt-6 border-t border-gray-100 pt-5 text-sm font-bold text-gray-900">Ngoại ngữ</h3>
+            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              <Field label="Trường hợp">{a.language?.option ? LANGUAGE_OPTION_LABEL[a.language.option] ?? a.language.option : "Chưa khai"}</Field>
+              {a.language?.note && <Field label="Lý do miễn">{a.language.note}</Field>}
             </dl>
           </Panel>
 

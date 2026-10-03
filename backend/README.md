@@ -32,7 +32,7 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 5 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 6 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
@@ -40,6 +40,7 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source 
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v5_announcement.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v6_staff_security.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v7_payment_config.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v8_real_notice.sql"
 ```
 
 Kiểm tra: CSDL `admission_db` có **42 bảng** (40 bảng gốc + `application_education` + `complaint`).
@@ -133,7 +134,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 
 ## Trước khi triển khai thật (bắt buộc)
 
-1. Tạo CSDL mới, chạy đủ các file SQL v3 → v7, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
+1. Tạo CSDL mới, chạy đủ các file SQL v3 → v8, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
 2. Quản trị vào **Tài khoản cán bộ** cấp tài khoản cho từng cán bộ bằng email công tác thật (nên chọn chỉ đăng nhập Google).
 3. `backend/.env`: `DEV_AUTH_BYPASS=false`, đổi `JWT_SECRET` thành chuỗi ngẫu nhiên dài, điền `GOOGLE_CLIENT_ID`, `SMTP_USER`, `SMTP_PASS`.
 4. Frontend `.env.local`: `NEXT_PUBLIC_DEMO_LOGIN=false` (ẩn khung tài khoản demo ở trang đăng nhập cán bộ).
@@ -155,6 +156,10 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
   - Hồ sơ đi qua bản nháp `DRAFT` (cán bộ không thấy), chỉ tạo/nộp được khi đợt đang mở và còn trong thời gian nhận hồ sơ. Mã hồ sơ dạng `<mã đợt>-<mã ngành>-<số thứ tự 5 chữ số>`.
   - Minh chứng bắt buộc: thạc sĩ cần văn bằng + bảng điểm; tiến sĩ thêm đề cương nghiên cứu + thư giới thiệu và phải khai đề tài. Chọn giảng viên hướng dẫn thì khi nộp hệ thống tạo đề nghị gửi giảng viên.
   - Khi nộp: phát sinh khoản lệ phí `PENDING` theo `APPLICATION_FEE_THAC_SI` / `APPLICATION_FEE_TIEN_SI`, gửi thông báo + email cho thí sinh kèm nội dung chuyển khoản `<mã hồ sơ> <mã thí sinh>`.
+- **Hồ sơ theo thông báo tuyển sinh thật (ThS 2025 đợt 1)**: bắt buộc đơn đăng ký (hệ thống in sẵn từ thông tin đã khai, trang `/application/print`), sơ yếu lý lịch, lý lịch chuyên môn, ảnh 3x4, bằng + bảng điểm, CCCD; tiến sĩ thêm đề cương và thư giới thiệu. Giấy tờ "nếu có": giấy giới thiệu, chứng chỉ ngoại ngữ, chứng chỉ AI, giấy ưu tiên, công nhận văn bằng nước ngoài, công bố khoa học.
+- **Ngoại ngữ**: thí sinh chọn có chứng chỉ (bắt buộc tải chứng chỉ) / được miễn (ghi lý do) / đăng ký thi đánh giá năng lực (cộng lệ phí thi).
+- **Các khoản thu khi nộp hồ sơ**: đăng ký dự tuyển + xét tuyển (+ thi tiếng Anh nếu có), chốt vào `application_payment.fee_detail` lúc nộp; cán bộ chỉnh mức ở trang "Lệ phí & thanh toán".
+- **Danh mục ngành**: cán bộ tuyển sinh thêm/sửa ngành; ngành đã mở trong đợt không đổi được mã và bậc, chỉ "ngừng tuyển" (không xóa).
 - **Lệ phí**: thí sinh thấy mã VietQR riêng (ngân hàng, số tài khoản, số tiền, nội dung = mã hồ sơ bỏ dấu gạch), tạo ngay trên trình duyệt từ cấu hình `PAYMENT_BANK_BIN`, `PAYMENT_ACCOUNT_NO` — không gọi dịch vụ ngoài. Ô tìm kiếm hồ sơ của cán bộ nhận được cả nội dung chuyển khoản dán từ sao kê. Cán bộ đối chiếu sao kê rồi bấm "Xác nhận đã thu" (ghi số biên lai, mã giao dịch; mã giao dịch không được trùng). Chưa có lệ phí `SUCCESS` thì không kết luận "Đạt" được.
 - **Phúc khảo**: đổi điểm thì trigger #3 sửa `exam_score` và trigger #4 tự tính lại `application_ranking`.
 - **Đăng ký thí sinh**: khai họ tên, ngày sinh, email, số điện thoại, mật khẩu (≥ 8 ký tự, có chữ và số). Tài khoản ở trạng thái `PENDING_VERIFY` cho tới khi nhập đúng mã gửi về email; chưa xác thực thì không đăng nhập được. Thông tin đăng ký được ghi luôn vào bảng `candidate` (hồ sơ cá nhân).
@@ -187,6 +192,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | POST | `/admin/applications/bulk-start-review` | application:review |
 | PATCH | `/admin/applications/:id/payment/confirm` | application:review |
 | GET / PUT | `/admin/payment-settings` | application:view / batch:manage |
+| GET / POST, PATCH | `/admin/majors`, `/admin/majors/:id` | batch:view / batch:manage |
 | GET | `/admission-batches`, `/admission-batches/:id` | batch:view |
 | POST/PATCH/PUT | `/admission-batches`, `/admission-batches/:id/status`, `/admission-batches/:id/majors`, `/admission-batch-majors/:id` | batch:manage |
 | PATCH | `/admission-batch-majors/:id/approve` | batch:approve |
@@ -201,7 +207,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |
 | POST | `/applications/:id/documents` (multipart: `file`, `documentType`), `/applications/me/supplement`, `/complaints` | thí sinh |
 | GET | `/applications/me/full`, `/applications/me/checklist`, `/lecturers` | thí sinh |
-| POST/PUT/DELETE | `/applications/me/draft`, `/applications/me/proposal`, `/applications/me/documents/:id`, `/applications/me/submit`, `/applications/me/cancel` | thí sinh |
+| POST/PUT/DELETE | `/applications/me/draft`, `/applications/me/language`, `/applications/me/proposal`, `/applications/me/documents/:id`, `/applications/me/submit`, `/applications/me/cancel` | thí sinh |
 | GET | `/health` (ngoài tiền tố) | công khai |
 
 ## Lệnh hữu ích
@@ -211,7 +217,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v7, thông báo mẫu) — chỉ thêm, không xóa |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v8, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm

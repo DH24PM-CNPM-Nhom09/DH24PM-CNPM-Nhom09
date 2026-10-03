@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 // ============================================================================
 // npm run db:update — cập nhật CSDL ĐANG CÓ DỮ LIỆU lên bản mới nhất. Chạy lại nhiều lần vẫn an toàn.
-//   1. Chạy database/migration_v5, v6, v7 (chỉ THÊM cột / dòng cấu hình)
+//   1. Chạy database/migration_v5 → v8 (chỉ THÊM cột / dòng cấu hình / giá trị cho phép)
 //   2. Sửa cột candidate.nationality bị lỗi font ("Viá»‡t Nam" -> "Việt Nam") do bản cũ ghi sai
 //   3. Nạp thông báo tuyển sinh / quy định mẫu nếu bảng announcement còn trống
 // Không xóa bất kỳ dòng hay cột nào.
@@ -30,6 +30,7 @@ function sqlStatements(file: string) {
       ["migration_v5_announcement.sql", "migration v5 (thêm cột category, is_pinned, updated_at cho bảng announcement)"],
       ["migration_v6_staff_security.sql", "migration v6 (đổi mật khẩu bắt buộc, chống dò mật khẩu cho tài khoản cán bộ)"],
       ["migration_v7_payment_config.sql", "migration v7 (cấu hình lệ phí xét tuyển và tài khoản nhận chuyển khoản)"],
+      ["migration_v8_real_notice.sql", "migration v8 (minh chứng, ngoại ngữ, các khoản lệ phí theo thông báo tuyển sinh thật)"],
     ];
     for (const [name, label] of migrations) {
       for (const stmt of sqlStatements(path.join(__dirname, "..", "database", name))) await prisma.$executeRawUnsafe(stmt);
@@ -41,7 +42,7 @@ function sqlStatements(file: string) {
 
     const n = await seedAnnouncements(prisma);
     console.log(n ? `✓ Đã nạp ${n} thông báo mẫu (tuyển sinh, quy định, hướng dẫn).` : "✓ Bảng thông báo đã có dữ liệu, giữ nguyên.");
-    console.log("\nXong. Khởi động lại backend (Ctrl+C rồi npm run dev) nếu đang chạy.");
+    console.log("\nXong phần CSDL. Lệnh sẽ tự chạy tiếp prisma generate; sau đó mở lại backend bằng npm run dev.");
   } catch (e) {
     console.error("✗ Cập nhật thất bại:", e instanceof Error ? e.message : e);
     process.exitCode = 1;

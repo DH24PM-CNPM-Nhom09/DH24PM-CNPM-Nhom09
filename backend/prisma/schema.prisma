@@ -172,6 +172,8 @@ model application {
   submitted_at                 DateTime?                     @db.DateTime(0)
   deleted_at                   DateTime?                     @db.DateTime(0)
   created_at                   DateTime                      @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  language_option              String?                       @db.VarChar(20)
+  language_note                String?                       @db.VarChar(500)
   admission_result             admission_result?
   staff_account                staff_account?                @relation(fields: [assigned_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_app_assigned_staff")
   admission_batch_major        admission_batch_major         @relation(fields: [batch_major_id], references: [batch_major_id], onUpdate: Restrict, map: "fk_app_bm")
@@ -245,6 +247,7 @@ model application_payment {
   gateway_status   String      @default("PENDING") @db.VarChar(20)
   receipt_no       String?     @db.VarChar(50)
   paid_at          DateTime?   @db.DateTime(0)
+  fee_detail       String?     @db.Text
   application      application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_payment_application")
 
   @@index([application_id], map: "fk_payment_application")

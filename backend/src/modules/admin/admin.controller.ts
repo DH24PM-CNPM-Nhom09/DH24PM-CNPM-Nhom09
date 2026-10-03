@@ -7,6 +7,7 @@ import { ApplicationsService } from "./applications.service";
 import { AuditLogsService } from "./audit-logs.service";
 import { BatchesService } from "./batches.service";
 import { CandidateAccountsService } from "./candidates.service";
+import { MajorsService } from "./majors.service";
 import { StaffService } from "./staff.service";
 
 type Q = Record<string, string | undefined>;
@@ -264,5 +265,29 @@ export class CandidateAccountsController {
   @RequirePermission("candidate:manage")
   unlock(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
     return this.svc.unlock(asStaff(user), id);
+  }
+}
+
+// ============================================================ Danh mục ngành đào tạo
+@Controller("admin/majors")
+export class MajorsController {
+  constructor(private readonly svc: MajorsService) {}
+
+  @Get()
+  @RequirePermission("batch:view")
+  list() {
+    return this.svc.list();
+  }
+
+  @Post()
+  @RequirePermission("batch:manage")
+  create(@CurrentUser() user: AuthUser, @Body() body: B) {
+    return this.svc.create(asStaff(user), body);
+  }
+
+  @Patch(":id")
+  @RequirePermission("batch:manage")
+  update(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.update(asStaff(user), id, body);
   }
 }

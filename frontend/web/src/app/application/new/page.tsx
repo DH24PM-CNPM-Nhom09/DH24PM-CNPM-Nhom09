@@ -16,13 +16,14 @@ import {
   getMyFullApplication,
   getMyProfile,
   saveApplicationDraft,
+  saveLanguageChoice,
   saveResearchProposal,
   submitMyApplication,
   uploadDraftDocument,
 } from "@/lib/api";
 import { getOpenBatches, fmtDate, fmtDateTime, timeLeft, type OpenBatch } from "@/lib/announcements";
-import { checkFile, DEGREE_LABEL, DOC_LABEL, EDU_LABEL, fmtMoney, fmtSize, OPTIONAL_DOCS } from "@/lib/application";
-import type { ApplicationDocument, Candidate, DocumentType, EducationInput, FullApplication, Lecturer } from "@/lib/types";
+import { checkFile, DEGREE_LABEL, DOC_LABEL, EDU_LABEL, EXEMPT_REASONS, fmtMoney, fmtSize, LANGUAGE_OPTION_TEXT } from "@/lib/application";
+import type { ApplicationDocument, Candidate, DocumentType, EducationInput, FullApplication, LanguageOption, Lecturer } from "@/lib/types";
 
 /** Các mục hồ sơ cá nhân bắt buộc trước khi nộp — khớp kiểm tra ở backend */
 const PROFILE_FIELDS: { key: keyof Candidate; label: string }[] = [
@@ -35,10 +36,11 @@ const PROFILE_FIELDS: { key: keyof Candidate; label: string }[] = [
 ];
 const GENDER_LABEL: Record<string, string> = { NAM: "Nam", NU: "Nữ", KHAC: "Khác" };
 
-type StepKey = "major" | "education" | "documents" | "research" | "review";
+type StepKey = "major" | "education" | "language" | "documents" | "research" | "review";
 const STEP_LABEL: Record<StepKey, string> = {
   major: "Đợt & ngành",
   education: "Quá trình đào tạo",
+  language: "Ngoại ngữ",
   documents: "Minh chứng",
   research: "Đề tài nghiên cứu",
   review: "Xác nhận & nộp",
@@ -72,6 +74,8 @@ function WizardInner() {
   const [eduErrors, setEduErrors] = useState<Partial<Record<keyof EduForm, string>>>({});
   const [proposal, setProposal] = useState({ researchTopic: "", researchField: "", preferredLecturerId: "" });
   const [proposalError, setProposalError] = useState("");
+  const [lang, setLang] = useState<{ option: LanguageOption | ""; note: string }>({ option: "", note: "" });
+  const [langError, setLangError] = useState("");
   const [agree, setAgree] = useState(false);
 
   const [busy, setBusy] = useState(false);
@@ -101,6 +105,7 @@ function WizardInner() {
               gpa: a.education.gpa === null ? "" : String(a.education.gpa),
               gpaScale: a.education.gpaScale === 10 ? "10" : "4",
             });
+          if (a.language?.option) setLang({ option: a.language.option, note: a.language.note ?? "" });
           if (a.proposal)
             setProposal({
               researchTopic: a.proposal.researchTopic,
@@ -108,7 +113,7 @@ function WizardInner() {
               preferredLecturerId: a.proposal.preferredLecturerId ? String(a.proposal.preferredLecturerId) : "",
             });
           // Mở lại đúng bước còn dang dở
-          setStep(a.missingDocuments.length ? "documents" : a.degreeLevel === "TIEN_SI" && !a.proposal ? "research" : "review");
+          setStep(!a.language?.option ? "language" : a.missingDocuments.length ? "documents" : a.degreeLevel === "TIEN_SI" && !a.proposal ? "research" : "review");
         } else {
           const want = Number(params.get("batch"));
           const pick = b.find((x) => x.batchId === want) ?? (b.length === 1 ? b[0] : null);
@@ -123,7 +128,7 @@ function WizardInner() {
   const batch = batches.find((b) => b.batchId === batchId) ?? null;
   const major = batch?.majors.find((m) => m.batchMajorId === batchMajorId) ?? null;
   const degree = batch?.degreeLevel ?? app?.degreeLevel ?? "THAC_SI";
-  const steps: StepKey[] = degree === "TIEN_SI" ? ["major", "education", "documents", "research", "review"] : ["major", "education", "documents", "review"];
+  const steps: StepKey[] = degree === "TIEN_SI" ? ["major", "education", "language", "documents", "research", "review"] : ["major", "education", "language", "documents", "review"];
   const stepIndex = steps.indexOf(step);
   const minGpa = major?.conditions.find((c) => c.minGpa !== null)?.minGpa ?? null;
   const missingProfile = profile ? PROFILE_FIELDS.filter((f) => !String(profile[f.key] ?? "").trim()).map((f) => f.label) : [];
@@ -192,9 +197,27 @@ function WizardInner() {
         },
       );
       setApp(a);
-      go("documents");
+      go(a.language?.option ? "documents" : "language");
     } catch (e) {
       setError(errMsg(e, "Không lưu được hồ sơ nháp, vui lòng thử lại."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ------------------------------------------------------------------ ngoại ngữ
+  async function saveLanguage() {
+    if (!lang.option) return setLangError("Chọn một trong ba trường hợp.");
+    if (lang.option === "EXEMPT" && lang.note.trim().length < 5) return setLangError("Ghi rõ lý do được miễn.");
+    setLangError("");
+    setBusy(true);
+    setError("");
+    try {
+      const a = await saveLanguageChoice(lang.option, lang.note.trim());
+      setApp(a);
+      go("documents");
+    } catch (e) {
+      setError(errMsg(e, "Không lưu được thông tin ngoại ngữ."));
     } finally {
       setBusy(false);
     }
@@ -346,7 +369,8 @@ function WizardInner() {
   }
 
   const expired = Boolean(app && !app.canEdit);
-  const freeOptional = OPTIONAL_DOCS.filter((t) => !(docsByType[t]?.length ?? 0));
+  const optionalList: DocumentType[] = app?.optionalDocuments ?? [];
+  const freeOptional = optionalList.filter((t) => !(docsByType[t]?.length ?? 0));
   const optType = freeOptional.includes(optionalType) ? optionalType : freeOptional[0];
   const reachable = (s: StepKey) => s === "major" || s === "education" || Boolean(app);
 
@@ -545,11 +569,77 @@ function WizardInner() {
           </div>
         )}
 
+        {/* ---------------- Bước: ngoại ngữ */}
+        {step === "language" && app && (
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Năng lực ngoại ngữ</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Chuẩn đầu vào: ngoại ngữ {app.language.requiredLevel} theo Khung năng lực ngoại ngữ 6 bậc dùng cho Việt Nam. Chọn trường hợp của bạn.
+            </p>
+            <fieldset className="mt-5 flex flex-col gap-3">
+              <legend className="sr-only">Trường hợp ngoại ngữ</legend>
+              {(Object.keys(LANGUAGE_OPTION_TEXT) as LanguageOption[]).map((k) => {
+                const active = lang.option === k;
+                return (
+                  <label key={k} className={`cursor-pointer rounded-input border-[1.5px] p-4 transition-colors ${active ? "border-accent bg-accent-50" : "border-gray-200 hover:border-gray-300"}`}>
+                    <span className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="language"
+                        className="mt-1 h-4 w-4 shrink-0 accent-[#E8734A]"
+                        checked={active}
+                        onChange={() => {
+                          setLang((l) => ({ ...l, option: k }));
+                          setLangError("");
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-[15px] font-bold text-gray-900">{LANGUAGE_OPTION_TEXT[k].title}</span>
+                        <span className="mt-0.5 block text-[13px] text-gray-600">{LANGUAGE_OPTION_TEXT[k].desc}</span>
+                        {k === "TEST" && <span className="mt-1 block text-[13px] font-semibold text-accent">Lệ phí thi: {fmtMoney(app.otherFees.englishTest)} (cộng vào khoản nộp khi nộp hồ sơ)</span>}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </fieldset>
+            {lang.option === "EXEMPT" && (
+              <div className="mt-4">
+                <Textarea
+                  label="Lý do được miễn"
+                  required
+                  rows={2}
+                  maxLength={500}
+                  value={lang.note}
+                  onChange={(e) => setLang((l) => ({ ...l, note: e.target.value }))}
+                  hint="Ghi rõ, ví dụ: bằng đại học ngành Ngôn ngữ Anh, Trường Đại học An Giang, năm 2019. Tải văn bằng làm minh chứng ở bước sau."
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {EXEMPT_REASONS.map((r) => (
+                    <button key={r} type="button" onClick={() => setLang((l) => ({ ...l, note: r }))} className="rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:border-gray-300 hover:text-gray-900">
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {langError && <p className="mt-3 text-sm font-medium text-danger">{langError}</p>}
+          </div>
+        )}
+
         {/* ---------------- Bước: minh chứng */}
         {step === "documents" && app && (
           <div>
             <h2 className="text-base font-bold text-gray-900">Tải minh chứng</h2>
             <p className="mt-1 text-sm text-gray-500">Tệp PDF, JPG hoặc PNG, tối đa 5MB mỗi tệp, tổng tối đa 30MB. Bản scan cần rõ nét, đủ trang, có dấu và chữ ký.</p>
+            <div className="mt-4 flex flex-col gap-2 rounded-input bg-navy-50 px-4 py-3 text-[13px] text-navy-800 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                <span className="font-semibold">Đơn đăng ký dự tuyển</span> được điền sẵn từ thông tin bạn đã khai. In ra, ký tên, chụp lại rồi tải lên mục bên dưới.
+              </span>
+              <Link href="/application/print" target="_blank" className="shrink-0 rounded-input bg-navy-800 px-4 py-2 text-center text-[13px] font-bold text-white hover:bg-navy-900">
+                In đơn đăng ký
+              </Link>
+            </div>
             <div className="mt-5 flex flex-col gap-3">
               {app.requiredDocuments.map((t) => (
                 <DocSlot
@@ -567,10 +657,10 @@ function WizardInner() {
               ))}
             </div>
 
-            <h3 className="mt-7 text-sm font-bold text-gray-900">Giấy tờ khác (không bắt buộc)</h3>
-            <p className="mt-1 text-xs text-gray-500">Chứng chỉ ngoại ngữ, công bố khoa học… giúp hội đồng xét đầy đủ hơn.</p>
+            <h3 className="mt-7 text-sm font-bold text-gray-900">Giấy tờ nếu có</h3>
+            <p className="mt-1 text-xs text-gray-500">Giấy giới thiệu, chứng chỉ AI, giấy ưu tiên, công nhận văn bằng nước ngoài, công bố khoa học… giúp hội đồng xét đầy đủ hơn.</p>
             <div className="mt-3 flex flex-col gap-3">
-              {OPTIONAL_DOCS.filter((t) => (docsByType[t]?.length ?? 0) > 0).map((t) => (
+              {optionalList.filter((t) => (docsByType[t]?.length ?? 0) > 0).map((t) => (
                 <DocSlot
                   key={t}
                   type={t}
@@ -692,6 +782,23 @@ function WizardInner() {
               </Summary>
             )}
 
+            <Summary title="Ngoại ngữ" edit={app.canEdit ? <EditBtn onClick={() => go("language")} /> : null}>
+              {app.language.option ? (
+                <>
+                  <Item label="Trường hợp" wide>
+                    {LANGUAGE_OPTION_TEXT[app.language.option].title}
+                  </Item>
+                  {app.language.note && (
+                    <Item label="Lý do miễn" wide>
+                      {app.language.note}
+                    </Item>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm font-semibold text-danger sm:col-span-2">Chưa khai thông tin ngoại ngữ.</p>
+              )}
+            </Summary>
+
             <Summary title={`Minh chứng (${app.documents.length} tệp)`} edit={app.canEdit ? <EditBtn onClick={() => go("documents")} /> : null}>
               <ul className="flex flex-col gap-1.5 sm:col-span-2">
                 {app.documents.map((d) => (
@@ -727,7 +834,22 @@ function WizardInner() {
             )}
 
             <div className="rounded-input bg-navy-50 px-4 py-3 text-sm text-navy-800">
-              Lệ phí xét tuyển: <span className="font-bold">{fmtMoney(app.fee)}</span>. Sau khi nộp, trang hồ sơ sẽ hiện hướng dẫn chuyển khoản và nội dung cần ghi. Hồ sơ chỉ được kết luận đạt khi đã nộp lệ phí.
+              <p className="font-semibold">Các khoản nộp khi nộp hồ sơ</p>
+              <ul className="mt-2 space-y-1">
+                {app.feeItems.map((f) => (
+                  <li key={f.code} className="flex justify-between gap-3">
+                    <span>{f.label}</span>
+                    <span className="tabular-nums">{fmtMoney(f.amount)}</span>
+                  </li>
+                ))}
+                <li className="flex justify-between gap-3 border-t border-navy-800/15 pt-1 font-bold">
+                  <span>Tổng cộng</span>
+                  <span className="tabular-nums">{fmtMoney(app.fee)}</span>
+                </li>
+              </ul>
+              <p className="mt-2 text-xs">
+                Sau khi nộp, trang hồ sơ hiện mã QR chuyển khoản. Hồ sơ chỉ được kết luận đạt khi đã nộp lệ phí. Nếu tốt nghiệp ngành gần, bạn có thể phải học bổ sung kiến thức ({fmtMoney(app.otherFees.supplementCredit)}/tín chỉ); phúc khảo hồ sơ {fmtMoney(app.otherFees.appeal)}/hồ sơ.
+              </p>
             </div>
 
             <label className="flex items-start gap-2.5 text-[13px] leading-relaxed text-gray-700">
@@ -758,6 +880,11 @@ function WizardInner() {
               Lưu và tiếp tục
             </Button>
           )}
+          {step === "language" && (
+            <Button loading={busy} disabled={expired} onClick={saveLanguage}>
+              Lưu và tiếp tục
+            </Button>
+          )}
           {step === "documents" && app && (
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
               <Button disabled={app.missingDocuments.length > 0 || uploading !== null} onClick={() => go(steps[stepIndex + 1])}>
@@ -772,7 +899,7 @@ function WizardInner() {
             </Button>
           )}
           {step === "review" && app && (
-            <Button loading={busy} disabled={!agree || expired || app.missingDocuments.length > 0 || (app.degreeLevel === "TIEN_SI" && !app.proposal)} onClick={submit}>
+            <Button loading={busy} disabled={!agree || expired || !app.language.option || app.missingDocuments.length > 0 || (app.degreeLevel === "TIEN_SI" && !app.proposal)} onClick={submit}>
               Nộp hồ sơ
             </Button>
           )}

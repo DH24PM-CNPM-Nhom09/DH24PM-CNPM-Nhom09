@@ -61,7 +61,7 @@ export class MailService {
       `Mã ${what} của bạn là: ${otp}\n` +
       `Mã có hiệu lực trong ${minutes} phút. Không chia sẻ mã này cho bất kỳ ai, kể cả cán bộ nhà trường.\n\n` +
       `Nếu bạn không thực hiện yêu cầu này, hãy bỏ qua email.\n` +
-      `Phòng Đào tạo Sau đại học - Trường Đại học An Giang`;
+      `Phòng Đào tạo Sau đại học - Trường Đại học An Giang, ĐHQG-HCM`;
     const html = layout(
       `<p style="margin:0 0 12px">Mã ${what} của bạn là:</p>
        <p style="margin:0 0 16px;font-size:32px;font-weight:800;letter-spacing:8px;color:#142B4D">${otp}</p>
@@ -75,7 +75,7 @@ export class MailService {
   async sendNotice(to: string, title: string, content: string): Promise<boolean> {
     const html = layout(`<p style="margin:0 0 8px;font-weight:700;font-size:16px;color:#142B4D">${esc(title)}</p>
       <p style="margin:0;color:#374151;white-space:pre-line">${esc(content)}</p>`);
-    return this.send(to, title, `${title}\n\n${content}\n\nPhòng Đào tạo Sau đại học - Trường Đại học An Giang`, html);
+    return this.send(to, title, `${title}\n\n${content}\n\nPhòng Đào tạo Sau đại học - Trường Đại học An Giang, ĐHQG-HCM`, html);
   }
 }
 
@@ -86,7 +86,7 @@ function esc(s: string) {
 function layout(body: string) {
   return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f3f4f6;padding:24px">
   <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-    <div style="background:#142B4D;color:#fff;padding:16px 24px;font-weight:700">Tuyển sinh Sau đại học · Trường ĐH An Giang</div>
+    <div style="background:#142B4D;color:#fff;padding:16px 24px;font-weight:700">Tuyển sinh Sau đại học · Trường ĐH An Giang, ĐHQG-HCM</div>
     <div style="padding:24px;font-size:15px;line-height:1.5;color:#111827">${body}</div>
   </div></div>`;
 }

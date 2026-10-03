@@ -22,7 +22,7 @@ export default function AuthLayout({
           </div>
           <div>
             <p className="text-sm font-bold leading-tight">Tuyển Sinh Sau Đại Học</p>
-            <p className="text-xs text-white/60">Trường Đại học An Giang</p>
+            <p className="text-xs text-white/60">Trường Đại học An Giang, ĐHQG-HCM</p>
           </div>
         </div>
 
@@ -39,7 +39,7 @@ export default function AuthLayout({
         </div>
 
         <p className="relative hidden text-xs text-white/50 md:block">
-          © {new Date().getFullYear()} Trường Đại học An Giang. Đã đăng ký bản quyền.
+          © {new Date().getFullYear()} Trường Đại học An Giang, ĐHQG-HCM. Đã đăng ký bản quyền.
         </p>
       </div>
 

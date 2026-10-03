@@ -64,6 +64,11 @@ export class CandidateController {
     return this.flow.saveProposal(asCandidate(user), body);
   }
 
+  @Put("applications/me/language")
+  saveLanguage(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.flow.saveLanguage(asCandidate(user), body);
+  }
+
   @Post("applications/me/submit")
   @HttpCode(200)
   submit(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {

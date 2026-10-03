@@ -552,15 +552,19 @@ export async function confirmPayment(applicationId: number, data: { receiptNo?: 
 }
 
 export interface PaymentSettings {
+  feeRegistration: number;
   feeThacSi: number;
   feeTienSi: number;
+  feeEnglishTest: number;
+  feeSupplementCredit: number;
+  feeAppeal: number;
   /** Mã BIN NAPAS của ngân hàng (6 số) — cần để tạo mã VietQR */
   bankBin: string;
   bankName: string;
   accountNo: string;
   accountName: string;
 }
-let mockPaymentSettings: PaymentSettings = { feeThacSi: 600000, feeTienSi: 1000000, bankBin: "", bankName: "", accountNo: "", accountName: "" };
+let mockPaymentSettings: PaymentSettings = { feeRegistration: 100000, feeThacSi: 360000, feeTienSi: 1000000, feeEnglishTest: 120000, feeSupplementCredit: 490000, feeAppeal: 360000, bankBin: "", bankName: "", accountNo: "", accountName: "" };
 
 /** GET /admin/payment-settings */
 export async function getPaymentSettings(): Promise<PaymentSettings> {
@@ -575,6 +579,68 @@ export async function updatePaymentSettings(data: PaymentSettings): Promise<Paym
   requirePermission("batch:manage");
   mockPaymentSettings = { ...data, accountNo: data.accountNo.replace(/\s/g, ""), accountName: data.accountName.trim().toUpperCase() };
   return delay(mockPaymentSettings);
+}
+
+// ============================================================================
+// Danh mục ngành đào tạo                      GET/POST/PATCH /admin/majors
+// ============================================================================
+export interface MajorRow {
+  majorId: number;
+  majorCode: string;
+  majorName: string;
+  degreeLevel: DegreeLevel;
+  facultyName: string;
+  status: "ACTIVE" | "INACTIVE";
+  batchCount: number;
+  applicationCount: number;
+}
+export type MajorInput = { majorCode: string; majorName: string; degreeLevel: DegreeLevel; facultyName: string };
+const mockMajorStatus = new Map<number, "ACTIVE" | "INACTIVE">();
+
+export async function listMajors(): Promise<MajorRow[]> {
+  if (!USE_MOCK) return request<MajorRow[]>("/admin/majors");
+  requirePermission("batch:view");
+  const db = getDb();
+  return delay(
+    db.majors.map((m) => {
+      const bms = db.batchMajors.filter((b) => b.majorId === m.majorId);
+      return {
+        ...m,
+        status: mockMajorStatus.get(m.majorId) ?? "ACTIVE",
+        batchCount: bms.length,
+        applicationCount: db.applications.filter((a) => bms.some((b) => b.batchMajorId === a.batchMajorId)).length,
+      };
+    }),
+  );
+}
+
+export async function createMajor(input: MajorInput) {
+  if (!USE_MOCK) return request<{ majorId: number }>("/admin/majors", { method: "POST", body: JSON.stringify(input) });
+  const me = requirePermission("batch:manage");
+  const db = getDb();
+  const code = input.majorCode.trim().toUpperCase();
+  if (!/^[0-9A-Z]{4,20}$/.test(code)) fail("VALIDATION", "Mã ngành gồm 4–20 chữ số hoặc chữ cái.");
+  if (input.majorName.trim().length < 3) fail("VALIDATION", "Tên ngành cần từ 3 ký tự.");
+  if (db.majors.some((m) => m.majorCode === code)) fail("DUPLICATE_CODE", `Mã ngành ${code} đã có trong danh mục.`);
+  const majorId = Math.max(0, ...db.majors.map((x) => x.majorId)) + 1;
+  db.majors.push({ majorId, majorCode: code, majorName: input.majorName.trim(), degreeLevel: input.degreeLevel, facultyName: input.facultyName.trim() });
+  audit(db, me.staffAccountId, "MAJOR_CREATE", "admission_major", majorId, `Thêm ngành ${code} ${input.majorName.trim()}`);
+  commit();
+  return delay({ majorId });
+}
+
+export async function updateMajor(majorId: number, patch: Partial<MajorInput> & { status?: "ACTIVE" | "INACTIVE" }) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/majors/${majorId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  const me = requirePermission("batch:manage");
+  const db = getDb();
+  const m = db.majors.find((x) => x.majorId === majorId);
+  if (!m) fail("NOT_FOUND", "Không tìm thấy ngành.");
+  if (patch.majorName) m.majorName = patch.majorName.trim();
+  if (patch.facultyName !== undefined) m.facultyName = patch.facultyName.trim();
+  if (patch.status) mockMajorStatus.set(majorId, patch.status);
+  audit(db, me.staffAccountId, "MAJOR_UPDATE", "admission_major", majorId, `Sửa ngành ${m.majorCode}`);
+  commit();
+  return delay({ success: true });
 }
 
 // ============================================================================

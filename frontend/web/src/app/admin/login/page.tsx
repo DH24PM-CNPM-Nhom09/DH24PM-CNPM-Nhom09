@@ -96,7 +96,7 @@ function LoginForm() {
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-lg font-extrabold">TS</div>
           <div className="leading-tight">
             <p className="text-sm font-bold">Tuyển Sinh Sau Đại Học</p>
-            <p className="text-xs text-white/60">Trường Đại học An Giang</p>
+            <p className="text-xs text-white/60">Trường Đại học An Giang, ĐHQG-HCM</p>
           </div>
         </div>
 

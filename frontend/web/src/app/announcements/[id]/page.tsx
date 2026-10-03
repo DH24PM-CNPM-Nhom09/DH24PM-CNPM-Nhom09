@@ -76,7 +76,7 @@ export default function AnnouncementDetailPage() {
             <Body text={a.content ?? a.excerpt} />
             <hr className="my-6 border-gray-100" />
             <p className="text-sm text-gray-500">
-              Phòng Đào tạo Sau đại học — Trường Đại học An Giang
+              Phòng Đào tạo Sau đại học — Trường Đại học An Giang, ĐHQG-HCM
               {a.createdByName && <span className="block text-xs text-gray-400">Người đăng: {a.createdByName}</span>}
             </p>
             {a.batch && (

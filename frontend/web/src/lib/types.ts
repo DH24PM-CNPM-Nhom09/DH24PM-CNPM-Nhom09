@@ -17,13 +17,29 @@ export type AdmissionStatus =
   | "ENROLLED";
 
 export type DocumentType =
+  | "DON_DANG_KY"
+  | "SO_YEU_LY_LICH"
+  | "LY_LICH_CHUYEN_MON"
+  | "ANH_THE"
   | "VAN_BANG"
   | "BANG_DIEM"
+  | "CCCD"
   | "CHUNG_CHI_NGOAI_NGU"
+  | "CHUNG_CHI_AI"
   | "DE_CUONG_NCS"
   | "THU_GIOI_THIEU"
+  | "GIAY_GIOI_THIEU"
+  | "GIAY_UU_TIEN"
+  | "CONG_NHAN_VAN_BANG"
   | "CONG_BO_KHOA_HOC"
   | "KHAC";
+
+export type LanguageOption = "CERTIFICATE" | "EXEMPT" | "TEST";
+export interface FeeItem {
+  code: string;
+  label: string;
+  amount: number;
+}
 
 export type SupervisorRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
@@ -126,7 +142,9 @@ export interface FullApplication {
   proposal: (ResearchProposalInput & { lecturerName: string | null; supervisorStatus: SupervisorRequestStatus | null }) | null;
   documents: ApplicationDocument[];
   requiredDocuments: DocumentType[];
+  optionalDocuments: DocumentType[];
   missingDocuments: DocumentType[];
+  language: { option: LanguageOption | null; note: string | null; requiredLevel: string };
   payment: {
     amount: number;
     status: "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED" | "CANCELLED" | "EXPIRED";
@@ -140,7 +158,11 @@ export interface FullApplication {
   history: { status: ReviewStatus; at: string; by: "CANDIDATE" | "STAFF" | "SYSTEM"; reason: string | null }[];
   /** Còn sửa được (nháp và đợt còn hạn nhận hồ sơ) */
   canEdit: boolean;
+  /** Tổng tiền phải nộp khi nộp hồ sơ = tổng feeItems */
   fee: number;
+  feeItems: FeeItem[];
+  /** Các khoản có thể phát sinh sau: học bổ sung kiến thức (đ/tín chỉ), phúc khảo hồ sơ */
+  otherFees: { supplementCredit: number; appeal: number; englishTest: number };
 }
 
 export interface SupervisorRequest {
