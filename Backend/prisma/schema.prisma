@@ -1,0 +1,80 @@
+// LƯU Ý: schema tạm, cần đối chiếu với admission_db_v3.sql / ERD GĐ3 do Data (Lâm Hoài An) quản lý.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql" // Prisma dùng provider "mysql" cho MariaDB
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CANDIDATE
+  STAFF
+  REVIEWER
+  ADMIN
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model User {
+  id                   Int           @id @default(autoincrement())
+  email                String        @unique
+  googleId             String?       @unique
+  fullName             String?
+  role                 Role          @default(CANDIDATE)
+  createdAt            DateTime      @default(now())
+  applications         Application[] @relation("CandidateApplications")
+  reviewedApplications Application[] @relation("ReviewedApplications")
+}
+
+model Program {
+  id           Int           @id @default(autoincrement())
+  code         String        @unique
+  name         String
+  isOpen       Boolean       @default(true)
+  applications Application[]
+}
+
+model Application {
+  id           Int               @id @default(autoincrement())
+  candidateId  Int
+  programId    Int
+  status       ApplicationStatus @default(DRAFT)
+  submittedAt  DateTime?
+  reviewedById Int?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  candidate    User              @relation("CandidateApplications", fields: [candidateId], references: [id])
+  reviewedBy   User?             @relation("ReviewedApplications", fields: [reviewedById], references: [id])
+  program      Program           @relation(fields: [programId], references: [id])
+  payments     Payment[]
+
+  @@unique([candidateId, programId])
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  applicationId Int
+  amount        Int
+  method        String
+  status        PaymentStatus @default(PENDING)
+  txnRef        String        @unique
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  application   Application   @relation(fields: [applicationId], references: [id])
+}
