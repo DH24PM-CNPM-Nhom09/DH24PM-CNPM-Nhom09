@@ -145,6 +145,18 @@ export interface FullApplication {
   optionalDocuments: DocumentType[];
   missingDocuments: DocumentType[];
   language: { option: LanguageOption | null; note: string | null; requiredLevel: string };
+  /** Thi đánh giá năng lực tiếng Anh — chỉ có khi thí sinh chọn đăng ký dự thi (null = không phải thi) */
+  englishTest: {
+    candidateNumber: string | null;
+    seatNo: number | null;
+    sessionCode: string | null;
+    testAt: string | null;
+    room: string | null;
+    location: string | null;
+    note: string | null;
+    result: EnglishTestResult | null;
+    score: number | null;
+  } | null;
   payment: {
     amount: number;
     status: "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED" | "CANCELLED" | "EXPIRED";
@@ -207,3 +219,5 @@ export type SupervisorOverview =
       canRequest: boolean;
       remaining: number;
     };
+
+export type EnglishTestResult = "PENDING" | "PASSED" | "FAILED" | "ABSENT";

@@ -25,6 +25,7 @@ const fullInclude = {
   supplement_request: { orderBy: { request_id: "desc" } },
   application_status_history: { orderBy: { history_id: "asc" } },
   research_proposal: { include: { lecturer: true, supervisor_request: { orderBy: { request_id: "desc" }, include: { lecturer: true } } } },
+  english_test_registration: { include: { english_test_session: true } },
 } satisfies Prisma.applicationInclude;
 type FullApp = Prisma.applicationGetPayload<{ include: typeof fullInclude }>;
 
@@ -188,6 +189,23 @@ export class ApplicationFlowService {
       optionalDocuments: OPTIONAL_DOCS.filter((t) => !requiredDocs(degree, a.language_option).includes(t)),
       missingDocuments: requiredDocs(degree, a.language_option).filter((t) => !have.has(t)),
       language: { option: a.language_option, note: a.language_note, requiredLevel: degree === "TIEN_SI" ? "bậc 4/6 (B2)" : "bậc 3/6 (B1)" },
+      // Thi đánh giá năng lực tiếng Anh (chỉ khi thí sinh chọn đăng ký dự thi)
+      englishTest:
+        a.language_option === "TEST" && a.review_status !== "DRAFT"
+          ? a.english_test_registration
+            ? {
+                candidateNumber: a.english_test_registration.candidate_number,
+                seatNo: a.english_test_registration.seat_no,
+                sessionCode: a.english_test_registration.english_test_session.session_code,
+                testAt: isoReq(a.english_test_registration.english_test_session.test_at),
+                room: a.english_test_registration.english_test_session.room,
+                location: a.english_test_registration.english_test_session.location,
+                note: a.english_test_registration.english_test_session.note,
+                result: a.english_test_registration.result,
+                score: dec(a.english_test_registration.score),
+              }
+            : { candidateNumber: null, seatNo: null, sessionCode: null, testAt: null, room: null, location: null, note: null, result: null, score: null }
+          : null,
       payment: pay
         ? {
             amount: dec(pay.amount),

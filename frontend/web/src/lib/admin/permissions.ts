@@ -23,7 +23,8 @@ export type Permission =
   | "announcement:manage"
   | "candidate:view" // xem danh sách & thông tin tài khoản thí sinh
   | "candidate:manage" // khóa / mở khóa tài khoản thí sinh
-  | "supervisor:manage"; // ghi nhận GV đồng ý / từ chối hướng dẫn NCS, danh mục giảng viên
+  | "supervisor:manage" // ghi nhận GV đồng ý / từ chối hướng dẫn NCS, danh mục giảng viên
+  | "exam:manage"; // tổ chức thi đánh giá năng lực tiếng Anh: phòng thi, số báo danh, kết quả
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -38,6 +39,7 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "announcement:manage",
     "candidate:view",
     "supervisor:manage",
+    "exam:manage",
   ],
   HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage"],
   LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view"],

@@ -310,6 +310,9 @@ function StatusInner() {
         </Card>
       )}
 
+      {/* Thi đánh giá năng lực tiếng Anh — chỉ thí sinh đăng ký dự thi */}
+      {app.englishTest && <EnglishTestCard t={app.englishTest} paid={paid} />}
+
       {/* Thông tin đăng ký */}
       <Card className="mt-5 p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -384,6 +387,64 @@ function StatusInner() {
         </ol>
       </Card>
     </Shell>
+  );
+}
+
+const ENGLISH_RESULT = {
+  PENDING: { label: "Chờ kết quả", tone: "info" as const },
+  PASSED: { label: "Đạt", tone: "success" as const },
+  FAILED: { label: "Không đạt", tone: "danger" as const },
+  ABSENT: { label: "Vắng thi", tone: "danger" as const },
+};
+
+function EnglishTestCard({ t, paid }: { t: NonNullable<FullApplication["englishTest"]>; paid: boolean }) {
+  const upcoming = t.testAt ? new Date(t.testAt).getTime() > Date.now() : false;
+  return (
+    <Card className="mt-5 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h2 className="text-base font-bold text-gray-900">Thi đánh giá năng lực tiếng Anh</h2>
+        {t.candidateNumber ? <Badge tone={ENGLISH_RESULT[t.result ?? "PENDING"].tone}>{ENGLISH_RESULT[t.result ?? "PENDING"].label}</Badge> : <Badge tone="gray">Chờ xếp lịch</Badge>}
+      </div>
+      {!t.candidateNumber ? (
+        <p className="mt-3 text-sm text-gray-600">
+          Bạn đã đăng ký dự thi vì chưa có chứng chỉ ngoại ngữ đạt chuẩn. Phòng Đào tạo Sau đại học sẽ xếp phòng thi và gửi lịch qua cổng thông tin, email.
+          {!paid && " Lưu ý: chỉ thí sinh đã nộp lệ phí mới được xếp lịch thi."}
+        </p>
+      ) : (
+        <>
+          <dl className="mt-4 grid gap-3 rounded-input bg-gray-50 p-4 text-sm sm:grid-cols-2">
+            <Row label="Số báo danh" mono>
+              {t.candidateNumber}
+            </Row>
+            <Row label="Ghế số">{t.seatNo}</Row>
+            <Row label="Thời gian">{fmtDateTime(t.testAt)}</Row>
+            <Row label="Phòng thi">
+              {t.room} ({t.sessionCode})
+            </Row>
+            {t.location && <Row label="Địa điểm">{t.location}</Row>}
+            {t.score !== null && <Row label="Điểm">{t.score}</Row>}
+          </dl>
+          {t.note && <p className="mt-3 text-[13px] text-gray-600">Lưu ý: {t.note}</p>}
+          {upcoming && (
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-gray-500">Mang theo CCCD bản gốc và giấy báo dự thi, có mặt trước giờ thi 30 phút.</p>
+              <Link href="/application/test-card" target="_blank">
+                <Button variant="outline">In giấy báo dự thi</Button>
+              </Link>
+            </div>
+          )}
+          {t.result === "FAILED" && (
+            <p className="mt-3 text-sm text-gray-700">
+              Hồ sơ chưa đáp ứng điều kiện ngoại ngữ. Nếu không đồng ý với kết quả, bạn có thể{" "}
+              <Link href="/complaint" className="font-semibold text-accent hover:underline">
+                gửi phúc khảo
+              </Link>
+              .
+            </p>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 

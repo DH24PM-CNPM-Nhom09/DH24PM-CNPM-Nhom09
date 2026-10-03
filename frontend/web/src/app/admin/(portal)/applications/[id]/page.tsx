@@ -410,6 +410,23 @@ function DetailInner() {
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Field label="Trường hợp">{a.language?.option ? LANGUAGE_OPTION_LABEL[a.language.option] ?? a.language.option : "Chưa khai"}</Field>
               {a.language?.note && <Field label="Lý do miễn">{a.language.note}</Field>}
+              {a.englishTest && (
+                <Field label="Thi đánh giá năng lực tiếng Anh">
+                  {a.englishTest.candidateNumber ? (
+                    <>
+                      <span className={a.englishTest.result === "PASSED" ? "text-[#166534]" : a.englishTest.result === "PENDING" ? "text-gray-900" : "text-[#B91C1C]"}>
+                        {{ PENDING: "Chưa có kết quả", PASSED: "Đạt", FAILED: "Không đạt", ABSENT: "Vắng thi" }[a.englishTest.result ?? "PENDING"]}
+                        {a.englishTest.score !== null && ` (${a.englishTest.score} điểm)`}
+                      </span>
+                      <span className="block text-xs font-normal text-gray-500">
+                        SBD {a.englishTest.candidateNumber} · phòng {a.englishTest.sessionCode} · {fmtDateTime(a.englishTest.testAt)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[#92400E]">Chưa xếp phòng thi</span>
+                  )}
+                </Field>
+              )}
             </dl>
           </Panel>
 

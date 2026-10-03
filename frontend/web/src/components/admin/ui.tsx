@@ -275,6 +275,8 @@ export function Modal({
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     const t = setTimeout(() => {
+      // Người dùng đã bấm vào một ô trong hộp thoại thì không kéo con trỏ đi chỗ khác
+      if (ref.current?.contains(document.activeElement)) return;
       const el = ref.current?.querySelector<HTMLElement>("textarea, input, select, button:not([data-close])");
       el?.focus();
     }, 20);

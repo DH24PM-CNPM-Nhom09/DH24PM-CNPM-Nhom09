@@ -172,6 +172,8 @@ export interface AdminApplication {
   assignedStaffId: number | null;
   /** Ngoại ngữ thí sinh khai: CERTIFICATE / EXEMPT / TEST (mục 7 thông báo) */
   language?: { option: string | null; note: string | null };
+  /** Thi đánh giá năng lực tiếng Anh (null = thí sinh không phải thi) */
+  englishTest?: { result: string | null; score: number | null; candidateNumber: string | null; sessionCode: string | null; testAt: string | null; room: string | null } | null;
   documents: AdminDocument[];
   /** null = thí sinh chưa phát sinh giao dịch lệ phí nào */
   payment: Payment | null;

@@ -26,6 +26,7 @@ model admission_batch {
   admission_decision    admission_decision[]
   announcement          announcement[]
   exam_room             exam_room[]
+  english_test_session  english_test_session[]
 }
 
 model admission_batch_major {
@@ -195,6 +196,7 @@ model application {
   research_proposal            research_proposal?
   supplement_request           supplement_request[]
   waitlist                     waitlist?
+  english_test_registration    english_test_registration?
 
   @@unique([candidate_id, active_slot], map: "uq_candidate_active_slot")
   @@index([admission_status], map: "idx_application_admission_status")
@@ -605,6 +607,7 @@ model staff_account {
   score_appeal                                                           score_appeal[]
   staff_role                                                             staff_role[]
   supplement_request                                                     supplement_request[]
+  english_test_registration                                              english_test_registration[]
 }
 
 model staff_role {
@@ -662,4 +665,43 @@ model waitlist {
   rank_order     Int
   status         String      @default("WAITING") @db.VarChar(20)
   application    application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_waitlist_application")
+}
+
+/// Buổi thi đánh giá năng lực tiếng Anh (migration v9)
+model english_test_session {
+  session_id                BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  batch_id                  BigInt                      @db.UnsignedBigInt
+  session_code              String                      @db.VarChar(30)
+  test_at                   DateTime                    @db.DateTime(0)
+  room                      String                      @db.VarChar(100)
+  location                  String?                     @db.VarChar(255)
+  capacity                  Int
+  note                      String?                     @db.VarChar(500)
+  status                    String                      @default("SCHEDULED") @db.VarChar(20)
+  created_at                DateTime                    @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  admission_batch           admission_batch             @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_test_session_batch")
+  english_test_registration english_test_registration[]
+
+  @@unique([batch_id, session_code], map: "uq_test_session_code")
+}
+
+/// Thí sinh dự thi tiếng Anh: số báo danh, ghế, kết quả (migration v9)
+model english_test_registration {
+  registration_id      BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  application_id       BigInt               @unique(map: "application_id") @db.UnsignedBigInt
+  session_id           BigInt               @db.UnsignedBigInt
+  candidate_number     String               @unique(map: "candidate_number") @db.VarChar(30)
+  seat_no              Int
+  result               String               @default("PENDING") @db.VarChar(20)
+  score                Decimal?             @db.Decimal(5, 2)
+  note                 String?              @db.VarChar(500)
+  graded_by_staff_id   BigInt?              @db.UnsignedBigInt
+  graded_at            DateTime?            @db.DateTime(0)
+  assigned_at          DateTime             @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  application          application          @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_test_reg_application")
+  english_test_session english_test_session @relation(fields: [session_id], references: [session_id], onUpdate: Restrict, map: "fk_test_reg_session")
+  staff_account        staff_account?       @relation(fields: [graded_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_test_reg_staff")
+
+  @@index([session_id], map: "fk_test_reg_session")
+  @@index([graded_by_staff_id], map: "fk_test_reg_staff")
 }

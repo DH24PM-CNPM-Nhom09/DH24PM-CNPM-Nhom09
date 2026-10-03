@@ -247,6 +247,7 @@ export async function saveApplicationDraft(payload: { batchMajorId: number; educ
       optionalDocuments: ["GIAY_GIOI_THIEU", "CHUNG_CHI_NGOAI_NGU", "CHUNG_CHI_AI", "GIAY_UU_TIEN", "CONG_NHAN_VAN_BANG", "CONG_BO_KHOA_HOC", "KHAC"],
       missingDocuments: [],
       language: { option: null, note: null, requiredLevel: degree === "TIEN_SI" ? "bậc 4/6 (B2)" : "bậc 3/6 (B1)" },
+      englishTest: null,
       payment: null,
       supplement: null,
       history: [],

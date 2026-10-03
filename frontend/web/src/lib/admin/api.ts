@@ -916,6 +916,88 @@ export async function updateLecturer(lecturerId: number, data: LecturerInput) {
   return delay({ success: true });
 }
 
+// ============================================================================
+// Thi đánh giá năng lực tiếng Anh               /admin/english-test/...
+// (chỉ thí sinh chọn "đăng ký dự thi" — không có chứng chỉ, không được miễn)
+// ============================================================================
+export type EnglishResult = "PENDING" | "PASSED" | "FAILED" | "ABSENT";
+export interface EnglishBatch {
+  batchId: number;
+  batchCode: string;
+  batchName: string;
+  status: string;
+  candidates: number;
+}
+export interface EnglishSession {
+  sessionId: number;
+  sessionCode: string;
+  testAt: string;
+  room: string;
+  location: string | null;
+  capacity: number;
+  note: string | null;
+  status: "SCHEDULED" | "COMPLETED" | "CANCELLED";
+  assigned: number;
+  graded: number;
+}
+export interface EnglishCandidate {
+  applicationId: number;
+  applicationCode: string;
+  fullName: string;
+  dob: string | null;
+  idNumber: string | null;
+  majorName: string;
+  reviewStatus: ReviewStatus;
+  paid: boolean;
+  registration: { sessionId: number; sessionCode: string; candidateNumber: string; seatNo: number; result: EnglishResult; score: number | null; note: string | null } | null;
+}
+export interface EnglishOverview {
+  batch: { batchId: number; batchCode: string; batchName: string };
+  sessions: EnglishSession[];
+  candidates: EnglishCandidate[];
+  stats: { total: number; assigned: number; unpaidUnassigned: number; passed: number; failed: number; absent: number };
+}
+export interface EnglishSessionInput {
+  sessionCode: string;
+  testAt: string;
+  room: string;
+  location: string;
+  capacity: number;
+  note: string;
+}
+
+const MOCK_ONLY = () => fail("NOT_SUPPORTED", "Chức năng thi tiếng Anh cần chạy cùng backend (NEXT_PUBLIC_ADMIN_USE_MOCK=false).");
+
+export async function listEnglishBatches(): Promise<EnglishBatch[]> {
+  if (!USE_MOCK) return request<EnglishBatch[]>("/admin/english-test/batches");
+  requirePermission("exam:manage");
+  return delay([]);
+}
+export async function getEnglishOverview(batchId: number): Promise<EnglishOverview> {
+  if (!USE_MOCK) return request<EnglishOverview>(`/admin/english-test/batches/${batchId}`);
+  return MOCK_ONLY();
+}
+export async function createEnglishSession(batchId: number, data: EnglishSessionInput) {
+  if (!USE_MOCK) return request<{ sessionId: number }>(`/admin/english-test/batches/${batchId}/sessions`, { method: "POST", body: JSON.stringify(data) });
+  return MOCK_ONLY();
+}
+export async function updateEnglishSession(sessionId: number, data: Partial<EnglishSessionInput> & { status?: "CANCELLED" }) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/english-test/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify(data) });
+  return MOCK_ONLY();
+}
+export async function autoAssignEnglish(batchId: number, paidOnly: boolean) {
+  if (!USE_MOCK) return request<{ assigned: number; notEnoughSeats: number }>(`/admin/english-test/batches/${batchId}/auto-assign`, { method: "POST", body: JSON.stringify({ paidOnly }) });
+  return MOCK_ONLY();
+}
+export async function moveEnglishCandidate(applicationId: number, sessionId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/english-test/registrations/${applicationId}/move`, { method: "PATCH", body: JSON.stringify({ sessionId }) });
+  return MOCK_ONLY();
+}
+export async function saveEnglishResults(sessionId: number, items: { applicationId: number; result: EnglishResult; score: number | null; note: string }[]) {
+  if (!USE_MOCK) return request<{ success: boolean; changed: number }>(`/admin/english-test/sessions/${sessionId}/results`, { method: "PUT", body: JSON.stringify({ items }) });
+  return MOCK_ONLY();
+}
+
 /** CHỈ CÓ Ở MOCK: giả lập thí sinh nộp bổ sung (thật sẽ do phân hệ Thí sinh gọi) */
 export async function simulateCandidateSupplement(applicationId: number) {
   if (!USE_MOCK) fail("NOT_SUPPORTED", "Chỉ dùng trong chế độ dữ liệu mẫu.");

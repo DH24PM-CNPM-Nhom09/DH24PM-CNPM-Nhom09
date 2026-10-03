@@ -31,6 +31,7 @@ function sqlStatements(file: string) {
       ["migration_v6_staff_security.sql", "migration v6 (đổi mật khẩu bắt buộc, chống dò mật khẩu cho tài khoản cán bộ)"],
       ["migration_v7_payment_config.sql", "migration v7 (cấu hình lệ phí xét tuyển và tài khoản nhận chuyển khoản)"],
       ["migration_v8_real_notice.sql", "migration v8 (minh chứng, ngoại ngữ, các khoản lệ phí theo thông báo tuyển sinh thật)"],
+      ["migration_v9_english_test.sql", "migration v9 (thi đánh giá năng lực tiếng Anh: buổi thi, số báo danh, kết quả)"],
     ];
     for (const [name, label] of migrations) {
       for (const stmt of sqlStatements(path.join(__dirname, "..", "database", name))) await prisma.$executeRawUnsafe(stmt);

@@ -32,7 +32,7 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 6 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 7 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
@@ -41,9 +41,10 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source 
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v6_staff_security.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v7_payment_config.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v8_real_notice.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v9_english_test.sql"
 ```
 
-Kiểm tra: CSDL `admission_db` có **42 bảng** (40 bảng gốc + `application_education` + `complaint`).
+Kiểm tra: CSDL `admission_db` có **44 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration`).
 
 Có thể làm bằng phpMyAdmin thay cho 2 lệnh trên: bật Apache, mở http://localhost/phpmyadmin, vào tab **Import**, chọn file v3 rồi bấm **Import**; làm lại với file v4.
 Bắt buộc dùng `--default-character-set=utf8mb4` (phpMyAdmin mặc định đã đúng). Thiếu nó, tiếng Việt trong CSDL sẽ bị lỗi font.
@@ -65,7 +66,7 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
 > **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
-> lệnh này chạy migration v5 + v6, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+> lệnh này chạy migration v5 → v9, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
 
 ### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
 
@@ -172,6 +173,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
   - Đăng nhập sai 5 lần liên tiếp thì khóa tạm 15 phút (cùng cấu hình `LOGIN_MAX_FAILED`, `LOGIN_LOCK_MINUTES` với thí sinh).
 - **Tài khoản thí sinh (phía cán bộ)**: cán bộ tuyển sinh và quản trị xem danh sách, thông tin cá nhân, hồ sơ của từng thí sinh và xuất CSV (ghi nhật ký); CCCD trong danh sách chỉ hiện 3 số cuối. Chỉ quản trị được khóa/mở khóa: tài khoản bị khóa không đăng nhập được bằng mật khẩu lẫn Google, phiên đang mở bị chặn ngay, "quên mật khẩu" không mở khóa được; hồ sơ đã nộp giữ nguyên. Không xóa tài khoản thí sinh.
 - **Giảng viên hướng dẫn (bậc tiến sĩ)**: NCS chọn GV dự kiến khi nộp hồ sơ → tạo đề nghị chờ phản hồi. Cán bộ tuyển sinh / Hội đồng (quyền `supervisor:manage`) ghi nhận GV đồng ý hoặc từ chối (từ chối bắt buộc ghi lý do), NCS nhận thông báo + email. Bị từ chối thì NCS tự chọn GV khác trên cổng (tối đa 3 đề nghị/hồ sơ, không chọn lại GV đã phản hồi). Bậc thạc sĩ không đăng ký GVHD khi tuyển sinh. Danh mục giảng viên: thêm, sửa, ngừng nhận hướng dẫn (không xóa).
+- **Thi đánh giá năng lực tiếng Anh** (quyền `exam:manage`, cán bộ tuyển sinh): chỉ áp dụng cho hồ sơ chọn "Đăng ký dự thi" ở bước Ngoại ngữ (thí sinh có chứng chỉ đủ điều kiện không phải thi), hồ sơ đã nộp và chưa bị từ chối/hủy. Cán bộ tạo phòng thi theo đợt (mã phòng, giờ thi trong tương lai, phòng, địa điểm, sức chứa); "Xếp phòng tự động" chia thí sinh chưa có phòng vào các phòng còn chỗ theo giờ thi, mặc định chỉ xếp người đã thanh toán; số báo danh dạng `<mã đợt>-TA-0001`, cấp một lần và giữ nguyên khi chuyển phòng. Thí sinh nhận thông báo + email, xem lịch và in giấy báo dự thi trên cổng. Chỉ nhập kết quả (Đạt / Không đạt / Vắng, điểm tùy chọn) sau giờ thi; đổi kết quả thì thí sinh được báo lại. Phòng chỉ hủy được khi chưa có ai; đổi giờ/phòng thì báo cho thí sinh trong phòng. Hồ sơ đăng ký dự thi **không duyệt được** khi chưa có kết quả Đạt.
 - **Thông báo**: thông báo `PUBLISHED` ai cũng xem được (kể cả chưa đăng nhập); chỉ cán bộ tuyển sinh được soạn, đăng, gỡ. Mọi thao tác ghi nhật ký.
 - **Lỗi**: luôn trả về `{ error_code, message }` bằng tiếng Việt.
 
@@ -206,6 +208,9 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | GET / PATCH | `/admin/supervisor-requests`, `/admin/supervisor-requests/:id/respond` | supervisor:manage |
 | GET / POST / PATCH | `/admin/lecturers`, `/admin/lecturers/:id` | supervisor:manage |
 | GET / POST | `/supervisors/me`, `/supervisors/me/request` | thí sinh |
+| GET | `/admin/english-test/batches`, `/admin/english-test/batches/:batchId` | exam:manage |
+| POST | `/admin/english-test/batches/:batchId/sessions`, `/admin/english-test/batches/:batchId/auto-assign` | exam:manage |
+| PATCH / PUT | `/admin/english-test/sessions/:id`, `/admin/english-test/sessions/:id/results`, `/admin/english-test/registrations/:applicationId/move` | exam:manage |
 | GET/PATCH | `/candidates/me` | thí sinh |
 | GET | `/applications/me`, `/applications/me/documents`, `/applications/me/supervisor-request`, `/notifications/me` | thí sinh |
 | PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |
@@ -221,12 +226,12 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v8, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v9, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm
 
-- **M5 (phần còn lại):** xếp phòng thi, số báo danh, lịch phỏng vấn, nhập điểm.
+- **M5 (phần còn lại):** tiểu ban chấm hồ sơ thạc sĩ, lịch trình bày đề cương tiến sĩ và nhập điểm, phúc khảo. (Thi đánh giá năng lực tiếng Anh đã có.)
 - **M6:** điểm chuẩn, xếp hạng, danh sách dự bị, công bố kết quả 2 cấp duyệt.
 - **M7:** quyết định trúng tuyển, xác nhận nhập học, nộp bản chính.
 - **Gửi SMS:** chưa có; mã xác thực và thông báo chỉ gửi qua email.

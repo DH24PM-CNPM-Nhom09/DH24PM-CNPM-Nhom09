@@ -8,6 +8,7 @@ import { AuditLogsService } from "./audit-logs.service";
 import { BatchesService } from "./batches.service";
 import { CandidateAccountsService } from "./candidates.service";
 import { MajorsService } from "./majors.service";
+import { EnglishTestService } from "./english-test.service";
 import { StaffService } from "./staff.service";
 import { SupervisorsService } from "./supervisors.service";
 
@@ -326,5 +327,54 @@ export class SupervisorsController {
   @RequirePermission("supervisor:manage")
   updateLecturer(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
     return this.svc.updateLecturer(asStaff(user), id, body);
+  }
+}
+
+// ============================================================ Thi đánh giá năng lực tiếng Anh
+@Controller("admin/english-test")
+export class EnglishTestController {
+  constructor(private readonly svc: EnglishTestService) {}
+
+  @Get("batches")
+  @RequirePermission("exam:manage")
+  batches() {
+    return this.svc.batches();
+  }
+
+  @Get("batches/:batchId")
+  @RequirePermission("exam:manage")
+  overview(@Param("batchId", ParseIntPipe) batchId: number) {
+    return this.svc.overview(batchId);
+  }
+
+  @Post("batches/:batchId/sessions")
+  @RequirePermission("exam:manage")
+  createSession(@CurrentUser() user: AuthUser, @Param("batchId", ParseIntPipe) batchId: number, @Body() body: B) {
+    return this.svc.createSession(asStaff(user), batchId, body);
+  }
+
+  @Post("batches/:batchId/auto-assign")
+  @HttpCode(200)
+  @RequirePermission("exam:manage")
+  autoAssign(@CurrentUser() user: AuthUser, @Param("batchId", ParseIntPipe) batchId: number, @Body() body: B) {
+    return this.svc.autoAssign(asStaff(user), batchId, body);
+  }
+
+  @Patch("sessions/:id")
+  @RequirePermission("exam:manage")
+  updateSession(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.updateSession(asStaff(user), id, body);
+  }
+
+  @Put("sessions/:id/results")
+  @RequirePermission("exam:manage")
+  grade(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.grade(asStaff(user), id, body);
+  }
+
+  @Patch("registrations/:applicationId/move")
+  @RequirePermission("exam:manage")
+  move(@CurrentUser() user: AuthUser, @Param("applicationId", ParseIntPipe) applicationId: number, @Body() body: B) {
+    return this.svc.move(asStaff(user), applicationId, Number(body.sessionId));
   }
 }

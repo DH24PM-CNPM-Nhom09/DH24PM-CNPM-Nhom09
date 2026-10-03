@@ -19,6 +19,8 @@ const READY_WHERE: Prisma.applicationWhereInput = {
   review_status: "UNDER_REVIEW",
   application_document: { some: {}, every: { verify_status: "VALID" } },
   application_payment: { some: { gateway_status: "SUCCESS" } },
+  // Đăng ký thi tiếng Anh thì phải có kết quả Đạt mới "chờ kết luận"
+  OR: [{ language_option: null }, { language_option: { not: "TEST" } }, { english_test_registration: { is: { result: "PASSED" } } }],
 };
 const overdueWhere = (now: Date): Prisma.applicationWhereInput => ({
   review_status: "NEEDS_SUPPLEMENT",
@@ -50,10 +52,13 @@ export class ApplicationsService {
         application_document: { select: { verify_status: true } },
         application_payment: { select: { gateway_status: true } },
         supplement_request: { where: { status: "PENDING" }, orderBy: { request_id: "desc" }, take: 1 },
+        english_test_registration: { select: { result: true } },
       },
     });
     if (!a) notFound("Không tìm thấy hồ sơ.");
     return {
+      englishTestRequired: a.language_option === "TEST",
+      englishTestResult: a.english_test_registration?.result ?? null,
       candidateId: id(a.candidate_id),
       code: a.application_code,
       reviewStatus: a.review_status,
@@ -267,10 +272,12 @@ export class ApplicationsService {
         supplement_request: { orderBy: { request_id: "desc" } },
         application_status_history: { orderBy: { history_id: "asc" } },
         admission_batch_major: { include: { admission_batch: true, admission_major: true, exam_subject: true, admission_condition: true } },
+        english_test_registration: { include: { english_test_session: true } },
       },
     });
     if (!a) notFound("Không tìm thấy hồ sơ.");
     const c = a.candidate;
+    const et = a.english_test_registration;
     const edu = a.application_education;
     const pay = a.application_payment.find((p) => p.gateway_status === "SUCCESS") ?? a.application_payment[0] ?? null;
     const history = a.application_status_history
@@ -288,6 +295,12 @@ export class ApplicationsService {
         submittedAt: iso(a.submitted_at),
         assignedStaffId: num(a.assigned_staff_id),
         language: { option: a.language_option, note: a.language_note },
+        englishTest:
+          a.language_option === "TEST"
+            ? et
+              ? { result: et.result, score: dec(et.score), candidateNumber: et.candidate_number, sessionCode: et.english_test_session.session_code, testAt: isoReq(et.english_test_session.test_at), room: et.english_test_session.room }
+              : { result: null, score: null, candidateNumber: null, sessionCode: null, testAt: null, room: null }
+            : null,
         candidate: {
           candidateId: id(c.candidate_id),
           fullName: c.full_name,

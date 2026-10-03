@@ -62,6 +62,10 @@ export function blockReason(app: AdminApplication, action: ReviewAction, now = D
     if (app.documents.length === 0) return "Hồ sơ chưa có minh chứng nào.";
     const notValid = app.documents.filter((d) => d.verifyStatus !== "VALID");
     if (notValid.length > 0) return `Còn ${notValid.length} minh chứng chưa được xác nhận hợp lệ.`;
+    if (app.englishTest && app.englishTest.result !== "PASSED")
+      return app.englishTest.result === "FAILED" || app.englishTest.result === "ABSENT"
+        ? "Thí sinh không đạt / vắng kỳ thi đánh giá năng lực tiếng Anh nên chưa đáp ứng điều kiện ngoại ngữ."
+        : "Thí sinh đăng ký thi đánh giá năng lực tiếng Anh nhưng chưa có kết quả Đạt.";
   }
   if (action === "REQUEST_SUPPLEMENT") {
     // Không bắt buộc có minh chứng INVALID (có thể thiếu hẳn giấy tờ), nhưng

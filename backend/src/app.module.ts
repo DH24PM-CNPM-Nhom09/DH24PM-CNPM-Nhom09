@@ -10,13 +10,14 @@ import { NotificationDispatcher } from "./common/notification-dispatcher";
 import { OtpModule } from "./common/otp.service";
 import { AdminAnnouncementsController, PublicController } from "./modules/announcements/announcements.controller";
 import { AnnouncementsService } from "./modules/announcements/announcements.service";
-import { AppealsController, ApplicationsController, AuditLogsController, BatchesController, CandidateAccountsController, MajorsController, StaffController, SupervisorsController } from "./modules/admin/admin.controller";
+import { AppealsController, ApplicationsController, AuditLogsController, BatchesController, CandidateAccountsController, MajorsController, EnglishTestController, StaffController, SupervisorsController } from "./modules/admin/admin.controller";
 import { AppealsService } from "./modules/admin/appeals.service";
 import { ApplicationsService } from "./modules/admin/applications.service";
 import { AuditLogsService } from "./modules/admin/audit-logs.service";
 import { BatchesService } from "./modules/admin/batches.service";
 import { CandidateAccountsService } from "./modules/admin/candidates.service";
 import { MajorsService } from "./modules/admin/majors.service";
+import { EnglishTestService } from "./modules/admin/english-test.service";
 import { StaffService } from "./modules/admin/staff.service";
 import { SupervisorsService } from "./modules/admin/supervisors.service";
 import { AuthController } from "./modules/auth/auth.controller";
@@ -54,6 +55,7 @@ import { PrismaModule } from "./prisma/prisma.service";
     AuditLogsController,
     CandidateAccountsController,
     SupervisorsController,
+    EnglishTestController,
     MajorsController,
     CandidateController,
     PublicController,
@@ -69,6 +71,7 @@ import { PrismaModule } from "./prisma/prisma.service";
     AuditLogsService,
     CandidateAccountsService,
     SupervisorsService,
+    EnglishTestService,
     MajorsService,
     CandidateService,
     ApplicationFlowService,

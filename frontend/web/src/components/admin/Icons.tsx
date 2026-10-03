@@ -184,3 +184,9 @@ export const IconGraduation = (p: P) => (
     <path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5M22 9v6" />
   </Base>
 );
+export const IconClipboard = (p: P) => (
+  <Base {...p}>
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 4V3h6v1M9 11l2 2 4-4M9 17h6" />
+  </Base>
+);
