@@ -6,8 +6,8 @@ services:
     environment:
       MARIADB_ROOT_PASSWORD: root_password_doi_lai
       MARIADB_DATABASE: admission_db
-      MARIADB_USER: ptpm_user
-      MARIADB_PASSWORD: ptpm_password_doi_lai
+      MARIADB_USER: admission_user
+      MARIADB_PASSWORD: admission_pass
     ports:
       - "3306:3306"
     volumes:
