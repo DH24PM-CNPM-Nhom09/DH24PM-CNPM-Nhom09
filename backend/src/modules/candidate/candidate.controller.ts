@@ -3,6 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { asCandidate, CandidateOnly, CurrentUser, type AuthUser } from "../../common/auth";
 import { str } from "../../common/util";
+import { SupervisorsService } from "../admin/supervisors.service";
 import { ApplicationFlowService } from "./application-flow.service";
 import { CandidateService, type UploadedFileLike } from "./candidate.service";
 
@@ -13,7 +14,20 @@ export class CandidateController {
   constructor(
     private readonly svc: CandidateService,
     private readonly flow: ApplicationFlowService,
+    private readonly supervisors: SupervisorsService,
   ) {}
+
+  /** Giảng viên hướng dẫn: trạng thái theo bậc (thạc sĩ / tiến sĩ) và lịch sử đề nghị */
+  @Get("supervisors/me")
+  supervisorsMine(@CurrentUser() user: AuthUser) {
+    return this.supervisors.mine(asCandidate(user));
+  }
+
+  @Post("supervisors/me/request")
+  @HttpCode(200)
+  supervisorRequest(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.supervisors.request(asCandidate(user), body.lecturerId);
+  }
 
   @Get("candidates/me")
   profile(@CurrentUser() user: AuthUser) {

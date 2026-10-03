@@ -7,7 +7,7 @@
 //   NEXT_PUBLIC_USE_MOCK=false
 //   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
-import type { Application, ApplicationDocument, Candidate, CandidateNotification, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorRequest } from "./types";
+import type { Application, ApplicationDocument, Candidate, CandidateNotification, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorOverview, SupervisorRequest } from "./types";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -378,4 +378,39 @@ export async function markNotificationRead(notificationId: number) {
 export async function markAllNotificationsRead() {
   if (USE_MOCK) return delay({ updated: 0 });
   return request<{ updated: number }>("/notifications/me/read-all", { method: "PATCH" });
+}
+
+// ---- Giảng viên hướng dẫn (bậc tiến sĩ) ----
+let mockSupervisor: SupervisorOverview = {
+  state: "DOCTORAL",
+  applicationCode: "TS-2026-9480101-00001",
+  reviewStatus: "UNDER_REVIEW",
+  degreeLevel: "TIEN_SI",
+  majorName: "Khoa học máy tính",
+  researchTopic: "Ứng dụng học sâu trong dự báo năng suất lúa vùng ĐBSCL",
+  researchField: "Khoa học dữ liệu",
+  requests: [{ requestId: 1, lecturerId: 1, lecturerName: "PGS.TS Trần Văn Long", facultyName: "Khoa Công nghệ thông tin", status: "PENDING", requestedAt: "2026-09-10T00:00:00Z", respondedAt: null, responseNote: null }],
+  canRequest: false,
+  remaining: 2,
+};
+
+export async function getMySupervisors(): Promise<SupervisorOverview> {
+  if (USE_MOCK) return delay(structuredClone(mockSupervisor));
+  return request<SupervisorOverview>("/supervisors/me");
+}
+
+/** Gửi đề nghị hướng dẫn tới giảng viên (lần đầu hoặc sau khi bị từ chối) */
+export async function requestSupervisor(lecturerId: number): Promise<SupervisorOverview> {
+  if (USE_MOCK) {
+    if (mockSupervisor.state === "DOCTORAL") {
+      mockSupervisor = {
+        ...mockSupervisor,
+        canRequest: false,
+        remaining: mockSupervisor.remaining - 1,
+        requests: [{ requestId: Date.now(), lecturerId, lecturerName: "Giảng viên đã chọn", facultyName: "", status: "PENDING", requestedAt: new Date().toISOString(), respondedAt: null, responseNote: null }, ...mockSupervisor.requests],
+      };
+    }
+    return delay(structuredClone(mockSupervisor));
+  }
+  return request<SupervisorOverview>("/supervisors/me/request", { method: "POST", body: JSON.stringify({ lecturerId }) });
 }

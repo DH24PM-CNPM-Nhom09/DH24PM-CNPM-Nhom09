@@ -807,6 +807,115 @@ export async function exportCandidateAccounts(query: CandidateAccountQuery): Pro
   return res.blob();
 }
 
+// ============================================================================
+// Giảng viên hướng dẫn (bậc tiến sĩ)       /admin/supervisor-requests, /admin/lecturers
+// ============================================================================
+export type SupervisorStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+export interface SupervisorRequestRow {
+  requestId: number;
+  status: SupervisorStatus;
+  requestedAt: string;
+  respondedAt: string | null;
+  responseNote: string | null;
+  lecturer: { lecturerId: number; fullName: string; facultyName: string };
+  candidateName: string;
+  applicationId: number;
+  applicationCode: string;
+  reviewStatus: ReviewStatus;
+  majorName: string;
+  researchTopic: string;
+  researchField: string | null;
+}
+export interface LecturerRow {
+  lecturerId: number;
+  lecturerCode: string;
+  fullName: string;
+  email: string | null;
+  facultyName: string;
+  status: "ACTIVE" | "INACTIVE";
+  accepted: number;
+  pending: number;
+}
+export interface LecturerInput {
+  lecturerCode?: string;
+  fullName?: string;
+  email?: string;
+  facultyName?: string;
+  status?: "ACTIVE" | "INACTIVE";
+}
+
+// Dữ liệu mẫu (chế độ không có backend)
+const mockLecturers: LecturerRow[] = [
+  { lecturerId: 1, lecturerCode: "GV-CNTT-01", fullName: "PGS.TS Trần Văn Long", email: null, facultyName: "Khoa Công nghệ thông tin", status: "ACTIVE", accepted: 1, pending: 1 },
+  { lecturerId: 2, lecturerCode: "GV-CNTT-02", fullName: "TS. Lê Thị Minh Thư", email: null, facultyName: "Khoa Công nghệ thông tin", status: "ACTIVE", accepted: 0, pending: 0 },
+  { lecturerId: 3, lecturerCode: "GV-NN-01", fullName: "PGS.TS Nguyễn Văn Hòa", email: null, facultyName: "Khoa Nông nghiệp - Tài nguyên thiên nhiên", status: "ACTIVE", accepted: 0, pending: 0 },
+];
+const mockSupRequests: SupervisorRequestRow[] = [
+  {
+    requestId: 1,
+    status: "PENDING",
+    requestedAt: "2026-09-10T02:00:00Z",
+    respondedAt: null,
+    responseNote: null,
+    lecturer: { lecturerId: 1, fullName: "PGS.TS Trần Văn Long", facultyName: "Khoa Công nghệ thông tin" },
+    candidateName: "Nguyễn Văn An",
+    applicationId: 1,
+    applicationCode: "TS-2026-9480101-00001",
+    reviewStatus: "UNDER_REVIEW",
+    majorName: "Khoa học máy tính",
+    researchTopic: "Ứng dụng học sâu trong dự báo năng suất lúa vùng ĐBSCL",
+    researchField: "Khoa học dữ liệu",
+  },
+];
+
+export async function listSupervisorRequests(query: { status?: SupervisorStatus | ""; q?: string } = {}) {
+  if (!USE_MOCK) return request<{ counts: Record<"ALL" | SupervisorStatus, number>; items: SupervisorRequestRow[] }>(`/admin/supervisor-requests?${qs(query)}`);
+  requirePermission("supervisor:manage");
+  const t = (query.q ?? "").toLowerCase();
+  const base = mockSupRequests.filter((r) => !t || `${r.candidateName} ${r.lecturer.fullName} ${r.researchTopic} ${r.applicationCode}`.toLowerCase().includes(t));
+  const counts = { ALL: base.length, PENDING: 0, ACCEPTED: 0, REJECTED: 0 };
+  base.forEach((r) => counts[r.status]++);
+  return delay({ counts, items: base.filter((r) => !query.status || r.status === query.status) });
+}
+
+/** PATCH /admin/supervisor-requests/{id}/respond   { decision: ACCEPTED|REJECTED, note } */
+export async function respondSupervisorRequest(requestId: number, decision: "ACCEPTED" | "REJECTED", note: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/supervisor-requests/${requestId}/respond`, { method: "PATCH", body: JSON.stringify({ decision, note }) });
+  requirePermission("supervisor:manage");
+  const r = mockSupRequests.find((x) => x.requestId === requestId);
+  if (!r || r.status !== "PENDING") fail("STALE_STATUS", "Đề nghị này đã được xử lý.");
+  if (decision === "REJECTED" && note.trim().length < 5) fail("REASON_REQUIRED", "Ghi lý do từ chối (ít nhất 5 ký tự).");
+  Object.assign(r, { status: decision, respondedAt: new Date().toISOString(), responseNote: note.trim() || null });
+  emitDataChange();
+  return delay({ success: true });
+}
+
+export async function listLecturers(): Promise<LecturerRow[]> {
+  if (!USE_MOCK) return request<LecturerRow[]>("/admin/lecturers");
+  requirePermission("supervisor:manage");
+  return delay(mockLecturers);
+}
+
+export async function createLecturer(data: LecturerInput) {
+  if (!USE_MOCK) return request<{ lecturerId: number }>("/admin/lecturers", { method: "POST", body: JSON.stringify(data) });
+  requirePermission("supervisor:manage");
+  if (!data.fullName?.trim() || !data.lecturerCode?.trim()) fail("VALIDATION", "Nhập mã và họ tên giảng viên.");
+  const row: LecturerRow = { lecturerId: Date.now(), lecturerCode: data.lecturerCode.trim().toUpperCase(), fullName: data.fullName.trim(), email: data.email?.trim() || null, facultyName: data.facultyName?.trim() ?? "", status: "ACTIVE", accepted: 0, pending: 0 };
+  mockLecturers.push(row);
+  emitDataChange();
+  return delay({ lecturerId: row.lecturerId });
+}
+
+export async function updateLecturer(lecturerId: number, data: LecturerInput) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/lecturers/${lecturerId}`, { method: "PATCH", body: JSON.stringify(data) });
+  requirePermission("supervisor:manage");
+  const l = mockLecturers.find((x) => x.lecturerId === lecturerId);
+  if (!l) fail("NOT_FOUND", "Không tìm thấy giảng viên.");
+  Object.assign(l, Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)));
+  emitDataChange();
+  return delay({ success: true });
+}
+
 /** CHỈ CÓ Ở MOCK: giả lập thí sinh nộp bổ sung (thật sẽ do phân hệ Thí sinh gọi) */
 export async function simulateCandidateSupplement(applicationId: number) {
   if (!USE_MOCK) fail("NOT_SUPPORTED", "Chỉ dùng trong chế độ dữ liệu mẫu.");

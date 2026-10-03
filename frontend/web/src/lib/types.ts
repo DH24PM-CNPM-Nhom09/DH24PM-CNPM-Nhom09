@@ -179,3 +179,31 @@ export interface ApiError {
   message: string;
   detail?: string;
 }
+
+/** Trang "Giảng viên hướng dẫn" của thí sinh (GET /supervisors/me) */
+export interface SupervisorRequestItem {
+  requestId: number;
+  lecturerId: number;
+  lecturerName: string;
+  facultyName: string;
+  status: SupervisorRequestStatus;
+  requestedAt: string;
+  respondedAt: string | null;
+  responseNote: string | null;
+}
+export type SupervisorOverview =
+  | { state: "NO_APPLICATION" }
+  | { state: "MASTER"; applicationCode: string; reviewStatus: ReviewStatus; degreeLevel: "THAC_SI"; majorName: string }
+  | { state: "DRAFT"; applicationCode: string; reviewStatus: ReviewStatus; degreeLevel: "TIEN_SI"; majorName: string }
+  | {
+      state: "DOCTORAL";
+      applicationCode: string;
+      reviewStatus: ReviewStatus;
+      degreeLevel: "TIEN_SI";
+      majorName: string;
+      researchTopic: string | null;
+      researchField: string | null;
+      requests: SupervisorRequestItem[];
+      canRequest: boolean;
+      remaining: number;
+    };

@@ -9,6 +9,7 @@ import { BatchesService } from "./batches.service";
 import { CandidateAccountsService } from "./candidates.service";
 import { MajorsService } from "./majors.service";
 import { StaffService } from "./staff.service";
+import { SupervisorsService } from "./supervisors.service";
 
 type Q = Record<string, string | undefined>;
 type B = Record<string, unknown>;
@@ -289,5 +290,41 @@ export class MajorsController {
   @RequirePermission("batch:manage")
   update(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
     return this.svc.update(asStaff(user), id, body);
+  }
+}
+
+// ============================================================ Giảng viên hướng dẫn (bậc tiến sĩ)
+@Controller("admin")
+export class SupervisorsController {
+  constructor(private readonly svc: SupervisorsService) {}
+
+  @Get("supervisor-requests")
+  @RequirePermission("supervisor:manage")
+  list(@Query() q: Q) {
+    return this.svc.listRequests(q);
+  }
+
+  @Patch("supervisor-requests/:id/respond")
+  @RequirePermission("supervisor:manage")
+  respond(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.respond(asStaff(user), id, body);
+  }
+
+  @Get("lecturers")
+  @RequirePermission("supervisor:manage")
+  lecturers() {
+    return this.svc.lecturers();
+  }
+
+  @Post("lecturers")
+  @RequirePermission("supervisor:manage")
+  createLecturer(@CurrentUser() user: AuthUser, @Body() body: B) {
+    return this.svc.createLecturer(asStaff(user), body);
+  }
+
+  @Patch("lecturers/:id")
+  @RequirePermission("supervisor:manage")
+  updateLecturer(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.updateLecturer(asStaff(user), id, body);
   }
 }

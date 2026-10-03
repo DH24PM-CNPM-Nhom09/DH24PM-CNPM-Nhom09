@@ -171,6 +171,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
   - Cán bộ nghỉ việc: "Cho nghỉ việc" chỉ ẩn và vô hiệu tài khoản (deleted_at), KHÔNG xóa dữ liệu, để giữ lịch sử thẩm định và nhật ký; hồ sơ đang phụ trách chưa kết luận được trả về hàng chờ. Có thể "Khôi phục" khi quay lại làm. Không cho nghỉ việc tài khoản Quản trị duy nhất.
   - Đăng nhập sai 5 lần liên tiếp thì khóa tạm 15 phút (cùng cấu hình `LOGIN_MAX_FAILED`, `LOGIN_LOCK_MINUTES` với thí sinh).
 - **Tài khoản thí sinh (phía cán bộ)**: cán bộ tuyển sinh và quản trị xem danh sách, thông tin cá nhân, hồ sơ của từng thí sinh và xuất CSV (ghi nhật ký); CCCD trong danh sách chỉ hiện 3 số cuối. Chỉ quản trị được khóa/mở khóa: tài khoản bị khóa không đăng nhập được bằng mật khẩu lẫn Google, phiên đang mở bị chặn ngay, "quên mật khẩu" không mở khóa được; hồ sơ đã nộp giữ nguyên. Không xóa tài khoản thí sinh.
+- **Giảng viên hướng dẫn (bậc tiến sĩ)**: NCS chọn GV dự kiến khi nộp hồ sơ → tạo đề nghị chờ phản hồi. Cán bộ tuyển sinh / Hội đồng (quyền `supervisor:manage`) ghi nhận GV đồng ý hoặc từ chối (từ chối bắt buộc ghi lý do), NCS nhận thông báo + email. Bị từ chối thì NCS tự chọn GV khác trên cổng (tối đa 3 đề nghị/hồ sơ, không chọn lại GV đã phản hồi). Bậc thạc sĩ không đăng ký GVHD khi tuyển sinh. Danh mục giảng viên: thêm, sửa, ngừng nhận hướng dẫn (không xóa).
 - **Thông báo**: thông báo `PUBLISHED` ai cũng xem được (kể cả chưa đăng nhập); chỉ cán bộ tuyển sinh được soạn, đăng, gỡ. Mọi thao tác ghi nhật ký.
 - **Lỗi**: luôn trả về `{ error_code, message }` bằng tiếng Việt.
 
@@ -202,6 +203,9 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | GET | `/audit-logs` | audit:view |
 | GET | `/admin/candidates`, `/admin/candidates/:id`, `/admin/candidates/export` | candidate:view |
 | PATCH | `/admin/candidates/:id/lock`, `/admin/candidates/:id/unlock` | candidate:manage |
+| GET / PATCH | `/admin/supervisor-requests`, `/admin/supervisor-requests/:id/respond` | supervisor:manage |
+| GET / POST / PATCH | `/admin/lecturers`, `/admin/lecturers/:id` | supervisor:manage |
+| GET / POST | `/supervisors/me`, `/supervisors/me/request` | thí sinh |
 | GET/PATCH | `/candidates/me` | thí sinh |
 | GET | `/applications/me`, `/applications/me/documents`, `/applications/me/supervisor-request`, `/notifications/me` | thí sinh |
 | PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |

@@ -178,3 +178,9 @@ export const IconBook = (p: P) => (
     <path d="M4 19a2 2 0 0 1 2-2h13M9 7h6" />
   </Base>
 );
+export const IconGraduation = (p: P) => (
+  <Base {...p}>
+    <path d="M2 9l10-5 10 5-10 5-10-5z" />
+    <path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5M22 9v6" />
+  </Base>
+);
