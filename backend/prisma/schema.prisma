@@ -38,6 +38,9 @@ model admission_batch_major {
   status               String                @default("CONFIGURING") @db.VarChar(20)
   approved_by_staff_id BigInt?               @db.UnsignedBigInt
   approved_at          DateTime?             @db.DateTime(0)
+  scores_published_at  DateTime?             @db.DateTime(0)
+  appeal_deadline      DateTime?             @db.DateTime(0)
+  result_return_note   String?               @db.VarChar(500)
   staff_account        staff_account?        @relation(fields: [approved_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bm_approved_staff")
   admission_batch      admission_batch       @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_bm_batch")
   admission_major      admission_major       @relation(fields: [major_id], references: [major_id], onUpdate: Restrict, map: "fk_bm_major")
@@ -102,6 +105,7 @@ model admission_decision {
   signed_by_staff_id   BigInt?                @db.UnsignedBigInt
   signed_at            DateTime?              @db.DateTime(0)
   signature_ref        String?                @db.VarChar(255)
+  return_note          String?                @db.VarChar(500)
   admission_batch      admission_batch        @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_decision_batch")
   staff_account        staff_account?         @relation(fields: [signed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_decision_staff")
   decision_application decision_application[]
@@ -197,6 +201,7 @@ model application {
   supplement_request           supplement_request[]
   waitlist                     waitlist?
   english_test_registration    english_test_registration?
+  appeal_request               appeal_request?
 
   @@unique([candidate_id, active_slot], map: "uq_candidate_active_slot")
   @@index([admission_status], map: "idx_application_admission_status")
@@ -608,6 +613,7 @@ model staff_account {
   staff_role                                                             staff_role[]
   supplement_request                                                     supplement_request[]
   english_test_registration                                              english_test_registration[]
+  appeal_request                                                         appeal_request[]
 }
 
 model staff_role {
@@ -704,4 +710,21 @@ model english_test_registration {
 
   @@index([session_id], map: "fk_test_reg_session")
   @@index([graded_by_staff_id], map: "fk_test_reg_staff")
+}
+
+/// Đơn phúc khảo của thí sinh (một hồ sơ một đơn) — migration v10
+model appeal_request {
+  request_id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  application_id        BigInt         @unique(map: "uq_appeal_request_application") @db.UnsignedBigInt
+  reason                String         @db.Text
+  fee_amount            Decimal        @db.Decimal(15, 2)
+  status                String         @default("CHO_NOP_PHI") @db.VarChar(20)
+  created_at            DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  paid_at               DateTime?      @db.DateTime(0)
+  receipt_no            String?        @db.VarChar(50)
+  confirmed_by_staff_id BigInt?        @db.UnsignedBigInt
+  application           application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_appeal_request_application")
+  staff_account         staff_account? @relation(fields: [confirmed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_appeal_request_staff")
+
+  @@index([confirmed_by_staff_id], map: "fk_appeal_request_staff")
 }

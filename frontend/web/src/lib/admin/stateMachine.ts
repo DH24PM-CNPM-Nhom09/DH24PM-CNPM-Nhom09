@@ -66,6 +66,7 @@ export function blockReason(app: AdminApplication, action: ReviewAction, now = D
       return app.englishTest.result === "FAILED" || app.englishTest.result === "ABSENT"
         ? "Thí sinh không đạt / vắng kỳ thi đánh giá năng lực tiếng Anh nên chưa đáp ứng điều kiện ngoại ngữ."
         : "Thí sinh đăng ký thi đánh giá năng lực tiếng Anh nhưng chưa có kết quả Đạt.";
+    if (app.supervisor && !app.supervisor.accepted) return "Nghiên cứu sinh chưa có giảng viên hướng dẫn đồng ý nhận hướng dẫn.";
   }
   if (action === "REQUEST_SUPPLEMENT") {
     // Không bắt buộc có minh chứng INVALID (có thể thiếu hẳn giấy tờ), nhưng

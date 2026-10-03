@@ -190,3 +190,20 @@ export const IconClipboard = (p: P) => (
     <path d="M9 4V3h6v1M9 11l2 2 4-4M9 17h6" />
   </Base>
 );
+export const IconAward = (p: P) => (
+  <Base {...p}>
+    <circle cx="12" cy="9" r="6" />
+    <path d="M8.5 14L7 22l5-3 5 3-1.5-8M10 9l1.5 1.5L14.5 7.5" />
+  </Base>
+);
+export const IconStamp = (p: P) => (
+  <Base {...p}>
+    <path d="M9 3h6v5l2 3v3H7v-3l2-3V3zM5 18h14M5 21h14" />
+  </Base>
+);
+export const IconTable = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 10h18M9 10v10M15 10v10" />
+  </Base>
+);

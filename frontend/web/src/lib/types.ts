@@ -175,6 +175,57 @@ export interface FullApplication {
   feeItems: FeeItem[];
   /** Các khoản có thể phát sinh sau: học bổ sung kiến thức (đ/tín chỉ), phúc khảo hồ sơ */
   otherFees: { supplementCredit: number; appeal: number; englishTest: number };
+  /** Xét tuyển → kết quả → quyết định → nhập học (chỉ phần đã công bố). null = chưa vào giai đoạn xét tuyển */
+  admission?: AdmissionView | null;
+  /** Hồ sơ đã hủy do thí sinh từ chối / quá hạn xác nhận nhập học */
+  declined?: boolean;
+}
+
+export type AdmissionResultCode = "TRUNG_TUYEN" | "DU_BI" | "KHONG_TRUNG_TUYEN";
+export interface AdmissionView {
+  interviewLabel: string;
+  hasInterview: boolean;
+  interview: { scheduledAt: string; location: string | null; committeeName: string; status: string } | null;
+  scores: {
+    publishedAt: string;
+    items: {
+      subjectId: number;
+      subjectName: string;
+      weight: number;
+      score: number | null;
+      absent: boolean;
+      appeal: { status: "PENDING" | "RESOLVED_CHANGED" | "RESOLVED_UNCHANGED"; oldScore: number; newScore: number | null; note: string | null } | null;
+    }[];
+    total: number | null;
+    appealDeadline: string | null;
+    canAppeal: boolean;
+    appealFee: number;
+    appeal: { status: "CHO_NOP_PHI" | "DA_NOP_PHI" | "DONG"; reason: string; feeAmount: number; paidAt: string | null; transferContent: string; createdAt: string } | null;
+  } | null;
+  result: {
+    result: AdmissionResultCode;
+    label: string;
+    rank: number | null;
+    total: number | null;
+    benchmark: number | null;
+    quota: number;
+    waitlistRank: number | null;
+    promoted: boolean;
+    publishedAt: string;
+  } | null;
+  enrollment: {
+    decisionNo: string | null;
+    decisionDate: string | null;
+    signedAt: string | null;
+    status: "CHUA_XAC_NHAN" | "DA_XAC_NHAN" | "TU_CHOI_QUA_HAN";
+    deadline: string;
+    confirmedAt: string | null;
+    canConfirm: boolean;
+    canDecline: boolean;
+    originals: "PENDING" | "VERIFIED" | "MISSING" | null;
+    studentCode: string | null;
+    completedAt: string | null;
+  } | null;
 }
 
 export interface SupervisorRequest {

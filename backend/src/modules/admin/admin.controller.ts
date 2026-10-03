@@ -9,6 +9,9 @@ import { BatchesService } from "./batches.service";
 import { CandidateAccountsService } from "./candidates.service";
 import { MajorsService } from "./majors.service";
 import { EnglishTestService } from "./english-test.service";
+import { EnrollmentService } from "./enrollment.service";
+import { ResultsService } from "./results.service";
+import { ScoringService } from "./scoring.service";
 import { StaffService } from "./staff.service";
 import { SupervisorsService } from "./supervisors.service";
 
@@ -376,5 +379,178 @@ export class EnglishTestController {
   @RequirePermission("exam:manage")
   move(@CurrentUser() user: AuthUser, @Param("applicationId", ParseIntPipe) applicationId: number, @Body() body: B) {
     return this.svc.move(asStaff(user), applicationId, Number(body.sessionId));
+  }
+}
+
+// ============================================================ M5 — Tổ chức xét tuyển (tiểu ban, lịch, điểm, công bố điểm)
+@Controller("admin/scoring")
+export class ScoringController {
+  constructor(private readonly svc: ScoringService) {}
+
+  @Get("batches")
+  @RequirePermission("exam:manage", "score:enter", "result:view", "decision:manage", "decision:sign")
+  batches() {
+    return this.svc.batches();
+  }
+
+  @Get("majors/:id")
+  @RequirePermission("exam:manage", "score:enter", "result:view")
+  overview(@Param("id", ParseIntPipe) id: number) {
+    return this.svc.overview(id);
+  }
+
+  @Put("majors/:id/committee")
+  @RequirePermission("exam:manage")
+  committee(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.saveCommittee(asStaff(user), id, body);
+  }
+
+  @Post("majors/:id/interviews/auto")
+  @HttpCode(200)
+  @RequirePermission("exam:manage")
+  autoSchedule(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.autoSchedule(asStaff(user), id, body);
+  }
+
+  @Patch("interviews/:id")
+  @RequirePermission("exam:manage")
+  updateInterview(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.updateInterview(asStaff(user), id, body);
+  }
+
+  @Put("majors/:id/scores")
+  @RequirePermission("score:enter")
+  scores(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.saveScores(asStaff(user), id, body);
+  }
+
+  @Post("majors/:id/publish-scores")
+  @HttpCode(200)
+  @RequirePermission("exam:manage")
+  publish(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.publishScores(asStaff(user), id);
+  }
+
+  @Patch("appeal-requests/:id/confirm-payment")
+  @RequirePermission("appeal:resolve")
+  confirmAppealPayment(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.confirmAppealPayment(asStaff(user), id, body);
+  }
+
+  @Patch("appeal-requests/:id/close")
+  @RequirePermission("appeal:resolve")
+  closeAppeal(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.closeUnpaidAppeal(asStaff(user), id);
+  }
+}
+
+// ============================================================ M6 — Điểm chuẩn, xếp hạng, duyệt 2 cấp, công bố
+@Controller("admin/results")
+export class ResultsController {
+  constructor(private readonly svc: ResultsService) {}
+
+  @Get("majors/:id")
+  @RequirePermission("result:view")
+  overview(@Param("id", ParseIntPipe) id: number) {
+    return this.svc.overview(id);
+  }
+
+  @Post("majors/:id/rank")
+  @HttpCode(200)
+  @RequirePermission("result:propose")
+  rank(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.rank(asStaff(user), id, body);
+  }
+
+  @Post("majors/:id/propose")
+  @HttpCode(200)
+  @RequirePermission("result:propose")
+  propose(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.propose(asStaff(user), id);
+  }
+
+  @Post("majors/:id/approve")
+  @HttpCode(200)
+  @RequirePermission("result:approve")
+  approve(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.approve(asStaff(user), id);
+  }
+
+  @Post("majors/:id/return")
+  @HttpCode(200)
+  @RequirePermission("result:approve")
+  returnResults(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.returnResults(asStaff(user), id, body);
+  }
+}
+
+// ============================================================ M7 — Quyết định trúng tuyển & nhập học
+@Controller("admin/decisions")
+export class DecisionsController {
+  constructor(private readonly svc: EnrollmentService) {}
+
+  @Get("batches/:batchId")
+  @RequirePermission("decision:manage", "decision:sign")
+  overview(@Param("batchId", ParseIntPipe) batchId: number) {
+    return this.svc.overview(batchId);
+  }
+
+  @Post("batches/:batchId")
+  @RequirePermission("decision:manage")
+  create(@CurrentUser() user: AuthUser, @Param("batchId", ParseIntPipe) batchId: number, @Body() body: B) {
+    return this.svc.createDecision(asStaff(user), batchId, body);
+  }
+
+  @Post("batches/:batchId/process-overdue")
+  @HttpCode(200)
+  @RequirePermission("decision:manage")
+  overdue(@CurrentUser() user: AuthUser, @Param("batchId", ParseIntPipe) batchId: number) {
+    return this.svc.processOverdue(asStaff(user), batchId);
+  }
+
+  @Get(":id")
+  @RequirePermission("decision:manage", "decision:sign")
+  detail(@Param("id", ParseIntPipe) id: number) {
+    return this.svc.decisionDetail(id);
+  }
+
+  @Patch(":id")
+  @RequirePermission("decision:manage")
+  update(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.updateDecision(asStaff(user), id, body);
+  }
+
+  @Post(":id/submit")
+  @HttpCode(200)
+  @RequirePermission("decision:manage")
+  submit(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.submitDecision(asStaff(user), id);
+  }
+
+  @Post(":id/sign")
+  @HttpCode(200)
+  @RequirePermission("decision:sign")
+  sign(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.signDecision(asStaff(user), id);
+  }
+
+  @Post(":id/return")
+  @HttpCode(200)
+  @RequirePermission("decision:sign")
+  reject(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.rejectDecision(asStaff(user), id, body);
+  }
+
+  @Patch("enrollment/:applicationId/originals")
+  @RequirePermission("decision:manage")
+  originals(@CurrentUser() user: AuthUser, @Param("applicationId", ParseIntPipe) applicationId: number, @Body() body: B) {
+    return this.svc.setOriginals(asStaff(user), applicationId, body);
+  }
+
+  @Post("enrollment/:applicationId/complete")
+  @HttpCode(200)
+  @RequirePermission("decision:manage")
+  complete(@CurrentUser() user: AuthUser, @Param("applicationId", ParseIntPipe) applicationId: number) {
+    return this.svc.complete(asStaff(user), applicationId);
   }
 }

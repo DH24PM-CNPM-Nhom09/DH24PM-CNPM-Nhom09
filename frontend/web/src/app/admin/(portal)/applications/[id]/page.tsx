@@ -428,7 +428,49 @@ function DetailInner() {
                 </Field>
               )}
             </dl>
+            {a.supervisor && (
+              <>
+                <h3 className="mb-3 mt-6 border-t border-gray-100 pt-5 text-sm font-bold text-gray-900">Giảng viên hướng dẫn</h3>
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  <Field label="Giảng viên dự kiến">{a.supervisor.lecturerName ?? "Chưa chọn"}</Field>
+                  <Field label="Trạng thái">
+                    <span className={a.supervisor.accepted ? "text-[#166534]" : "text-[#92400E]"}>
+                      {a.supervisor.accepted ? "Đã đồng ý hướng dẫn" : a.supervisor.status === "REJECTED" ? "Từ chối — NCS cần chọn giảng viên khác" : "Chờ giảng viên phản hồi"}
+                    </span>
+                  </Field>
+                </dl>
+              </>
+            )}
           </Panel>
+
+          {a.admission && (
+            <Panel title="Xét tuyển">
+              <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                {a.admission.interviewAt && <Field label="Lịch phỏng vấn / trình bày">{fmtDateTime(a.admission.interviewAt)}</Field>}
+                {a.admission.scores.map((s) => (
+                  <Field key={s.subjectName} label={`${s.subjectName} (hệ số ${s.weight})`}>
+                    {s.absent ? <span className="text-[#B91C1C]">Vắng</span> : s.score === null ? <span className="text-gray-400">Chưa có điểm</span> : String(s.score).replace(".", ",")}
+                  </Field>
+                ))}
+                <Field label="Tổng điểm">{a.admission.total === null ? "—" : String(a.admission.total).replace(".", ",")}</Field>
+                {a.admission.result && (
+                  <Field label="Kết quả">
+                    <span className={a.admission.result === "TRUNG_TUYEN" ? "text-[#166534]" : a.admission.result === "DU_BI" ? "text-[#92400E]" : "text-gray-700"}>
+                      {{ TRUNG_TUYEN: "Trúng tuyển", DU_BI: `Dự bị #${a.admission.waitlistRank ?? ""}`, KHONG_TRUNG_TUYEN: "Không trúng tuyển" }[a.admission.result]}
+                      {a.admission.rank ? ` · hạng ${a.admission.rank}` : ""}
+                    </span>
+                    {!a.admission.resultPublished && <span className="block text-xs font-normal text-gray-500">Bản nháp, chưa công bố</span>}
+                  </Field>
+                )}
+                {a.admission.enrollment && (
+                  <Field label="Nhập học">
+                    {{ CHUA_XAC_NHAN: "Chờ thí sinh xác nhận", DA_XAC_NHAN: "Đã xác nhận nhập học", TU_CHOI_QUA_HAN: "Từ chối / quá hạn" }[a.admission.enrollment] ?? a.admission.enrollment}
+                    {a.admission.studentCode && <span className="block font-mono text-xs text-gray-600">Mã học viên {a.admission.studentCode}</span>}
+                  </Field>
+                )}
+              </dl>
+            </Panel>
+          )}
 
           <Panel title="Điều kiện dự tuyển của ngành">
             <ul className="space-y-3">

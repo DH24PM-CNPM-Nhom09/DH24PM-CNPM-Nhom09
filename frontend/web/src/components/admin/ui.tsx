@@ -66,6 +66,11 @@ function Pill({ t, children }: { t: Tone; children: ReactNode }) {
   );
 }
 
+/** Nhãn trạng thái dùng chung cho các màn hình xét tuyển */
+export function Tag({ tone: t, children }: { tone: Tone; children: ReactNode }) {
+  return <Pill t={t}>{children}</Pill>;
+}
+
 export const REVIEW_LABEL: Record<ReviewStatus, string> = {
   DRAFT: "Nháp",
   SUBMITTED: "Chờ tiếp nhận",

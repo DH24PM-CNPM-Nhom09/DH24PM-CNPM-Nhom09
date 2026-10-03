@@ -24,7 +24,13 @@ export type Permission =
   | "candidate:view" // xem danh sách & thông tin tài khoản thí sinh
   | "candidate:manage" // khóa / mở khóa tài khoản thí sinh
   | "supervisor:manage" // ghi nhận GV đồng ý / từ chối hướng dẫn NCS, danh mục giảng viên
-  | "exam:manage"; // tổ chức thi đánh giá năng lực tiếng Anh: phòng thi, số báo danh, kết quả
+  | "exam:manage" // tổ chức thi tiếng Anh; lập tiểu ban, lịch phỏng vấn / trình bày đề cương, công bố điểm
+  | "score:enter" // nhập điểm xét tuyển (thư ký tiểu ban / hội đồng)
+  | "result:view" // xem điểm chuẩn, xếp hạng, kết quả xét tuyển
+  | "result:propose" // hội đồng: định điểm chuẩn, xếp hạng, thông qua kết quả (cấp 1)
+  | "result:approve" // lãnh đạo: phê duyệt và công bố kết quả (cấp 2)
+  | "decision:manage" // lập quyết định trúng tuyển, theo dõi xác nhận nhập học, nhận bản chính, hoàn tất nhập học
+  | "decision:sign"; // lãnh đạo ký ban hành quyết định trúng tuyển
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -40,9 +46,12 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "candidate:view",
     "supervisor:manage",
     "exam:manage",
+    "score:enter",
+    "result:view",
+    "decision:manage",
   ],
-  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage"],
-  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view"],
+  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage", "score:enter", "result:view", "result:propose"],
+  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view", "result:view", "result:approve", "decision:sign"],
   // Admin là quản trị KỸ THUẬT: cấp tài khoản, phân quyền, xem nhật ký — không
   // tham gia thẩm định hồ sơ (tách bạch trách nhiệm theo tài liệu Vai trò người dùng).
   ADMIN: ["dashboard:view", "batch:view", "account:manage", "audit:view", "candidate:view", "candidate:manage"],
@@ -56,9 +65,9 @@ export const ROLE_LABEL: Record<RoleCode, string> = {
 };
 
 export const ROLE_DESCRIPTION: Record<RoleCode, string> = {
-  CAN_BO_TUYEN_SINH: "Cấu hình đợt tuyển sinh, đăng thông báo, tiếp nhận và thẩm định hồ sơ, xử lý phúc khảo.",
-  HOI_DONG: "Xem hồ sơ, chấm điểm và xử lý đơn phúc khảo.",
-  LANH_DAO_KHOA: "Phê duyệt chỉ tiêu và cấu hình ngành, theo dõi tiến độ.",
+  CAN_BO_TUYEN_SINH: "Cấu hình đợt tuyển sinh, đăng thông báo, thẩm định hồ sơ, tổ chức xét tuyển (tiểu ban, lịch, điểm), lập quyết định trúng tuyển và làm thủ tục nhập học.",
+  HOI_DONG: "Xem hồ sơ, chấm điểm, xử lý phúc khảo, định điểm chuẩn và thông qua kết quả xét tuyển.",
+  LANH_DAO_KHOA: "Phê duyệt chỉ tiêu, phê duyệt và công bố kết quả xét tuyển, ký quyết định trúng tuyển.",
   ADMIN: "Cấp tài khoản cán bộ, phân quyền, xem nhật ký hệ thống.",
 };
 

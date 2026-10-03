@@ -3,6 +3,7 @@ import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, num, str } from "../../common/util";
+import { appealTransferNote } from "../../common/admission";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
@@ -19,7 +20,7 @@ export class AppealsService {
         exam_score: {
           include: {
             exam_subject: true,
-            application: { include: { candidate: true, admission_batch_major: { include: { admission_major: true } } } },
+            application: { include: { candidate: true, appeal_request: true, admission_batch_major: { include: { admission_major: true } } } },
           },
         },
       },
@@ -44,6 +45,18 @@ export class AppealsService {
           candidateName: app.candidate.full_name,
           majorName: app.admission_batch_major.admission_major.major_name,
           resolvedByName: p.staff_account?.full_name ?? null,
+          // Đơn phúc khảo của thí sinh (có lệ phí); null = đơn do cán bộ ghi nhận / dữ liệu cũ
+          request: app.appeal_request
+            ? {
+                requestId: id(app.appeal_request.request_id),
+                status: app.appeal_request.status,
+                feeAmount: Number(app.appeal_request.fee_amount),
+                paidAt: iso(app.appeal_request.paid_at),
+                receiptNo: app.appeal_request.receipt_no,
+                transferNote: appealTransferNote(app.application_code),
+                appealDeadline: iso(app.admission_batch_major.appeal_deadline),
+              }
+            : null,
         };
       })
       .sort((a, b) => Number(a.status !== "PENDING") - Number(b.status !== "PENDING"));
@@ -62,12 +75,15 @@ export class AppealsService {
     });
     if (!p) notFound("Không tìm thấy đơn phúc khảo.");
     if (p.status !== "PENDING") conflict("ALREADY_RESOLVED", "Đơn này đã được xử lý.");
+    const req = await this.prisma.appeal_request.findUnique({ where: { application_id: p.exam_score.application_id } });
+    if (req && req.status !== "DA_NOP_PHI") fail("FEE_UNPAID", "Thí sinh chưa nộp lệ phí phúc khảo. Xác nhận lệ phí trước khi kết luận.", 409);
     const oldScore = Number(p.old_score);
     let newScore = oldScore;
     let status = "RESOLVED_UNCHANGED";
     if (body.changed === true) {
       const s = Number(body.newScore);
-      if (!(s >= 0 && s <= 10)) fail("INVALID_SCORE", "Điểm mới phải trong khoảng 0–10.");
+      const max = Number(p.exam_score.exam_subject.max_score);
+      if (!(s >= 0 && s <= max)) fail("INVALID_SCORE", `Điểm mới phải trong khoảng 0–${max}.`);
       newScore = Math.round(s * 100) / 100;
       if (newScore === oldScore) fail("SCORE_UNCHANGED", "Điểm mới trùng điểm cũ — chọn “Giữ nguyên điểm”.");
       status = "RESOLVED_CHANGED";

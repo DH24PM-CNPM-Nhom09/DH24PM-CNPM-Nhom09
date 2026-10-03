@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
-import { AppealBadge, Btn, EmptyState, ErrorBox, fieldCls, Label, LoadingRows, Modal, PageHeader, useToast } from "@/components/admin/ui";
-import { listAppeals, resolveAppeal, type AppealRow } from "@/lib/admin/api";
-import { errorMessage, fmtDateTime, relativeDays } from "@/lib/admin/format";
+import { AppealBadge, Btn, EmptyState, ErrorBox, fieldCls, Label, LoadingRows, Modal, PageHeader, Tag, useToast } from "@/components/admin/ui";
+import { closeAppealRequest, confirmAppealFee, listAppeals, resolveAppeal, type AppealRow } from "@/lib/admin/api";
+import { errorMessage, fmtDateTime, fmtMoney, relativeDays } from "@/lib/admin/format";
 import { useAsync } from "@/lib/admin/useAsync";
 
 const score = (n: number | null) => (n === null ? "—" : n.toFixed(2).replace(".", ","));
@@ -22,6 +22,32 @@ function AppealsInner() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  const [feeTarget, setFeeTarget] = useState<AppealRow | null>(null);
+  const [receiptNo, setReceiptNo] = useState("");
+
+  async function confirmFee() {
+    if (!feeTarget?.request) return;
+    setBusy(true);
+    setFormError("");
+    try {
+      await confirmAppealFee(feeTarget.request.requestId, receiptNo);
+      toast("Đã xác nhận lệ phí phúc khảo. Đơn chuyển sang chờ hội đồng kết luận.");
+      setFeeTarget(null);
+    } catch (e) {
+      setFormError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function closeUnpaid(p: AppealRow) {
+    if (!p.request) return;
+    try {
+      await closeAppealRequest(p.request.requestId);
+      toast("Đã đóng đơn không nộp lệ phí; điểm giữ nguyên và thí sinh được thông báo.");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
 
   const list = (data ?? []).filter((p) => (tab === "ALL" ? true : tab === "PENDING" ? p.status === "PENDING" : p.status !== "PENDING"));
   const pendingCount = data?.filter((p) => p.status === "PENDING").length ?? 0;
@@ -99,6 +125,23 @@ function AppealsInner() {
                   <p className="mt-2 text-[13px] font-semibold text-gray-700">{p.subjectName}</p>
                   <blockquote className="mt-1 max-w-[70ch] border-l-2 border-gray-200 pl-3 text-sm italic text-gray-600">{p.reason}</blockquote>
                   <p className="mt-2 text-xs text-gray-400">Gửi {fmtDateTime(p.createdAt)} ({relativeDays(p.createdAt)})</p>
+                  {p.request && (
+                    <p className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-gray-600">
+                      Lệ phí {fmtMoney(p.request.feeAmount)}:
+                      {p.request.status === "DA_NOP_PHI" ? (
+                        <Tag tone="green">Đã nộp{p.request.receiptNo ? ` · BL ${p.request.receiptNo}` : ""}</Tag>
+                      ) : p.request.status === "DONG" ? (
+                        <Tag tone="gray">Không nộp — đã đóng đơn</Tag>
+                      ) : (
+                        <>
+                          <Tag tone="amber">Chưa nộp</Tag>
+                          <span className="text-xs text-gray-500">
+                            nội dung CK <span className="font-mono">{p.request.transferNote}</span>
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  )}
                   {p.status !== "PENDING" && (
                     <p className="mt-2 text-[13px] text-gray-700">
                       <span className="font-semibold">Kết luận:</span> {p.resolutionNote} <span className="text-gray-400">({p.resolvedByName}, {fmtDateTime(p.resolvedAt)})</span>
@@ -118,10 +161,24 @@ function AppealsInner() {
                   )}
                 </div>
                 <div className="md:text-right">
-                  {p.status === "PENDING" && canResolve && (
-                    <Btn variant="navy" size="sm" onClick={() => openResolve(p)}>
-                      Xử lý đơn
-                    </Btn>
+                  {p.status === "PENDING" && canResolve && p.request?.status === "CHO_NOP_PHI" ? (
+                    <div className="flex flex-col items-stretch gap-2 md:items-end">
+                      <Btn variant="navy" size="sm" onClick={() => (setFormError(""), setReceiptNo(""), setFeeTarget(p))}>
+                        Xác nhận đã nhận lệ phí
+                      </Btn>
+                      {p.request.appealDeadline && new Date(p.request.appealDeadline).getTime() < Date.now() && (
+                        <Btn size="sm" variant="danger" onClick={() => closeUnpaid(p)}>
+                          Đóng đơn (không nộp phí)
+                        </Btn>
+                      )}
+                    </div>
+                  ) : (
+                    p.status === "PENDING" &&
+                    canResolve && (
+                      <Btn variant="navy" size="sm" onClick={() => openResolve(p)}>
+                        Xử lý đơn
+                      </Btn>
+                    )
                   )}
                 </div>
               </li>
@@ -161,7 +218,7 @@ function AppealsInner() {
         {changed && (
           <div className="mt-4 max-w-[180px]">
             <Label htmlFor="new-score" required>Điểm sau phúc khảo</Label>
-            <input id="new-score" type="number" min={0} max={10} step={0.25} className={fieldCls} value={newScore} onChange={(e) => setNewScore(e.target.value)} />
+            <input id="new-score" type="number" min={0} max={10} step={0.05} className={fieldCls} value={newScore} onChange={(e) => setNewScore(e.target.value)} />
           </div>
         )}
         <div className="mt-4">
@@ -169,6 +226,24 @@ function AppealsInner() {
           <textarea id="appeal-note" rows={3} className={fieldCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ví dụ: Hội đồng chấm lại phần trả lời câu 2, cộng 0,5 điểm do chấm sót ý." />
           <p className="mt-1 text-xs text-gray-400">Tối thiểu 10 ký tự. Nội dung này được gửi cho thí sinh.</p>
         </div>
+        {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
+      </Modal>
+      <Modal
+        open={!!feeTarget}
+        onClose={() => setFeeTarget(null)}
+        title="Xác nhận lệ phí phúc khảo"
+        description={feeTarget?.request ? `${feeTarget.candidateName} — ${fmtMoney(feeTarget.request.feeAmount)}, nội dung chuyển khoản ${feeTarget.request.transferNote}. Đối chiếu sao kê trước khi xác nhận.` : undefined}
+        footer={
+          <>
+            <Btn onClick={() => setFeeTarget(null)}>Hủy</Btn>
+            <Btn variant="navy" loading={busy} onClick={confirmFee}>
+              Xác nhận
+            </Btn>
+          </>
+        }
+      >
+        <Label htmlFor="fee-receipt">Số biên lai (nếu có)</Label>
+        <input id="fee-receipt" className={fieldCls} value={receiptNo} maxLength={50} onChange={(e) => setReceiptNo(e.target.value)} />
         {formError && <div className="mt-3"><ErrorBox message={formError} /></div>}
       </Modal>
     </>

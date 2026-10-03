@@ -340,6 +340,22 @@ export async function submitSupplement() {
   return request<{ success: boolean }>("/applications/me/supplement", { method: "POST" });
 }
 
+// ---- Xét tuyển: phúc khảo, xác nhận nhập học (chỉ chạy cùng backend) ----
+const NEED_BACKEND = () => Promise.reject({ error_code: "NOT_SUPPORTED", message: "Chức năng này cần chạy cùng backend (NEXT_PUBLIC_USE_MOCK=false)." });
+
+export async function fileScoreAppeal(subjectIds: number[], reason: string) {
+  if (USE_MOCK) return NEED_BACKEND();
+  return request<{ success: boolean }>("/applications/me/appeal", { method: "POST", body: JSON.stringify({ subjectIds, reason }) });
+}
+export async function confirmEnrollment() {
+  if (USE_MOCK) return NEED_BACKEND();
+  return request<{ success: boolean }>("/applications/me/enrollment/confirm", { method: "POST" });
+}
+export async function declineEnrollment(reason: string) {
+  if (USE_MOCK) return NEED_BACKEND();
+  return request<{ success: boolean; promoted: number }>("/applications/me/enrollment/decline", { method: "POST", body: JSON.stringify({ reason }) });
+}
+
 // ---- GVHD (bậc Tiến sĩ) ----
 export async function getMySupervisorRequest(): Promise<SupervisorRequest | null> {
   if (USE_MOCK) {

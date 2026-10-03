@@ -9,6 +9,7 @@ import { conflict, fail, notFound } from "../../common/errors";
 import { dec, id, iso, isoReq, num, parseReviewStatus, str, transferNote } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ApplicationsService } from "../admin/applications.service";
+import { admissionView } from "./admission-view";
 
 import { DOC_LABEL, LANGUAGE_LABEL, LANGUAGE_OPTIONS, OPTIONAL_DOCS, requiredDocs, type Degree, type LanguageOption } from "../../common/documents";
 
@@ -225,13 +226,24 @@ export class ApplicationFlowService {
       feeItems,
       fee: feeItems.reduce((t, x) => t + x.amount, 0),
       otherFees: await this.otherFees(),
+      // Xét tuyển → kết quả → quyết định → nhập học (chỉ phần đã công bố)
+      admission: await admissionView(this.prisma, this.config, a.application_id),
+      /** Hồ sơ đã bị hủy do thí sinh từ chối / quá hạn xác nhận nhập học */
+      declined: a.is_cancelled,
     };
   }
 
   // ------------------------------------------------------------------ đọc
   async full(me: CandidateUser) {
     if (!me.candidateId) return null;
-    const a = await this.load(me.candidateId);
+    const a =
+      (await this.load(me.candidateId)) ??
+      // Không còn hồ sơ hiệu lực: vẫn cho xem hồ sơ vừa từ chối nhập học (để biết kết quả)
+      (await this.prisma.application.findFirst({
+        where: { candidate_id: BigInt(me.candidateId), deleted_at: null, is_cancelled: true, enrollment_confirmation: { is: { status: "TU_CHOI_QUA_HAN" } } },
+        orderBy: { application_id: "desc" },
+        include: fullInclude,
+      }));
     return a ? this.toFull(a) : null;
   }
 

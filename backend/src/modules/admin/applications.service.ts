@@ -7,6 +7,7 @@ import { can } from "../../common/permissions";
 import type { StaffUser } from "../../common/auth";
 import { env } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
+import { ABSENT_NOTE } from "../../common/admission";
 import { blockReason, REVIEW_VI, STAFF_ACTIONS, TRANSITIONS, type ReviewAction, type ReviewFacts, type ReviewStatus } from "../../common/review-rules";
 import { dec, id, iso, isoReq, num, parseReviewStatus, toInt, transferNote, ymd } from "../../common/util";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
@@ -20,7 +21,11 @@ const READY_WHERE: Prisma.applicationWhereInput = {
   application_document: { some: {}, every: { verify_status: "VALID" } },
   application_payment: { some: { gateway_status: "SUCCESS" } },
   // Đăng ký thi tiếng Anh thì phải có kết quả Đạt mới "chờ kết luận"
-  OR: [{ language_option: null }, { language_option: { not: "TEST" } }, { english_test_registration: { is: { result: "PASSED" } } }],
+  AND: [
+    { OR: [{ language_option: null }, { language_option: { not: "TEST" } }, { english_test_registration: { is: { result: "PASSED" } } }] },
+    // Tiến sĩ phải có giảng viên hướng dẫn đồng ý
+    { OR: [{ admission_batch_major: { admission_batch: { degree_level: { not: "TIEN_SI" } } } }, { research_proposal: { is: { supervisor_request: { some: { status: "ACCEPTED" } } } } }] },
+  ],
 };
 const overdueWhere = (now: Date): Prisma.applicationWhereInput => ({
   review_status: "NEEDS_SUPPLEMENT",
@@ -53,10 +58,14 @@ export class ApplicationsService {
         application_payment: { select: { gateway_status: true } },
         supplement_request: { where: { status: "PENDING" }, orderBy: { request_id: "desc" }, take: 1 },
         english_test_registration: { select: { result: true } },
+        admission_batch_major: { select: { admission_batch: { select: { degree_level: true } } } },
+        research_proposal: { select: { supervisor_request: { select: { status: true } } } },
       },
     });
     if (!a) notFound("Không tìm thấy hồ sơ.");
     return {
+      supervisorRequired: a.admission_batch_major.admission_batch.degree_level === "TIEN_SI",
+      supervisorAccepted: !!a.research_proposal?.supervisor_request.some((r) => r.status === "ACCEPTED"),
       englishTestRequired: a.language_option === "TEST",
       englishTestResult: a.english_test_registration?.result ?? null,
       candidateId: id(a.candidate_id),
@@ -273,10 +282,43 @@ export class ApplicationsService {
         application_status_history: { orderBy: { history_id: "asc" } },
         admission_batch_major: { include: { admission_batch: true, admission_major: true, exam_subject: true, admission_condition: true } },
         english_test_registration: { include: { english_test_session: true } },
+        research_proposal: { include: { supervisor_request: { orderBy: { request_id: "desc" }, include: { lecturer: true } } } },
+        exam_score: true,
+        interview_schedule: { where: { status: { not: "CANCELLED" } }, orderBy: { schedule_id: "desc" }, take: 1 },
+        application_ranking: true,
+        admission_result: true,
+        waitlist: true,
+        enrollment_confirmation: true,
+        original_document_submission: true,
+        enrollment_completion: true,
       },
     });
     if (!a) notFound("Không tìm thấy hồ sơ.");
     const c = a.candidate;
+    const subjects = a.admission_batch_major.exam_subject;
+    const ar = a.admission_result;
+    // Xét tuyển: điểm thành phần, xếp hạng, kết quả (kể cả bản nháp chưa công bố — chỉ cán bộ thấy)
+    const admission =
+      a.exam_score.length || a.interview_schedule.length || ar
+        ? {
+            interviewAt: a.interview_schedule[0] ? isoReq(a.interview_schedule[0].scheduled_at) : null,
+            scores: subjects.map((s) => {
+              const x = a.exam_score.find((e) => e.subject_id === s.subject_id);
+              return { subjectName: s.subject_name, weight: Number(s.weight), score: x ? Number(x.score) : null, absent: x?.note === ABSENT_NOTE };
+            }),
+            total: a.application_ranking && a.exam_score.length === subjects.length ? Number(a.application_ranking.total_score) : null,
+            rank: ar ? (a.application_ranking?.rank_order ?? null) : null,
+            result: ar?.result ?? null,
+            resultPublished: !!ar?.published_at,
+            waitlistRank: a.waitlist?.rank_order ?? null,
+            enrollment: a.enrollment_confirmation?.status ?? null,
+            originals: a.original_document_submission?.status ?? null,
+            studentCode: a.enrollment_completion?.completed_at ? a.enrollment_completion.transfer_ref : null,
+          }
+        : null;
+    const supReqs = a.research_proposal?.supervisor_request ?? [];
+    const supAccepted = supReqs.find((r) => r.status === "ACCEPTED");
+    const supLatest = supAccepted ?? supReqs[0];
     const et = a.english_test_registration;
     const edu = a.application_education;
     const pay = a.application_payment.find((p) => p.gateway_status === "SUCCESS") ?? a.application_payment[0] ?? null;
@@ -300,6 +342,11 @@ export class ApplicationsService {
             ? et
               ? { result: et.result, score: dec(et.score), candidateNumber: et.candidate_number, sessionCode: et.english_test_session.session_code, testAt: isoReq(et.english_test_session.test_at), room: et.english_test_session.room }
               : { result: null, score: null, candidateNumber: null, sessionCode: null, testAt: null, room: null }
+            : null,
+        admission,
+        supervisor:
+          a.admission_batch_major.admission_batch.degree_level === "TIEN_SI"
+            ? { accepted: !!supAccepted, status: supLatest?.status ?? null, lecturerName: supLatest?.lecturer.full_name ?? null }
             : null,
         candidate: {
           candidateId: id(c.candidate_id),

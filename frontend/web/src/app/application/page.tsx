@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Input";
 import Badge, { admissionStatusLabel, admissionStatusTone, reviewStatusLabel, reviewStatusTone } from "@/components/ui/Badge";
 import { Alert, errMsg } from "@/components/auth/AuthBits";
 import DocSlot from "@/components/application/DocSlot";
+import AdmissionSection from "@/components/application/AdmissionSection";
 import VietQrCode from "@/components/payment/VietQrCode";
 import { getMyFullApplication, submitSupplement, uploadDocument } from "@/lib/api";
 import { fmtDate, fmtDateTime, timeLeft } from "@/lib/announcements";
@@ -135,7 +136,11 @@ function StatusInner() {
       badges={
         <>
           <Badge tone={reviewStatusTone(app.reviewStatus)}>{reviewStatusLabel[app.reviewStatus]}</Badge>
-          {app.admissionStatus !== "NONE" && <Badge tone={admissionStatusTone(app.admissionStatus)}>{admissionStatusLabel[app.admissionStatus]}</Badge>}
+          {app.declined ? (
+            <Badge tone="gray">Không nhập học</Badge>
+          ) : (
+            app.admissionStatus !== "NONE" && <Badge tone={admissionStatusTone(app.admissionStatus)}>{admissionStatusLabel[app.admissionStatus]}</Badge>
+          )}
         </>
       }
     >
@@ -233,14 +238,16 @@ function StatusInner() {
           </p>
         </Card>
       )}
-      {app.reviewStatus === "APPROVED" && (
+      {app.reviewStatus === "APPROVED" && !app.admission?.scores && !app.admission?.result && (
         <Card className="mt-5 border-[#BFE3CB] p-5">
           <p className="text-base font-bold text-[#166534]">Hồ sơ đạt thẩm định</p>
           <p className="mt-2 text-sm text-gray-700">
-            Bạn đủ điều kiện dự thi/xét tuyển{app.batch.examStartAt ? `, dự kiến từ ngày ${fmtDate(app.batch.examStartAt)}` : ""}. Lịch cụ thể sẽ được thông báo qua cổng và email.
+            Bạn đủ điều kiện xét tuyển{app.batch.examStartAt ? `, dự kiến từ ngày ${fmtDate(app.batch.examStartAt)}` : ""}.{" "}
+            {app.admission?.hasInterview && !app.admission.interview ? `Lịch ${app.admission.interviewLabel.toLowerCase()} sẽ được thông báo qua cổng và email.` : "Điểm xét tuyển sẽ được công bố trên cổng và qua email."}
           </p>
         </Card>
       )}
+      {app.reviewStatus === "APPROVED" && <AdmissionSection app={app} onChange={load} />}
 
       {/* Lệ phí */}
       {app.payment && (
@@ -467,6 +474,25 @@ function Progress({ app }: { app: FullApplication }) {
       state: s === "APPROVED" ? "done" : s === "REJECTED" ? "bad" : "todo",
     },
   ];
+  // Sau khi đạt thẩm định: xét tuyển → kết quả → nhập học
+  const ad = app.admission;
+  if (s === "APPROVED" && ad) {
+    const res = ad.result?.result;
+    const en = ad.enrollment;
+    steps.push(
+      { title: "Xét tuyển", sub: ad.scores ? `Tổng điểm ${ad.scores.total ?? "—"}` : ad.interview ? "Đã có lịch" : "Chờ lịch / điểm", state: ad.scores ? "done" : "current" },
+      {
+        title: "Kết quả",
+        sub: res === "TRUNG_TUYEN" ? "Trúng tuyển" : res === "DU_BI" ? "Dự bị" : res ? "Không trúng tuyển" : "Chưa công bố",
+        state: res === "TRUNG_TUYEN" ? "done" : res === "DU_BI" ? "warn" : res ? "bad" : ad.scores ? "current" : "todo",
+      },
+      {
+        title: "Nhập học",
+        sub: en?.studentCode ? "Đã nhập học" : en?.status === "DA_XAC_NHAN" ? "Đã xác nhận" : en?.status === "TU_CHOI_QUA_HAN" ? "Không nhập học" : en ? "Chờ xác nhận" : "Chưa đến bước này",
+        state: en?.studentCode ? "done" : en?.status === "TU_CHOI_QUA_HAN" ? "bad" : en ? "current" : "todo",
+      },
+    );
+  }
   const dot: Record<St, string> = {
     done: "bg-success text-white",
     current: "border-2 border-navy-800 bg-white text-navy-800",
@@ -475,7 +501,7 @@ function Progress({ app }: { app: FullApplication }) {
     todo: "bg-gray-100 text-gray-400",
   };
   return (
-    <ol className="mt-6 grid grid-cols-2 gap-4 rounded-card border border-gray-200 bg-white p-4 sm:flex sm:gap-0" aria-label="Tiến độ hồ sơ">
+    <ol className={`mt-6 grid grid-cols-2 gap-4 rounded-card border border-gray-200 bg-white p-4 ${steps.length > 4 ? "sm:grid-cols-4 lg:flex lg:gap-0" : "sm:flex sm:gap-0"}`} aria-label="Tiến độ hồ sơ">
       {steps.map((x, i) => (
         <li key={x.title} className="flex flex-1 items-start gap-2.5 sm:pr-3">
           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${dot[x.state]}`}>{x.state === "done" ? "✓" : x.state === "warn" || x.state === "bad" ? "!" : i + 1}</span>

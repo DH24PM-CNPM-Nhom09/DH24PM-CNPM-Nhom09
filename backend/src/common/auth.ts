@@ -41,7 +41,8 @@ const CANDIDATE = "auth:candidate";
 /** Không cần đăng nhập (đăng nhập, quên mật khẩu, health…) */
 export const Public = () => SetMetadata(PUBLIC, true);
 /** Chỉ cán bộ có quyền này mới gọi được — đúng RbacGuard trong thiết kế GĐ3 */
-export const RequirePermission = (p: Permission) => SetMetadata(PERMISSION, p);
+/** Cần MỘT trong các quyền liệt kê (ví dụ trang xem chung cho nhiều vai trò) */
+export const RequirePermission = (...p: Permission[]) => SetMetadata(PERMISSION, p);
 /** Chỉ tài khoản thí sinh */
 export const CandidateOnly = () => SetMetadata(CANDIDATE, true);
 const PENDING_PW = "auth:allowPendingPasswordChange";
@@ -74,7 +75,8 @@ export class AuthGuard implements CanActivate {
       unauthorized();
     }
 
-    const permission = this.reflector.getAllAndOverride<Permission | undefined>(PERMISSION, targets);
+    const permission = this.reflector.getAllAndOverride<Permission[] | Permission | undefined>(PERMISSION, targets);
+    const perms = permission === undefined ? [] : Array.isArray(permission) ? permission : [permission];
     const candidateOnly = this.reflector.getAllAndOverride<boolean>(CANDIDATE, targets);
 
     if (payload.typ === "STAFF") {
@@ -97,13 +99,13 @@ export class AuthGuard implements CanActivate {
       // Đang dùng mật khẩu tạm: chặn mọi thao tác cho tới khi đổi mật khẩu
       if (staff.must_change_password && !this.reflector.getAllAndOverride<boolean>(PENDING_PW, targets))
         fail("PASSWORD_CHANGE_REQUIRED", "Bạn cần đổi mật khẩu tạm trước khi sử dụng hệ thống.", 403);
-      if (permission && !can(user.roles, permission)) forbidden();
+      if (perms.length && !perms.some((p) => can(user.roles, p))) forbidden();
       req.user = user;
       return true;
     }
 
     if (payload.typ === "CANDIDATE") {
-      if (permission) forbidden("Chức năng này chỉ dành cho cán bộ.");
+      if (perms.length) forbidden("Chức năng này chỉ dành cho cán bộ.");
       const account = await this.prisma.candidate_account.findFirst({
         where: { account_id: BigInt(payload.sub), deleted_at: null },
         include: { candidate: true },

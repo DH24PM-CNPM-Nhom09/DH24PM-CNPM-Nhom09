@@ -92,7 +92,8 @@ function WizardInner() {
       .then(([p, a, b]) => {
         setProfile(p);
         setBatches(b);
-        setApp(a);
+        // Hồ sơ đã từ chối nhập học không chặn việc đăng ký đợt mới
+        setApp(a && a.declined ? null : a);
         if (a && a.reviewStatus === "DRAFT") {
           setBatchId(a.batch.batchId);
           setBatchMajorId(a.major.batchMajorId);

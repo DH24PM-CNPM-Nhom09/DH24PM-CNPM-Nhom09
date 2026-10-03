@@ -32,7 +32,7 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 7 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 8 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
@@ -42,9 +42,10 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source 
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v7_payment_config.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v8_real_notice.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v9_english_test.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v10_admission_results.sql"
 ```
 
-Kiểm tra: CSDL `admission_db` có **44 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration`).
+Kiểm tra: CSDL `admission_db` có **45 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration` + bảng đơn phúc khảo `appeal_request`).
 
 Có thể làm bằng phpMyAdmin thay cho 2 lệnh trên: bật Apache, mở http://localhost/phpmyadmin, vào tab **Import**, chọn file v3 rồi bấm **Import**; làm lại với file v4.
 Bắt buộc dùng `--default-character-set=utf8mb4` (phpMyAdmin mặc định đã đúng). Thiếu nó, tiếng Việt trong CSDL sẽ bị lỗi font.
@@ -66,7 +67,7 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
 > **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
-> lệnh này chạy migration v5 → v9, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+> lệnh này chạy migration v5 → v10, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
 
 ### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
 
@@ -162,7 +163,11 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 - **Các khoản thu khi nộp hồ sơ**: đăng ký dự tuyển + xét tuyển (+ thi tiếng Anh nếu có), chốt vào `application_payment.fee_detail` lúc nộp; cán bộ chỉnh mức ở trang "Lệ phí & thanh toán".
 - **Danh mục ngành**: cán bộ tuyển sinh thêm/sửa ngành; ngành đã mở trong đợt không đổi được mã và bậc, chỉ "ngừng tuyển" (không xóa).
 - **Lệ phí**: thí sinh thấy mã VietQR riêng (ngân hàng, số tài khoản, số tiền, nội dung = mã hồ sơ bỏ dấu gạch), tạo ngay trên trình duyệt từ cấu hình `PAYMENT_BANK_BIN`, `PAYMENT_ACCOUNT_NO` — không gọi dịch vụ ngoài. Ô tìm kiếm hồ sơ của cán bộ nhận được cả nội dung chuyển khoản dán từ sao kê. Cán bộ đối chiếu sao kê rồi bấm "Xác nhận đã thu" (ghi số biên lai, mã giao dịch; mã giao dịch không được trùng). Chưa có lệ phí `SUCCESS` thì không kết luận "Đạt" được.
-- **Phúc khảo**: đổi điểm thì trigger #3 sửa `exam_score` và trigger #4 tự tính lại `application_ranking`.
+- **Phúc khảo**: thí sinh nộp đơn trên cổng trong hạn phúc khảo (sau khi công bố điểm, `APPEAL_WINDOW_DAYS` ngày, mặc định 7), chọn phần điểm cần phúc khảo, một đơn/hồ sơ, lệ phí `FEE_APPEAL` (360.000 đ/hồ sơ) chuyển khoản qua mã VietQR với nội dung `PK<mã hồ sơ>`. Cán bộ xác nhận đã nhận lệ phí thì hội đồng mới kết luận được; hết hạn mà chưa nộp thì cán bộ "Đóng đơn", điểm giữ nguyên. Đổi điểm thì trigger #3 sửa `exam_score` và trigger #4 tự tính lại `application_ranking`.
+- **Xét tuyển theo ngành (M5)** — trang "Tổ chức xét tuyển": chỉ hồ sơ đã "Đạt" thẩm định; đợt phải ở trạng thái "Đóng đăng ký" hoặc "Xét kết quả". (1) Cán bộ lập tiểu ban (≥ 3 người, đúng 1 Chủ tịch và 1 Thư ký). (2) Nếu ngành có hình thức phỏng vấn (thạc sĩ: phỏng vấn chuyên môn; tiến sĩ: trình bày đề cương), "Xếp lịch tự động" chia lượt trong giờ hành chính (7:30–11:30, 13:30–17:00, nghỉ Chủ nhật) và báo từng thí sinh; đổi lịch thì báo lại; in lịch kèm cột điểm cho tiểu ban. (3) Hội đồng / cán bộ (`score:enter`) nhập điểm từng hình thức theo thang của hình thức; phần phỏng vấn chỉ nhập sau giờ hẹn; vắng mặt = 0 điểm và không được trúng tuyển. (4) Cán bộ công bố điểm khi mọi thí sinh đủ điểm và không còn hồ sơ đang thẩm định; sau đó không sửa điểm trực tiếp được nữa.
+- **Xét trúng tuyển (M6)** — trang "Xét trúng tuyển": chỉ xếp hạng khi đợt ở "Xét kết quả", đã hết hạn phúc khảo và không còn đơn phúc khảo chờ kết luận. Hội đồng (`result:propose`) nhập điểm chuẩn và xếp hạng: tổng điểm = Σ(điểm × hệ số); ≥ điểm chuẩn và trong chỉ tiêu → Trúng tuyển; ≥ điểm chuẩn ngoài chỉ tiêu → Dự bị (theo thứ tự); dưới điểm chuẩn hoặc vắng → Không trúng tuyển; đồng điểm ưu tiên điểm hình thức có hệ số lớn nhất rồi nộp hồ sơ sớm hơn. Hội đồng thông qua (cấp 1) → Lãnh đạo (`result:approve`, không được là người đã thông qua cấp 1) phê duyệt và công bố, hoặc trả lại kèm lý do. Công bố xong thí sinh mới thấy kết quả (thông báo + email); không xếp hạng lại được.
+- **Quyết định trúng tuyển & nhập học (M7)** — trang "Quyết định & nhập học": cán bộ (`decision:manage`) lập dự thảo quyết định gồm mọi thí sinh trúng tuyển đã công bố chưa có quyết định → trình ký → Lãnh đạo (`decision:sign`) ký ban hành hoặc trả lại. Ký xong, thí sinh có `ENROLL_CONFIRM_DAYS` ngày (mặc định 15) để bấm "Xác nhận nhập học" và in giấy báo trúng tuyển. Thí sinh từ chối, hoặc cán bộ bấm "Xử lý quá hạn", thì hồ sơ bị hủy chỗ và hệ thống tự gọi người dự bị kế tiếp (trúng tuyển bổ sung, đưa vào quyết định bổ sung). Thí sinh đã xác nhận nộp bản chính → cán bộ ghi "Đã đối chiếu" (hoặc "Còn thiếu" kèm nội dung báo thí sinh) → "Hoàn tất nhập học" cấp mã học viên `HV-<mã đợt>-0001`.
+- **Tiến sĩ**: không kết luận "Đạt" thẩm định được khi chưa có giảng viên hướng dẫn đồng ý.
 - **Đăng ký thí sinh**: khai họ tên, ngày sinh, email, số điện thoại, mật khẩu (≥ 8 ký tự, có chữ và số). Tài khoản ở trạng thái `PENDING_VERIFY` cho tới khi nhập đúng mã gửi về email; chưa xác thực thì không đăng nhập được. Thông tin đăng ký được ghi luôn vào bảng `candidate` (hồ sơ cá nhân).
 - **Mã OTP** (đăng ký và quên mật khẩu): 6 số, chỉ lưu bản băm bcrypt, hết hạn sau 5 phút, mỗi lần chỉ 1 mã còn hiệu lực. Chờ 60 giây giữa 2 lần gửi, tối đa 5 lần/giờ; nhập sai 5 lần thì mã bị hủy.
 - **Đăng nhập thí sinh bằng mật khẩu** (email hoặc số điện thoại): sai 5 lần thì khóa 15 phút (chỉnh trong `system_config`).
@@ -208,6 +213,18 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | GET / PATCH | `/admin/supervisor-requests`, `/admin/supervisor-requests/:id/respond` | supervisor:manage |
 | GET / POST / PATCH | `/admin/lecturers`, `/admin/lecturers/:id` | supervisor:manage |
 | GET / POST | `/supervisors/me`, `/supervisors/me/request` | thí sinh |
+| GET | `/admin/scoring/batches` | exam:manage, score:enter, result:view, decision:manage hoặc decision:sign |
+| GET | `/admin/scoring/majors/:id` | exam:manage, score:enter hoặc result:view |
+| PUT / POST / PATCH | `/admin/scoring/majors/:id/committee`, `/admin/scoring/majors/:id/interviews/auto`, `/admin/scoring/interviews/:id`, `/admin/scoring/majors/:id/publish-scores` | exam:manage |
+| PUT | `/admin/scoring/majors/:id/scores` | score:enter |
+| PATCH | `/admin/scoring/appeal-requests/:id/confirm-payment`, `/admin/scoring/appeal-requests/:id/close` | appeal:resolve |
+| GET | `/admin/results/majors/:id` | result:view |
+| POST | `/admin/results/majors/:id/rank`, `/admin/results/majors/:id/propose` | result:propose |
+| POST | `/admin/results/majors/:id/approve`, `/admin/results/majors/:id/return` | result:approve |
+| GET | `/admin/decisions/batches/:batchId`, `/admin/decisions/:id` | decision:manage hoặc decision:sign |
+| POST / PATCH | `/admin/decisions/batches/:batchId`, `/admin/decisions/:id`, `/admin/decisions/:id/submit`, `/admin/decisions/batches/:batchId/process-overdue`, `/admin/decisions/enrollment/:applicationId/originals`, `/admin/decisions/enrollment/:applicationId/complete` | decision:manage |
+| POST | `/admin/decisions/:id/sign`, `/admin/decisions/:id/return` | decision:sign |
+| POST | `/applications/me/appeal`, `/applications/me/enrollment/confirm`, `/applications/me/enrollment/decline` | thí sinh |
 | GET | `/admin/english-test/batches`, `/admin/english-test/batches/:batchId` | exam:manage |
 | POST | `/admin/english-test/batches/:batchId/sessions`, `/admin/english-test/batches/:batchId/auto-assign` | exam:manage |
 | PATCH / PUT | `/admin/english-test/sessions/:id`, `/admin/english-test/sessions/:id/results`, `/admin/english-test/registrations/:applicationId/move` | exam:manage |
@@ -226,13 +243,12 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v9, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v10, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm
 
-- **M5 (phần còn lại):** tiểu ban chấm hồ sơ thạc sĩ, lịch trình bày đề cương tiến sĩ và nhập điểm, phúc khảo. (Thi đánh giá năng lực tiếng Anh đã có.)
-- **M6:** điểm chuẩn, xếp hạng, danh sách dự bị, công bố kết quả 2 cấp duyệt.
-- **M7:** quyết định trúng tuyển, xác nhận nhập học, nộp bản chính.
+- **Thi viết (hình thức `THI_VIET`)**: nhập điểm được nhưng chưa có xếp phòng thi viết / số báo danh riêng (Trường hiện xét tuyển bằng hồ sơ + phỏng vấn / trình bày đề cương).
+- **Tự động xử lý quá hạn**: hồ sơ quá hạn bổ sung và thí sinh quá hạn xác nhận nhập học do cán bộ bấm xử lý, chưa có tác vụ chạy định kỳ.
 - **Gửi SMS:** chưa có; mã xác thực và thông báo chỉ gửi qua email.
 - **Màn hình cán bộ xử lý khiếu nại chung:** bảng `complaint` đã có và thí sinh gửi được.

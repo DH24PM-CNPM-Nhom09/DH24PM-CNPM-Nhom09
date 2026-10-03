@@ -1274,6 +1274,8 @@ export interface AppealRow extends ScoreAppeal {
   candidateName: string;
   majorName: string;
   resolvedByName: string | null;
+  /** Đơn phúc khảo có lệ phí do thí sinh nộp trên cổng (null = dữ liệu cũ / cán bộ ghi nhận) */
+  request?: { requestId: number; status: "CHO_NOP_PHI" | "DA_NOP_PHI" | "DONG"; feeAmount: number; paidAt: string | null; receiptNo: string | null; transferNote: string; appealDeadline: string | null } | null;
 }
 
 export async function listAppeals(): Promise<AppealRow[]> {
@@ -1516,4 +1518,282 @@ export async function resetMockData() {
   const s = readSession();
   if (s && !getDb().staff.some((x) => x.staffAccountId === s.staff.staffAccountId)) writeSession(null);
   return delay({ success: true }, 200);
+}
+
+// ============================================================================
+// Xét tuyển → kết quả → quyết định → nhập học (M5–M7). Chỉ chạy cùng backend.
+//   /admin/scoring/...   tiểu ban, lịch phỏng vấn / trình bày đề cương, điểm, công bố điểm
+//   /admin/results/...   điểm chuẩn, xếp hạng, hội đồng thông qua, lãnh đạo phê duyệt & công bố
+//   /admin/decisions/... quyết định trúng tuyển, xác nhận nhập học, bản chính, hoàn tất
+// ============================================================================
+const NEED_BACKEND = () => fail("NOT_SUPPORTED", "Chức năng xét tuyển cần chạy cùng backend (NEXT_PUBLIC_ADMIN_USE_MOCK=false).");
+
+export type ResultStage = "NOT_RANKED" | "DRAFT" | "PROPOSED" | "PUBLISHED";
+export type AdmissionResult = "TRUNG_TUYEN" | "DU_BI" | "KHONG_TRUNG_TUYEN";
+export type CommitteeRole = "CHU_TICH" | "THU_KY" | "UY_VIEN";
+
+export interface ScoringMajor {
+  batchMajorId: number;
+  majorCode: string;
+  majorName: string;
+  quota: number;
+  eligible: number;
+  pendingReview: number;
+  scoresPublishedAt: string | null;
+  appealDeadline: string | null;
+  resultStage: ResultStage;
+  admitted: number;
+}
+export interface ScoringBatch {
+  batchId: number;
+  batchCode: string;
+  batchName: string;
+  degreeLevel: DegreeLevel;
+  status: BatchStatus;
+  majors: ScoringMajor[];
+}
+export interface ScoringSubject {
+  subjectId: number;
+  subjectName: string;
+  examFormat: string;
+  examFormatLabel: string;
+  weight: number;
+  maxScore: number;
+}
+export interface CommitteeMember {
+  memberId?: number;
+  fullName: string;
+  lecturerCode: string | null;
+  role: CommitteeRole;
+}
+export interface Committee {
+  committeeId: number;
+  committeeName: string;
+  decisionNo: string | null;
+  formedAt: string | null;
+  members: CommitteeMember[];
+}
+export interface ScoringCandidate {
+  applicationId: number;
+  applicationCode: string;
+  fullName: string;
+  dob: string | null;
+  researchTopic: string | null;
+  interview: { scheduleId: number; scheduledAt: string; location: string | null; status: string } | null;
+  scores: Record<number, { score: number; absent: boolean; note: string | null }>;
+  complete: boolean;
+  absent: boolean;
+  total: number | null;
+  appeal: { status: string } | null;
+}
+interface BatchRef {
+  batchId: number;
+  batchCode: string;
+  batchName: string;
+  status: BatchStatus;
+  degreeLevel: DegreeLevel;
+}
+interface MajorRef {
+  batchMajorId: number;
+  majorCode: string;
+  majorName: string;
+  quota: number;
+}
+export interface ScoringOverview {
+  batch: BatchRef;
+  major: MajorRef;
+  interviewLabel: string;
+  subjects: ScoringSubject[];
+  hasInterview: boolean;
+  committee: Committee | null;
+  candidates: ScoringCandidate[];
+  pendingReview: number;
+  scoresPublishedAt: string | null;
+  appealDeadline: string | null;
+  scoringOpen: boolean;
+  defaults: { interviewMinutes: number; appealWindowDays: number };
+  stats: { total: number; scheduled: number; complete: number };
+}
+export interface ScoreInput {
+  applicationId: number;
+  subjectId: number;
+  score: number | null;
+  absent: boolean;
+  note?: string;
+}
+
+export async function listScoringBatches(): Promise<ScoringBatch[]> {
+  if (!USE_MOCK) return request<ScoringBatch[]>("/admin/scoring/batches");
+  return delay([]);
+}
+export async function getScoringOverview(batchMajorId: number): Promise<ScoringOverview> {
+  if (!USE_MOCK) return request<ScoringOverview>(`/admin/scoring/majors/${batchMajorId}`);
+  return NEED_BACKEND();
+}
+export async function saveCommittee(batchMajorId: number, data: { committeeName: string; decisionNo: string; formedAt: string; members: CommitteeMember[] }) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/majors/${batchMajorId}/committee`, { method: "PUT", body: JSON.stringify(data) });
+  return NEED_BACKEND();
+}
+export async function autoScheduleInterviews(batchMajorId: number, data: { startAt: string; minutes: number; location: string }) {
+  if (!USE_MOCK) return request<{ scheduled: number }>(`/admin/scoring/majors/${batchMajorId}/interviews/auto`, { method: "POST", body: JSON.stringify(data) });
+  return NEED_BACKEND();
+}
+export async function updateInterview(scheduleId: number, data: { scheduledAt: string; location: string }) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/interviews/${scheduleId}`, { method: "PATCH", body: JSON.stringify(data) });
+  return NEED_BACKEND();
+}
+export async function saveScores(batchMajorId: number, items: ScoreInput[]) {
+  if (!USE_MOCK) return request<{ success: boolean; changed: number }>(`/admin/scoring/majors/${batchMajorId}/scores`, { method: "PUT", body: JSON.stringify({ items }) });
+  return NEED_BACKEND();
+}
+export async function publishScores(batchMajorId: number) {
+  if (!USE_MOCK) return request<{ success: boolean; appealDeadline: string }>(`/admin/scoring/majors/${batchMajorId}/publish-scores`, { method: "POST" });
+  return NEED_BACKEND();
+}
+export async function confirmAppealFee(requestId: number, receiptNo: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/appeal-requests/${requestId}/confirm-payment`, { method: "PATCH", body: JSON.stringify({ receiptNo }) });
+  return NEED_BACKEND();
+}
+export async function closeAppealRequest(requestId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/appeal-requests/${requestId}/close`, { method: "PATCH" });
+  return NEED_BACKEND();
+}
+
+export interface ResultRow {
+  applicationId: number;
+  applicationCode: string;
+  fullName: string;
+  dob: string | null;
+  scores: Record<number, number | null>;
+  absent: boolean;
+  total: number | null;
+  rank: number | null;
+  result: AdmissionResult | null;
+  resultLabel: string | null;
+  waitlist: { rank: number; status: string } | null;
+  cancelled: boolean;
+  enrollment: string | null;
+}
+export interface ResultsOverview {
+  batch: BatchRef;
+  major: MajorRef;
+  subjects: { subjectId: number; subjectName: string; weight: number }[];
+  benchmark: number | null;
+  benchmarkDecidedBy: string | null;
+  stage: ResultStage;
+  proposedBy: string | null;
+  approvedBy: string | null;
+  publishedAt: string | null;
+  returnNote: string | null;
+  scoresPublishedAt: string | null;
+  appealDeadline: string | null;
+  blockers: string[];
+  rows: ResultRow[];
+  stats: { admitted: number; waitlisted: number; rejected: number };
+}
+export async function getResults(batchMajorId: number): Promise<ResultsOverview> {
+  if (!USE_MOCK) return request<ResultsOverview>(`/admin/results/majors/${batchMajorId}`);
+  return NEED_BACKEND();
+}
+export async function rankResults(batchMajorId: number, benchmark: number) {
+  if (!USE_MOCK) return request<{ admitted: number; waitlisted: number; rejected: number }>(`/admin/results/majors/${batchMajorId}/rank`, { method: "POST", body: JSON.stringify({ benchmark }) });
+  return NEED_BACKEND();
+}
+export async function proposeResults(batchMajorId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/results/majors/${batchMajorId}/propose`, { method: "POST" });
+  return NEED_BACKEND();
+}
+export async function approveResults(batchMajorId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/results/majors/${batchMajorId}/approve`, { method: "POST" });
+  return NEED_BACKEND();
+}
+export async function returnResults(batchMajorId: number, note: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/results/majors/${batchMajorId}/return`, { method: "POST", body: JSON.stringify({ note }) });
+  return NEED_BACKEND();
+}
+
+export type DecisionStatus = "DRAFT" | "PENDING_SIGN" | "SIGNED" | "FAILED_SIGN" | "ISSUED";
+export interface DecisionItem {
+  decisionId: number;
+  decisionNo: string | null;
+  decisionDate: string | null;
+  status: DecisionStatus;
+  statusLabel: string;
+  signedBy: string | null;
+  signedAt: string | null;
+  returnNote: string | null;
+  count: number;
+}
+export interface EnrollRow {
+  applicationId: number;
+  applicationCode: string;
+  fullName: string;
+  dob: string | null;
+  majorName: string;
+  fromWaitlist: boolean;
+  decisionNo: string | null;
+  decisionStatus: DecisionStatus | null;
+  confirmation: { status: "CHUA_XAC_NHAN" | "DA_XAC_NHAN" | "TU_CHOI_QUA_HAN"; deadline: string; confirmedAt: string | null; overdue: boolean } | null;
+  originals: { status: "PENDING" | "VERIFIED" | "MISSING"; verifiedAt: string | null } | null;
+  completion: { transferRef: string | null; completedAt: string } | null;
+}
+export interface DecisionsOverview {
+  batch: BatchRef;
+  decisions: DecisionItem[];
+  pending: { applicationId: number; applicationCode: string; fullName: string; majorName: string }[];
+  admitted: EnrollRow[];
+  waitlist: { applicationCode: string; fullName: string; majorName: string; rank: number; status: string }[];
+  stats: { admitted: number; confirmed: number; waiting: number; declined: number; overdue: number; enrolled: number };
+}
+export interface DecisionDetail {
+  decisionId: number;
+  decisionNo: string | null;
+  decisionDate: string | null;
+  status: DecisionStatus;
+  statusLabel: string;
+  signedBy: string | null;
+  signedAt: string | null;
+  signatureRef: string | null;
+  batch: { batchCode: string; batchName: string; degreeLevel: DegreeLevel; legalBasis: string | null };
+  rows: { applicationCode: string; fullName: string; dob: string | null; gender: string | null; majorCode: string; majorName: string; total: number | null; cancelled: boolean }[];
+}
+export async function getDecisions(batchId: number): Promise<DecisionsOverview> {
+  if (!USE_MOCK) return request<DecisionsOverview>(`/admin/decisions/batches/${batchId}`);
+  return NEED_BACKEND();
+}
+export async function createDecision(batchId: number, data: { decisionNo: string; decisionDate: string }) {
+  if (!USE_MOCK) return request<{ decisionId: number; count: number }>(`/admin/decisions/batches/${batchId}`, { method: "POST", body: JSON.stringify(data) });
+  return NEED_BACKEND();
+}
+export async function updateDecision(decisionId: number, data: { decisionNo: string; decisionDate: string }) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/decisions/${decisionId}`, { method: "PATCH", body: JSON.stringify(data) });
+  return NEED_BACKEND();
+}
+export async function submitDecision(decisionId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/decisions/${decisionId}/submit`, { method: "POST" });
+  return NEED_BACKEND();
+}
+export async function signDecision(decisionId: number) {
+  if (!USE_MOCK) return request<{ success: boolean; count: number; deadline: string }>(`/admin/decisions/${decisionId}/sign`, { method: "POST" });
+  return NEED_BACKEND();
+}
+export async function returnDecision(decisionId: number, note: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/decisions/${decisionId}/return`, { method: "POST", body: JSON.stringify({ note }) });
+  return NEED_BACKEND();
+}
+export async function getDecisionDetail(decisionId: number): Promise<DecisionDetail> {
+  if (!USE_MOCK) return request<DecisionDetail>(`/admin/decisions/${decisionId}`);
+  return NEED_BACKEND();
+}
+export async function processOverdue(batchId: number) {
+  if (!USE_MOCK) return request<{ expired: number; promoted: number }>(`/admin/decisions/batches/${batchId}/process-overdue`, { method: "POST" });
+  return NEED_BACKEND();
+}
+export async function setOriginals(applicationId: number, status: "VERIFIED" | "MISSING", note = "") {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/decisions/enrollment/${applicationId}/originals`, { method: "PATCH", body: JSON.stringify({ status, note }) });
+  return NEED_BACKEND();
+}
+export async function completeEnrollment(applicationId: number) {
+  if (!USE_MOCK) return request<{ success: boolean; transferRef: string }>(`/admin/decisions/enrollment/${applicationId}/complete`, { method: "POST" });
+  return NEED_BACKEND();
 }

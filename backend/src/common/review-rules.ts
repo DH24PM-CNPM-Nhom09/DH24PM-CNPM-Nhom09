@@ -45,6 +45,9 @@ export interface ReviewFacts {
   englishTestRequired?: boolean;
   /** Kết quả thi tiếng Anh: PENDING / PASSED / FAILED / ABSENT, null = chưa xếp phòng */
   englishTestResult?: string | null;
+  /** Bậc tiến sĩ: phải có giảng viên hướng dẫn đồng ý mới kết luận "Đạt" */
+  supervisorRequired?: boolean;
+  supervisorAccepted?: boolean;
 }
 
 /** null = được phép; ngược lại là câu giải thích (cũng là message lỗi trả về) */
@@ -60,6 +63,7 @@ export function blockReason(f: ReviewFacts, action: ReviewAction, now = Date.now
       return f.englishTestResult === "FAILED" || f.englishTestResult === "ABSENT"
         ? "Thí sinh không đạt / vắng kỳ thi đánh giá năng lực tiếng Anh nên chưa đáp ứng điều kiện ngoại ngữ."
         : "Thí sinh đăng ký thi đánh giá năng lực tiếng Anh nhưng chưa có kết quả Đạt.";
+    if (f.supervisorRequired && !f.supervisorAccepted) return "Nghiên cứu sinh chưa có giảng viên hướng dẫn đồng ý nhận hướng dẫn.";
   }
   if (action === "REJECT_EXPIRED") {
     if (!f.pendingSupplementDeadline || f.pendingSupplementDeadline.getTime() >= now) return "Yêu cầu bổ sung vẫn còn hạn.";

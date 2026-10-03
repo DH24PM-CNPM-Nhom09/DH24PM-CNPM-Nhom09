@@ -174,6 +174,21 @@ export interface AdminApplication {
   language?: { option: string | null; note: string | null };
   /** Thi đánh giá năng lực tiếng Anh (null = thí sinh không phải thi) */
   englishTest?: { result: string | null; score: number | null; candidateNumber: string | null; sessionCode: string | null; testAt: string | null; room: string | null } | null;
+  /** Bậc tiến sĩ: giảng viên hướng dẫn (null = bậc thạc sĩ) */
+  supervisor?: { accepted: boolean; status: string | null; lecturerName: string | null } | null;
+  /** Xét tuyển (chỉ cán bộ thấy, kể cả kết quả nháp chưa công bố) */
+  admission?: {
+    interviewAt: string | null;
+    scores: { subjectName: string; weight: number; score: number | null; absent: boolean }[];
+    total: number | null;
+    rank: number | null;
+    result: "TRUNG_TUYEN" | "DU_BI" | "KHONG_TRUNG_TUYEN" | null;
+    resultPublished: boolean;
+    waitlistRank: number | null;
+    enrollment: string | null;
+    originals: string | null;
+    studentCode: string | null;
+  } | null;
   documents: AdminDocument[];
   /** null = thí sinh chưa phát sinh giao dịch lệ phí nào */
   payment: Payment | null;

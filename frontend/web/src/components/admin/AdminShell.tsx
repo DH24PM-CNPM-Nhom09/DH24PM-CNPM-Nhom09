@@ -9,7 +9,7 @@ import { can as canRoles, ROLE_LABEL, type Permission } from "@/lib/admin/permis
 import { useStaffSession, writeSession } from "@/lib/admin/session";
 import { getDb } from "@/lib/admin/store";
 import type { StaffAccount } from "@/lib/admin/types";
-import { IconBook, IconCalendar, IconClipboard, IconDashboard, IconFolder, IconGraduation, IconIdCard, IconKey, IconList, IconLogout, IconMegaphone, IconMenu, IconRefresh, IconScale, IconShield, IconUsers, IconWallet, IconX } from "./Icons";
+import { IconAward, IconBook, IconCalendar, IconClipboard, IconStamp, IconTable, IconDashboard, IconFolder, IconGraduation, IconIdCard, IconKey, IconList, IconLogout, IconMegaphone, IconMenu, IconRefresh, IconScale, IconShield, IconUsers, IconWallet, IconX } from "./Icons";
 import { Btn, Modal, ToastProvider, useToast } from "./ui";
 
 interface AdminCtx {
@@ -24,12 +24,15 @@ export function useAdmin(): AdminCtx {
   return v;
 }
 
-const NAV: { href: string; label: string; perm: Permission; icon: (p: { size?: number }) => JSX.Element }[] = [
+const NAV: { href: string; label: string; perm: Permission | Permission[]; icon: (p: { size?: number }) => JSX.Element }[] = [
   { href: "/admin", label: "Tổng quan", perm: "dashboard:view", icon: IconDashboard },
   { href: "/admin/applications", label: "Hồ sơ xét tuyển", perm: "application:view", icon: IconFolder },
   { href: "/admin/candidates", label: "Tài khoản thí sinh", perm: "candidate:view", icon: IconIdCard },
   { href: "/admin/supervisors", label: "Giảng viên hướng dẫn", perm: "supervisor:manage", icon: IconGraduation },
   { href: "/admin/english-test", label: "Thi tiếng Anh", perm: "exam:manage", icon: IconClipboard },
+  { href: "/admin/scoring", label: "Tổ chức xét tuyển", perm: ["exam:manage", "score:enter"], icon: IconTable },
+  { href: "/admin/results", label: "Xét trúng tuyển", perm: "result:view", icon: IconAward },
+  { href: "/admin/decisions", label: "Quyết định & nhập học", perm: ["decision:manage", "decision:sign"], icon: IconStamp },
   { href: "/admin/batches", label: "Đợt tuyển sinh", perm: "batch:view", icon: IconCalendar },
   { href: "/admin/majors", label: "Danh mục ngành", perm: "batch:view", icon: IconBook },
   { href: "/admin/appeals", label: "Phúc khảo", perm: "appeal:view", icon: IconScale },
@@ -103,7 +106,7 @@ function ShellInner({ children }: { children: ReactNode }) {
     );
   }
 
-  const items = NAV.filter((n) => ctx.can(n.perm));
+  const items = NAV.filter((n) => (Array.isArray(n.perm) ? n.perm.some((p) => ctx.can(p)) : ctx.can(n.perm)));
   const isActive = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
 
   function logout() {
@@ -222,9 +225,9 @@ function ShellInner({ children }: { children: ReactNode }) {
 }
 
 /** Bọc nội dung trang: không đủ quyền -> hiện thông báo 403 thay vì trang trắng */
-export function RequirePermission({ perm, children }: { perm: Permission; children: ReactNode }) {
+export function RequirePermission({ perm, children }: { perm: Permission | Permission[]; children: ReactNode }) {
   const { can, staff } = useAdmin();
-  if (can(perm)) return <>{children}</>;
+  if (Array.isArray(perm) ? perm.some((p) => can(p)) : can(perm)) return <>{children}</>;
   return (
     <div className="mx-auto mt-16 max-w-md rounded-card border border-gray-200 bg-white p-8 text-center">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-800">

@@ -21,7 +21,13 @@ export type Permission =
   | "candidate:view"
   | "candidate:manage"
   | "supervisor:manage"
-  | "exam:manage";
+  | "exam:manage"
+  | "score:enter"
+  | "result:view"
+  | "result:propose"
+  | "result:approve"
+  | "decision:manage"
+  | "decision:sign";
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -37,9 +43,12 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "candidate:view",
     "supervisor:manage",
     "exam:manage",
+    "score:enter",
+    "result:view",
+    "decision:manage",
   ],
-  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage"],
-  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view"],
+  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage", "score:enter", "result:view", "result:propose"],
+  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view", "result:view", "result:approve", "decision:sign"],
   ADMIN: ["dashboard:view", "batch:view", "account:manage", "audit:view", "candidate:view", "candidate:manage"],
 };
 

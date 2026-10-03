@@ -3,6 +3,8 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { asCandidate, CandidateOnly, CurrentUser, type AuthUser } from "../../common/auth";
 import { str } from "../../common/util";
+import { EnrollmentService } from "../admin/enrollment.service";
+import { ScoringService } from "../admin/scoring.service";
 import { SupervisorsService } from "../admin/supervisors.service";
 import { ApplicationFlowService } from "./application-flow.service";
 import { CandidateService, type UploadedFileLike } from "./candidate.service";
@@ -15,7 +17,35 @@ export class CandidateController {
     private readonly svc: CandidateService,
     private readonly flow: ApplicationFlowService,
     private readonly supervisors: SupervisorsService,
+    private readonly scoring: ScoringService,
+    private readonly enrollment: EnrollmentService,
   ) {}
+
+  private cid(user: AuthUser) {
+    const me = asCandidate(user);
+    if (!me.candidateId) return 0;
+    return me.candidateId;
+  }
+
+  // ---------------------------------------------------- xét tuyển → trúng tuyển → nhập học
+  /** Nộp đơn phúc khảo điểm xét tuyển (trong hạn, có lệ phí theo hồ sơ) */
+  @Post("applications/me/appeal")
+  @HttpCode(200)
+  appeal(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.scoring.fileAppeal(this.cid(user), body);
+  }
+
+  @Post("applications/me/enrollment/confirm")
+  @HttpCode(200)
+  confirmEnrollment(@CurrentUser() user: AuthUser) {
+    return this.enrollment.candidateRespond(this.cid(user), true, {});
+  }
+
+  @Post("applications/me/enrollment/decline")
+  @HttpCode(200)
+  declineEnrollment(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.enrollment.candidateRespond(this.cid(user), false, body);
+  }
 
   /** Giảng viên hướng dẫn: trạng thái theo bậc (thạc sĩ / tiến sĩ) và lịch sử đề nghị */
   @Get("supervisors/me")
