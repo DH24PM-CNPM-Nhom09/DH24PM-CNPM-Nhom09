@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 // ============================================================================
 // npm run db:update — cập nhật CSDL ĐANG CÓ DỮ LIỆU lên bản mới nhất. Chạy lại nhiều lần vẫn an toàn.
-//   1. Chạy database/migration_v5 → v10 (chỉ THÊM cột / dòng cấu hình / giá trị cho phép)
+//   1. Chạy database/migration_v5 → v11 (chỉ THÊM cột / dòng cấu hình / giá trị cho phép)
 //   2. Sửa cột candidate.nationality bị lỗi font ("Viá»‡t Nam" -> "Việt Nam") do bản cũ ghi sai
 //   3. Nạp thông báo tuyển sinh / quy định mẫu nếu bảng announcement còn trống
 // Không xóa bất kỳ dòng hay cột nào.
@@ -33,6 +33,7 @@ function sqlStatements(file: string) {
       ["migration_v8_real_notice.sql", "migration v8 (minh chứng, ngoại ngữ, các khoản lệ phí theo thông báo tuyển sinh thật)"],
       ["migration_v9_english_test.sql", "migration v9 (thi đánh giá năng lực tiếng Anh: buổi thi, số báo danh, kết quả)"],
       ["migration_v10_admission_results.sql", "migration v10 (công bố điểm, hạn phúc khảo, đơn phúc khảo, cấu hình xác nhận nhập học)"],
+      ["migration_v11_privacy.sql", "migration v11 (ghi nhận đồng ý chính sách bảo vệ dữ liệu cá nhân)"],
     ];
     for (const [name, label] of migrations) {
       for (const stmt of sqlStatements(path.join(__dirname, "..", "database", name))) await prisma.$executeRawUnsafe(stmt);

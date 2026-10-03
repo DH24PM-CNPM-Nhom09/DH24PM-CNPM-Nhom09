@@ -174,4 +174,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   ORIGINALS_VERIFIED: "Đối chiếu bản chính",
   ORIGINALS_MISSING: "Yêu cầu bổ sung bản chính",
   ENROLL_COMPLETE: "Hoàn tất nhập học",
+  COMPLAINT_ACCEPT: "Tiếp nhận khiếu nại",
+  COMPLAINT_RESOLVE: "Giải quyết khiếu nại",
+  COMPLAINT_REJECT: "Không chấp nhận khiếu nại",
 };

@@ -32,7 +32,7 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 8 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 9 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
@@ -43,6 +43,7 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source 
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v8_real_notice.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v9_english_test.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v10_admission_results.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v11_privacy.sql"
 ```
 
 Kiểm tra: CSDL `admission_db` có **45 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration` + bảng đơn phúc khảo `appeal_request`).
@@ -67,7 +68,7 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
 > **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
-> lệnh này chạy migration v5 → v10, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+> lệnh này chạy migration v5 → v11, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
 
 ### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
 
@@ -136,11 +137,16 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 
 ## Trước khi triển khai thật (bắt buộc)
 
-1. Tạo CSDL mới, chạy đủ các file SQL v3 → v8, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
+1. Tạo CSDL mới, chạy đủ các file SQL v3 → v11, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
 2. Quản trị vào **Tài khoản cán bộ** cấp tài khoản cho từng cán bộ bằng email công tác thật (nên chọn chỉ đăng nhập Google).
 3. `backend/.env`: `DEV_AUTH_BYPASS=false`, đổi `JWT_SECRET` thành chuỗi ngẫu nhiên dài, điền `GOOGLE_CLIENT_ID`, `SMTP_USER`, `SMTP_PASS`.
 4. Frontend `.env.local`: `NEXT_PUBLIC_DEMO_LOGIN=false` (ẩn khung tài khoản demo ở trang đăng nhập cán bộ).
 5. Cán bộ tuyển sinh vào **Lệ phí & thanh toán** điền mức lệ phí và tài khoản ngân hàng chính thức của Trường (để trống thì thí sinh được hướng dẫn nộp trực tiếp tại Phòng Đào tạo SĐH).
+6. Chạy sau HTTPS (Render, Nginx...). Backend đã tự gửi header an toàn (chống nhúng iframe, chống đoán kiểu tệp, HSTS khi qua HTTPS) và giới hạn số lần gọi API đăng nhập/đăng ký/quên mật khẩu theo IP (`AUTH_RATE_LIMIT`, mặc định 60 lần/10 phút).
+7. Thư mục tệp minh chứng (`UPLOAD_DIR`) phải nằm trên ổ lưu trữ bền vững (Render: gắn persistent disk), nếu không mỗi lần triển khai lại sẽ mất tệp thí sinh đã tải lên.
+8. Sao lưu định kỳ: `npm run db:backup` tạo `backups/admission_db_<ngày>_<giờ>.sql` (đủ dữ liệu, trigger, thủ tục) và bản sao thư mục tệp minh chứng; chép thư mục `backups/` sang nơi khác. Khôi phục: `mysql -u root admission_db < backups/<tệp>.sql`. Lệnh chỉ tạo bản mới, không xóa bản cũ.
+9. Rà soát nội dung trang **Chính sách bảo vệ dữ liệu cá nhân** (`/privacy`, theo Nghị định 13/2023/NĐ-CP) với bộ phận pháp chế của Trường trước khi áp dụng.
+10. Đổi lại toàn bộ mật khẩu ứng dụng Gmail, khóa bí mật Google OAuth, `JWT_SECRET` đã từng dùng khi phát triển.
 
 ## Quy tắc nghiệp vụ backend đang chặn
 
@@ -168,6 +174,9 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 - **Xét trúng tuyển (M6)** — trang "Xét trúng tuyển": chỉ xếp hạng khi đợt ở "Xét kết quả", đã hết hạn phúc khảo và không còn đơn phúc khảo chờ kết luận. Hội đồng (`result:propose`) nhập điểm chuẩn và xếp hạng: tổng điểm = Σ(điểm × hệ số); ≥ điểm chuẩn và trong chỉ tiêu → Trúng tuyển; ≥ điểm chuẩn ngoài chỉ tiêu → Dự bị (theo thứ tự); dưới điểm chuẩn hoặc vắng → Không trúng tuyển; đồng điểm ưu tiên điểm hình thức có hệ số lớn nhất rồi nộp hồ sơ sớm hơn. Hội đồng thông qua (cấp 1) → Lãnh đạo (`result:approve`, không được là người đã thông qua cấp 1) phê duyệt và công bố, hoặc trả lại kèm lý do. Công bố xong thí sinh mới thấy kết quả (thông báo + email); không xếp hạng lại được.
 - **Quyết định trúng tuyển & nhập học (M7)** — trang "Quyết định & nhập học": cán bộ (`decision:manage`) lập dự thảo quyết định gồm mọi thí sinh trúng tuyển đã công bố chưa có quyết định → trình ký → Lãnh đạo (`decision:sign`) ký ban hành hoặc trả lại. Ký xong, thí sinh có `ENROLL_CONFIRM_DAYS` ngày (mặc định 15) để bấm "Xác nhận nhập học" và in giấy báo trúng tuyển. Thí sinh từ chối, hoặc cán bộ bấm "Xử lý quá hạn", thì hồ sơ bị hủy chỗ và hệ thống tự gọi người dự bị kế tiếp (trúng tuyển bổ sung, đưa vào quyết định bổ sung). Thí sinh đã xác nhận nộp bản chính → cán bộ ghi "Đã đối chiếu" (hoặc "Còn thiếu" kèm nội dung báo thí sinh) → "Hoàn tất nhập học" cấp mã học viên `HV-<mã đợt>-0001`.
 - **Tiến sĩ**: không kết luận "Đạt" thẩm định được khi chưa có giảng viên hướng dẫn đồng ý.
+- **Khiếu nại** (trang "Khiếu nại", quyền `complaint:view` / `complaint:handle`): thí sinh gửi khiếu nại kết quả xét tuyển, xử lý hồ sơ, kết quả thi tiếng Anh hoặc vấn đề khác và xem lại câu trả lời ở cổng thí sinh. Cán bộ tuyển sinh / hội đồng "Tiếp nhận" (Mới gửi → Đang xử lý, báo thí sinh) rồi "Trả lời" (Đã giải quyết / Không chấp nhận, nội dung ≥ 20 ký tự, gửi thông báo + email). Lãnh đạo chỉ xem. Không xóa khiếu nại.
+- **Tác vụ tự động** (mặc định 15 phút/lần, `AUTO_JOB_MINUTES`, 0 = tắt): hồ sơ quá hạn bổ sung → Không đạt; thí sinh quá hạn xác nhận nhập học → xem như từ chối và gọi dự bị; đơn phúc khảo chưa nộp phí khi hết hạn → đóng đơn. Nhật ký ghi người thực hiện là SYSTEM. Quản trị đợt có thể chạy ngay bằng `POST /admin/jobs/run`. Lưu ý dữ liệu mẫu có sẵn vài hồ sơ quá hạn bổ sung để demo nút làm tay; muốn giữ để demo thì đặt `AUTO_JOB_MINUTES=0`.
+- **Bảo vệ dữ liệu cá nhân**: đăng ký bằng mật khẩu bắt buộc tick đồng ý Chính sách bảo vệ dữ liệu cá nhân (`/privacy`); đăng nhập Google lần đầu có dòng thông báo "tiếp tục là đồng ý". Thời điểm đồng ý lưu ở `candidate_account.privacy_consent_at` (migration v11).
 - **Đăng ký thí sinh**: khai họ tên, ngày sinh, email, số điện thoại, mật khẩu (≥ 8 ký tự, có chữ và số). Tài khoản ở trạng thái `PENDING_VERIFY` cho tới khi nhập đúng mã gửi về email; chưa xác thực thì không đăng nhập được. Thông tin đăng ký được ghi luôn vào bảng `candidate` (hồ sơ cá nhân).
 - **Mã OTP** (đăng ký và quên mật khẩu): 6 số, chỉ lưu bản băm bcrypt, hết hạn sau 5 phút, mỗi lần chỉ 1 mã còn hiệu lực. Chờ 60 giây giữa 2 lần gửi, tối đa 5 lần/giờ; nhập sai 5 lần thì mã bị hủy.
 - **Đăng nhập thí sinh bằng mật khẩu** (email hoặc số điện thoại): sai 5 lần thì khóa 15 phút (chỉnh trong `system_config`).
@@ -225,6 +234,10 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | POST / PATCH | `/admin/decisions/batches/:batchId`, `/admin/decisions/:id`, `/admin/decisions/:id/submit`, `/admin/decisions/batches/:batchId/process-overdue`, `/admin/decisions/enrollment/:applicationId/originals`, `/admin/decisions/enrollment/:applicationId/complete` | decision:manage |
 | POST | `/admin/decisions/:id/sign`, `/admin/decisions/:id/return` | decision:sign |
 | POST | `/applications/me/appeal`, `/applications/me/enrollment/confirm`, `/applications/me/enrollment/decline` | thí sinh |
+| GET | `/admin/complaints` | complaint:view |
+| PATCH | `/admin/complaints/:id/accept`, `/admin/complaints/:id/respond` | complaint:handle |
+| GET | `/complaints/me` | thí sinh |
+| POST | `/admin/jobs/run` | batch:manage |
 | GET | `/admin/english-test/batches`, `/admin/english-test/batches/:batchId` | exam:manage |
 | POST | `/admin/english-test/batches/:batchId/sessions`, `/admin/english-test/batches/:batchId/auto-assign` | exam:manage |
 | PATCH / PUT | `/admin/english-test/sessions/:id`, `/admin/english-test/sessions/:id/results`, `/admin/english-test/registrations/:applicationId/move` | exam:manage |
@@ -243,12 +256,12 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v10, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
+| `npm run db:backup` | Sao lưu CSDL (kèm trigger, thủ tục) và thư mục tệp minh chứng vào `backups/` — chỉ tạo bản mới |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v11, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm
 
 - **Thi viết (hình thức `THI_VIET`)**: nhập điểm được nhưng chưa có xếp phòng thi viết / số báo danh riêng (Trường hiện xét tuyển bằng hồ sơ + phỏng vấn / trình bày đề cương).
-- **Tự động xử lý quá hạn**: hồ sơ quá hạn bổ sung và thí sinh quá hạn xác nhận nhập học do cán bộ bấm xử lý, chưa có tác vụ chạy định kỳ.
 - **Gửi SMS:** chưa có; mã xác thực và thông báo chỉ gửi qua email.
-- **Màn hình cán bộ xử lý khiếu nại chung:** bảng `complaint` đã có và thí sinh gửi được.
+- **Danh mục ngành và lệ phí tiến sĩ theo thông báo thật**: cần các trang còn lại của thông báo tuyển sinh để nhập đúng danh sách ngành và mức lệ phí xét tuyển tiến sĩ (hiện để tạm 1.000.000 đ).

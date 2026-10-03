@@ -371,6 +371,22 @@ export async function getMySupervisorRequest(): Promise<SupervisorRequest | null
 }
 
 // ---- Khiếu nại / Phúc khảo ----
+export interface MyComplaint {
+  complaintId: number;
+  type: string;
+  typeLabel: string;
+  content: string;
+  status: "PENDING" | "IN_PROGRESS" | "RESOLVED" | "REJECTED";
+  response: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  applicationCode: string | null;
+}
+export async function getMyComplaints(): Promise<MyComplaint[]> {
+  if (USE_MOCK) return delay([]);
+  return request<MyComplaint[]>("/complaints/me");
+}
+
 export async function submitComplaint(payload: { type: string; applicationCode: string; content: string }) {
   if (USE_MOCK) return delay({ success: true });
   return request("/complaints", { method: "POST", body: JSON.stringify(payload) });

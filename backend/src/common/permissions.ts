@@ -27,7 +27,9 @@ export type Permission =
   | "result:propose"
   | "result:approve"
   | "decision:manage"
-  | "decision:sign";
+  | "decision:sign"
+  | "complaint:view"
+  | "complaint:handle";
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -46,9 +48,11 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "score:enter",
     "result:view",
     "decision:manage",
+    "complaint:view",
+    "complaint:handle",
   ],
-  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage", "score:enter", "result:view", "result:propose"],
-  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view", "result:view", "result:approve", "decision:sign"],
+  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage", "score:enter", "result:view", "result:propose", "complaint:view", "complaint:handle"],
+  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view", "result:view", "result:approve", "decision:sign", "complaint:view"],
   ADMIN: ["dashboard:view", "batch:view", "account:manage", "audit:view", "candidate:view", "candidate:manage"],
 };
 

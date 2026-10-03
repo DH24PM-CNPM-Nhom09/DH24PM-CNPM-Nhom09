@@ -4,19 +4,21 @@ import { APP_GUARD } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { AuditModule } from "./common/audit.service";
 import { AuthGuard } from "./common/auth";
+import { JobsService } from "./common/jobs.service";
 import { SystemConfigModule } from "./common/config.service";
 import { MailModule } from "./common/mail.service";
 import { NotificationDispatcher } from "./common/notification-dispatcher";
 import { OtpModule } from "./common/otp.service";
 import { AdminAnnouncementsController, PublicController } from "./modules/announcements/announcements.controller";
 import { AnnouncementsService } from "./modules/announcements/announcements.service";
-import { AppealsController, ApplicationsController, AuditLogsController, BatchesController, CandidateAccountsController, MajorsController, EnglishTestController, DecisionsController, ResultsController, ScoringController, StaffController, SupervisorsController } from "./modules/admin/admin.controller";
+import { AppealsController, ApplicationsController, ComplaintsController, JobsController, AuditLogsController, BatchesController, CandidateAccountsController, MajorsController, EnglishTestController, DecisionsController, ResultsController, ScoringController, StaffController, SupervisorsController } from "./modules/admin/admin.controller";
 import { AppealsService } from "./modules/admin/appeals.service";
 import { ApplicationsService } from "./modules/admin/applications.service";
 import { AuditLogsService } from "./modules/admin/audit-logs.service";
 import { BatchesService } from "./modules/admin/batches.service";
 import { CandidateAccountsService } from "./modules/admin/candidates.service";
 import { MajorsService } from "./modules/admin/majors.service";
+import { ComplaintsService } from "./modules/admin/complaints.service";
 import { EnglishTestService } from "./modules/admin/english-test.service";
 import { EnrollmentService } from "./modules/admin/enrollment.service";
 import { ResultsService } from "./modules/admin/results.service";
@@ -62,6 +64,8 @@ import { PrismaModule } from "./prisma/prisma.service";
     ScoringController,
     ResultsController,
     DecisionsController,
+    ComplaintsController,
+    JobsController,
     MajorsController,
     CandidateController,
     PublicController,
@@ -81,11 +85,13 @@ import { PrismaModule } from "./prisma/prisma.service";
     ScoringService,
     ResultsService,
     EnrollmentService,
+    ComplaintsService,
     MajorsService,
     CandidateService,
     ApplicationFlowService,
     AnnouncementsService,
     NotificationDispatcher,
+    JobsService,
   ],
 })
 export class AppModule {}

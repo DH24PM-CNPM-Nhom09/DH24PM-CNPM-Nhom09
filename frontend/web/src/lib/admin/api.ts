@@ -251,6 +251,11 @@ export interface DashboardData {
   pendingAppeals: number;
   configuringMajors: number;
   lockedAccounts: number;
+  openComplaints?: number;
+  appealFeesPending?: number;
+  resultsAwaitingApproval?: number;
+  decisionsToSign?: number;
+  enrollmentsPending?: number;
   progress: { batchCode: string; batchName: string; rows: { batchMajorId: number; majorName: string; quota: number; submitted: number; approved: number }[] }[];
   recent: AuditLog[];
 }
@@ -1795,5 +1800,46 @@ export async function setOriginals(applicationId: number, status: "VERIFIED" | "
 }
 export async function completeEnrollment(applicationId: number) {
   if (!USE_MOCK) return request<{ success: boolean; transferRef: string }>(`/admin/decisions/enrollment/${applicationId}/complete`, { method: "POST" });
+  return NEED_BACKEND();
+}
+
+// ============================================================================
+// Khiếu nại chung của thí sinh   /admin/complaints
+// ============================================================================
+export type ComplaintStatus = "PENDING" | "IN_PROGRESS" | "RESOLVED" | "REJECTED";
+export interface ComplaintItem {
+  complaintId: number;
+  type: string;
+  typeLabel: string;
+  content: string;
+  status: ComplaintStatus;
+  response: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  handledBy: string | null;
+  candidate: { candidateId: number; fullName: string; email: string; phone: string | null };
+  application: { applicationId: number; applicationCode: string; majorName: string; batchCode: string; reviewStatus: string } | null;
+}
+export interface ComplaintPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: Record<ComplaintStatus, number>;
+  items: ComplaintItem[];
+}
+export async function listComplaints(q: { status?: string; type?: string; search?: string; page?: number }): Promise<ComplaintPage> {
+  if (!USE_MOCK) {
+    const p = new URLSearchParams();
+    Object.entries(q).forEach(([k, v]) => v !== undefined && v !== "" && p.set(k, String(v)));
+    return request<ComplaintPage>(`/admin/complaints?${p.toString()}`);
+  }
+  return delay({ total: 0, page: 1, pageSize: 20, counts: { PENDING: 0, IN_PROGRESS: 0, RESOLVED: 0, REJECTED: 0 }, items: [] });
+}
+export async function acceptComplaint(complaintId: number) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/complaints/${complaintId}/accept`, { method: "PATCH" });
+  return NEED_BACKEND();
+}
+export async function respondComplaint(complaintId: number, status: "RESOLVED" | "REJECTED", response: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/complaints/${complaintId}/respond`, { method: "PATCH", body: JSON.stringify({ status, response }) });
   return NEED_BACKEND();
 }

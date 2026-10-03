@@ -423,6 +423,11 @@ export class ScoringService {
 
   /** Đóng đơn không nộp lệ phí khi đã hết hạn phúc khảo — các điểm giữ nguyên */
   async closeUnpaidAppeal(me: StaffUser, requestId: number) {
+    return this.closeUnpaid({ type: "STAFF", id: me.staffAccountId }, requestId);
+  }
+
+  /** Dùng chung cho cán bộ và tác vụ tự động (actor SYSTEM) */
+  async closeUnpaid(actor: { type: "STAFF" | "SYSTEM"; id: number | null }, requestId: number) {
     const r = await this.prisma.appeal_request.findUnique({ where: { request_id: BigInt(requestId) }, include: { application: { include: { admission_batch_major: true } } } });
     if (!r) notFound("Không tìm thấy đơn phúc khảo.");
     if (r.status !== "CHO_NOP_PHI") conflict("INVALID_STATE", "Chỉ đóng được đơn chưa nộp lệ phí.");
@@ -434,9 +439,9 @@ export class ScoringService {
       const ids = (await tx.score_appeal.findMany({ where: { status: "PENDING", exam_score: { application_id: r.application_id } }, select: { appeal_id: true } })).map((x) => x.appeal_id);
       await tx.score_appeal.updateMany({
         where: { appeal_id: { in: ids } },
-        data: { status: "RESOLVED_UNCHANGED", resolved_at: new Date(), resolved_by_staff_id: BigInt(me.staffAccountId), resolution_note: note },
+        data: { status: "RESOLVED_UNCHANGED", resolved_at: new Date(), resolved_by_staff_id: actor.id === null ? null : BigInt(actor.id), resolution_note: note },
       });
-      await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "APPEAL_CLOSE_UNPAID", { table: "appeal_request", id: r.request_id }, `${r.application.application_code}: đóng đơn phúc khảo chưa nộp lệ phí`, tx);
+      await this.audit.record(actor, "APPEAL_CLOSE_UNPAID", { table: "appeal_request", id: r.request_id }, `${r.application.application_code}: đóng đơn phúc khảo chưa nộp lệ phí`, tx);
       await this.audit.notifyCandidate(id(r.application.candidate_id), "Đơn phúc khảo không được xem xét", `Hồ sơ ${r.application.application_code}: ${note} Điểm xét tuyển giữ nguyên.`, tx);
     });
     return { success: true };

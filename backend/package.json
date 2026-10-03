@@ -12,7 +12,8 @@
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
     "db:seed:demo": "ts-node --transpile-only prisma/seed.ts --demo",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "db:update": "ts-node --transpile-only prisma/update.ts && prisma generate"
+    "db:update": "ts-node --transpile-only prisma/update.ts && prisma generate",
+    "db:backup": "ts-node --transpile-only prisma/backup.ts"
   },
   "engines": {
     "node": ">=18.18"

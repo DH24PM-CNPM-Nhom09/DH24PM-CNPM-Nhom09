@@ -58,6 +58,11 @@ export default function AdminDashboardPage() {
     if (can("appeal:resolve")) queue.push({ count: data.pendingAppeals, text: "đơn phúc khảo chờ hội đồng xử lý", href: "/admin/appeals" });
     if (can("batch:approve")) queue.push({ count: data.configuringMajors, text: "ngành chờ phê duyệt chỉ tiêu", href: "/admin/batches", urgent: true });
     if (can("account:manage")) queue.push({ count: data.lockedAccounts, text: "tài khoản cán bộ đang bị khóa", href: "/admin/accounts" });
+    if (can("complaint:handle")) queue.push({ count: data.openComplaints ?? 0, text: "khiếu nại của thí sinh cần trả lời", href: "/admin/complaints", urgent: true });
+    if (can("appeal:resolve")) queue.push({ count: data.appealFeesPending ?? 0, text: "đơn phúc khảo chờ xác nhận lệ phí", href: "/admin/appeals" });
+    if (can("result:approve")) queue.push({ count: data.resultsAwaitingApproval ?? 0, text: "ngành có kết quả xét tuyển chờ phê duyệt", href: "/admin/results", urgent: true });
+    if (can("decision:sign")) queue.push({ count: data.decisionsToSign ?? 0, text: "quyết định trúng tuyển chờ ký", href: "/admin/decisions", urgent: true });
+    if (can("decision:manage")) queue.push({ count: data.enrollmentsPending ?? 0, text: "thí sinh đã xác nhận nhập học, chờ đối chiếu bản chính / hoàn tất", href: "/admin/decisions" });
   }
   const todo = queue.filter((q) => q.count > 0);
 

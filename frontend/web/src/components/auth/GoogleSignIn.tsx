@@ -130,6 +130,13 @@ export default function GoogleSignIn({
       {mode === "google" && header}
       <div ref={box} className={`flex min-h-[44px] w-full justify-center ${mode === "fallback" ? "hidden" : ""}`} aria-busy={mode === "loading"} />
       {mode === "fallback" && fallback}
+      <p className="mt-2 text-center text-[11.5px] leading-snug text-gray-500">
+        Tiếp tục bằng Google nghĩa là bạn đồng ý với{" "}
+        <a href="/privacy" target="_blank" className="font-semibold text-accent hover:underline">
+          Chính sách bảo vệ dữ liệu cá nhân
+        </a>
+        .
+      </p>
     </>
   );
 }

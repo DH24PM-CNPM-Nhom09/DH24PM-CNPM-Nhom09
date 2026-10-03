@@ -88,6 +88,8 @@ export default function DashboardPage() {
               </div>
             )}
 
+            <AdmissionNotice app={app} />
+
             <div className="mt-5 flex flex-wrap gap-3">
               {app.reviewStatus === "DRAFT" ? (
                 <Link href="/application/new">
@@ -98,8 +100,8 @@ export default function DashboardPage() {
                   <Button variant="primary">Xem chi tiết hồ sơ</Button>
                 </Link>
               )}
-              {app.admissionStatus === "ADMITTED" && (
-                <Link href="/admission-confirm">
+              {app.admission?.enrollment?.canConfirm && (
+                <Link href="/application">
                   <Button variant="secondary">Xác nhận nhập học</Button>
                 </Link>
               )}
@@ -136,7 +138,7 @@ export default function DashboardPage() {
               Kết quả xét tuyển
             </p>
             <p className="mt-2 text-2xl font-extrabold text-gray-900">
-              {app ? admissionStatusLabel[app.admissionStatus] : "—"}
+              {app ? (app.declined ? "Không nhập học" : app.admission?.result && app.admissionStatus === "NONE" ? app.admission.result.label : admissionStatusLabel[app.admissionStatus]) : "—"}
             </p>
           </Card>
           <Card className="p-5">
@@ -175,4 +177,32 @@ export default function DashboardPage() {
       </div>
     </AppLayout>
   );
+}
+
+/** Việc cần làm ở giai đoạn xét tuyển → nhập học (lịch, phúc khảo, kết quả, xác nhận) */
+function AdmissionNotice({ app }: { app: FullApplication }) {
+  const a = app.admission;
+  if (!a || app.declined) return null;
+  const vn = (iso: string | null) => (iso ? new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "");
+  let text: string | null = null;
+  let tone = "bg-info-50 text-[#1D4ED8]";
+  const e = a.enrollment;
+  if (e?.studentCode) {
+    text = `Bạn đã hoàn tất nhập học. Mã học viên: ${e.studentCode}.`;
+    tone = "bg-success-50 text-[#166534]";
+  } else if (e?.canConfirm) {
+    text = `Bạn đã trúng tuyển (Quyết định ${e.decisionNo}). Hãy xác nhận nhập học trước ${vn(e.deadline)}.`;
+    tone = "bg-warning-50 text-[#92400E]";
+  } else if (e?.status === "DA_XAC_NHAN") {
+    text = "Bạn đã xác nhận nhập học. Nộp bản chính hồ sơ tại Phòng Đào tạo Sau đại học để hoàn tất thủ tục.";
+  } else if (a.result) {
+    text = a.result.result === "TRUNG_TUYEN" ? "Chúc mừng, bạn đã trúng tuyển! Quyết định công nhận trúng tuyển sẽ được gửi trên cổng." : a.result.result === "DU_BI" ? `Bạn có tên trong danh sách dự bị, thứ tự ${a.result.waitlistRank ?? ""}.` : "Kết quả xét tuyển đã được công bố.";
+    if (a.result.result === "TRUNG_TUYEN") tone = "bg-success-50 text-[#166534]";
+  } else if (a.scores) {
+    text = a.scores.canAppeal ? `Điểm xét tuyển đã công bố (tổng ${a.scores.total ?? "—"}). Hạn phúc khảo: ${vn(a.scores.appealDeadline)}.` : `Điểm xét tuyển đã công bố (tổng ${a.scores.total ?? "—"}). Chờ công bố kết quả trúng tuyển.`;
+  } else if (a.interview && new Date(a.interview.scheduledAt).getTime() > Date.now()) {
+    text = `Lịch ${a.interviewLabel.toLowerCase()}: ${vn(a.interview.scheduledAt)}${a.interview.location ? `, ${a.interview.location}` : ""}.`;
+  }
+  if (!text) return null;
+  return <div className={`mt-4 rounded-input px-4 py-3 text-[13px] font-medium ${tone}`}>{text}</div>;
 }

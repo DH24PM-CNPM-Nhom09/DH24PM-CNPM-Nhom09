@@ -72,6 +72,7 @@ function RegisterInner() {
         email: form.email.trim().toLowerCase(),
         phoneNumber: form.phoneNumber.replace(/[\s.-]/g, ""),
         password: form.password,
+        agreePrivacy: form.agree,
       });
       setForm((f) => ({ ...f, email: res.email ?? f.email.trim().toLowerCase() }));
       setDevOtp(res.devOtp);
@@ -230,9 +231,13 @@ function RegisterInner() {
             className="mt-0.5 h-4 w-4 shrink-0 accent-[#E8734A]"
           />
           <span>
-            Tôi cam kết thông tin khai là đúng sự thật và đã đọc{" "}
+            Tôi cam kết thông tin khai là đúng sự thật, đã đọc{" "}
             <Link href="/announcements?category=QUY_DINH" target="_blank" className="font-semibold text-accent hover:underline">
               quy định tuyển sinh
+            </Link>{" "}
+            và đồng ý với{" "}
+            <Link href="/privacy" target="_blank" className="font-semibold text-accent hover:underline">
+              Chính sách bảo vệ dữ liệu cá nhân
             </Link>
             .
             {errors.agree && <span className="mt-1 block text-xs font-medium text-danger">{errors.agree}</span>}

@@ -90,7 +90,15 @@ export default function AppLayout({ children, allowGuest = false }: { children: 
             </Link>
           </div>
         </header>
-        <main className="mx-auto max-w-[1100px] px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main className="mx-auto max-w-[1100px] px-4 py-6 md:px-8 md:py-8">
+          {children}
+          <footer className="mx-auto mt-10 max-w-[1100px] border-t border-gray-200 pt-4 pb-20 text-center text-xs text-gray-500 md:pb-4">
+            Phòng Đào tạo Sau đại học — Trường Đại học An Giang, ĐHQG-HCM ·{" "}
+            <Link href="/privacy" className="font-semibold hover:text-accent hover:underline">
+              Chính sách bảo vệ dữ liệu cá nhân
+            </Link>
+          </footer>
+        </main>
       </div>
     );
   }
@@ -177,7 +185,15 @@ export default function AppLayout({ children, allowGuest = false }: { children: 
         )}
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+          {children}
+          <footer className="mx-auto mt-10 max-w-[1100px] border-t border-gray-200 pt-4 pb-20 text-center text-xs text-gray-500 md:pb-4">
+            Phòng Đào tạo Sau đại học — Trường Đại học An Giang, ĐHQG-HCM ·{" "}
+            <Link href="/privacy" className="font-semibold hover:text-accent hover:underline">
+              Chính sách bảo vệ dữ liệu cá nhân
+            </Link>
+          </footer>
+        </main>
       </div>
 
       {/* Bottom nav - mobile */}

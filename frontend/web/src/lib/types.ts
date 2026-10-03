@@ -80,6 +80,8 @@ export interface RegisterPayload {
   email: string;
   phoneNumber: string;
   password: string;
+  /** Đồng ý Chính sách bảo vệ dữ liệu cá nhân (Nghị định 13/2023/NĐ-CP) — bắt buộc */
+  agreePrivacy?: boolean;
 }
 
 export interface Application {

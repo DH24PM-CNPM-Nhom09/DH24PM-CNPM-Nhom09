@@ -3,6 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { asCandidate, CandidateOnly, CurrentUser, type AuthUser } from "../../common/auth";
 import { str } from "../../common/util";
+import { ComplaintsService } from "../admin/complaints.service";
 import { EnrollmentService } from "../admin/enrollment.service";
 import { ScoringService } from "../admin/scoring.service";
 import { SupervisorsService } from "../admin/supervisors.service";
@@ -19,7 +20,15 @@ export class CandidateController {
     private readonly supervisors: SupervisorsService,
     private readonly scoring: ScoringService,
     private readonly enrollment: EnrollmentService,
+    private readonly complaints: ComplaintsService,
   ) {}
+
+  /** Khiếu nại thí sinh đã gửi, kèm trạng thái và câu trả lời của Nhà trường */
+  @Get("complaints/me")
+  myComplaints(@CurrentUser() user: AuthUser) {
+    const me = asCandidate(user);
+    return me.candidateId ? this.complaints.mine(me.candidateId) : [];
+  }
 
   private cid(user: AuthUser) {
     const me = asCandidate(user);

@@ -8,6 +8,8 @@ import { AuditLogsService } from "./audit-logs.service";
 import { BatchesService } from "./batches.service";
 import { CandidateAccountsService } from "./candidates.service";
 import { MajorsService } from "./majors.service";
+import { JobsService } from "../../common/jobs.service";
+import { ComplaintsService } from "./complaints.service";
 import { EnglishTestService } from "./english-test.service";
 import { EnrollmentService } from "./enrollment.service";
 import { ResultsService } from "./results.service";
@@ -552,5 +554,42 @@ export class DecisionsController {
   @RequirePermission("decision:manage")
   complete(@CurrentUser() user: AuthUser, @Param("applicationId", ParseIntPipe) applicationId: number) {
     return this.svc.complete(asStaff(user), applicationId);
+  }
+}
+
+// ============================================================ Khiếu nại chung của thí sinh
+@Controller("admin/complaints")
+export class ComplaintsController {
+  constructor(private readonly svc: ComplaintsService) {}
+
+  @Get()
+  @RequirePermission("complaint:view")
+  list(@Query() q: Q) {
+    return this.svc.list(q);
+  }
+
+  @Patch(":id/accept")
+  @RequirePermission("complaint:handle")
+  accept(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    return this.svc.accept(asStaff(user), id);
+  }
+
+  @Patch(":id/respond")
+  @RequirePermission("complaint:handle")
+  respond(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.respond(asStaff(user), id, body);
+  }
+}
+
+// ============================================================ Tác vụ tự động (chạy ngay để kiểm tra)
+@Controller("admin/jobs")
+export class JobsController {
+  constructor(private readonly jobs: JobsService) {}
+
+  @Post("run")
+  @HttpCode(200)
+  @RequirePermission("batch:manage")
+  run() {
+    return this.jobs.runAll();
   }
 }

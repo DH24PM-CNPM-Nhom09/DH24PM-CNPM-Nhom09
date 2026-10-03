@@ -301,10 +301,15 @@ export class EnrollmentService {
 
   /** Quá hạn mà chưa xác nhận -> xem như từ chối, gọi dự bị */
   async processOverdue(me: StaffUser, batchId: number) {
+    return this.expireOverdue({ type: "STAFF", id: me.staffAccountId }, batchId);
+  }
+
+  /** Dùng chung cho nút "Xử lý quá hạn" và tác vụ tự động (actor SYSTEM, batchId null = mọi đợt) */
+  async expireOverdue(actor: { type: "STAFF" | "SYSTEM"; id: number | null }, batchId: number | null) {
     return this.prisma.$transaction(
       async (tx) => {
         const rows = await tx.enrollment_confirmation.findMany({
-          where: { status: "CHUA_XAC_NHAN", deadline: { lt: new Date() }, application: { admission_batch_major: { batch_id: BigInt(batchId) } } },
+          where: { status: "CHUA_XAC_NHAN", deadline: { lt: new Date() }, ...(batchId !== null ? { application: { admission_batch_major: { batch_id: BigInt(batchId) } } } : {}) },
           include: { application: true },
         });
         const bms = new Set<bigint>();
@@ -319,9 +324,9 @@ export class EnrollmentService {
           bms.add(c.application.batch_major_id);
         }
         let promoted = 0;
-        for (const bm of bms) promoted += (await this.results.promoteFromWaitlist(tx, bm, { type: "STAFF", id: me.staffAccountId })).length;
+        for (const bm of bms) promoted += (await this.results.promoteFromWaitlist(tx, bm, actor)).length;
         if (rows.length)
-          await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "ENROLL_OVERDUE", { table: "enrollment_confirmation", id: null }, `Xử lý ${rows.length} thí sinh quá hạn xác nhận nhập học (${rows.map((r) => r.application.application_code).join(", ")}), gọi ${promoted} dự bị`, tx);
+          await this.audit.record(actor, "ENROLL_OVERDUE", { table: "enrollment_confirmation", id: null }, `Xử lý ${rows.length} thí sinh quá hạn xác nhận nhập học (${rows.map((r) => r.application.application_code).join(", ")}), gọi ${promoted} dự bị`, tx);
         return { expired: rows.length, promoted };
       },
       { timeout: 60_000 },

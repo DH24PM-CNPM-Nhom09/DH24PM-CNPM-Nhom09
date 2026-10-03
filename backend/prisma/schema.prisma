@@ -342,6 +342,7 @@ model candidate_account {
   locked_until       DateTime?          @db.DateTime(0)
   deleted_at         DateTime?          @db.DateTime(0)
   created_at         DateTime           @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  privacy_consent_at DateTime?          @db.DateTime(0)
   candidate          candidate?
   otp_verification   otp_verification[]
 }

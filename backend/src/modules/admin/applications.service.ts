@@ -157,6 +157,14 @@ export class ApplicationsService {
       can(me.roles, "audit:view") ? this.prisma.audit_log.findMany({ orderBy: { created_at: "desc" }, take: 6 }) : Promise.resolve([]),
     ]);
 
+    // Việc tồn của giai đoạn xét tuyển → nhập học và khiếu nại
+    const [openComplaints, appealFeesPending, proposedResults, decisionsToSign, enrollmentsPending] = await Promise.all([
+      this.prisma.complaint.count({ where: { status: { in: ["PENDING", "IN_PROGRESS"] } } }),
+      this.prisma.appeal_request.count({ where: { status: "CHO_NOP_PHI" } }),
+      this.prisma.admission_result.findMany({ where: { approved_by_staff_id: { not: null }, published_at: null }, select: { application: { select: { batch_major_id: true } } } }),
+      this.prisma.admission_decision.count({ where: { status: "PENDING_SIGN" } }),
+      this.prisma.enrollment_confirmation.count({ where: { status: "DA_XAC_NHAN", application: { OR: [{ enrollment_completion: { is: null } }, { enrollment_completion: { is: { completed_at: null } } }] } } }),
+    ]);
     const statusCounts: Record<string, number> = { DRAFT: 0, SUBMITTED: 0, UNDER_REVIEW: 0, NEEDS_SUPPLEMENT: 0, APPROVED: 0, REJECTED: 0 };
     grouped.forEach((g) => (statusCounts[g.review_status] = g._count._all));
 
@@ -169,6 +177,11 @@ export class ApplicationsService {
       pendingAppeals,
       configuringMajors: configuring,
       lockedAccounts: locked,
+      openComplaints,
+      appealFeesPending,
+      resultsAwaitingApproval: new Set(proposedResults.map((r) => String(r.application.batch_major_id))).size,
+      decisionsToSign,
+      enrollmentsPending,
       progress: openBatches.map((b) => ({
         batchCode: b.batch_code,
         batchName: b.batch_name,

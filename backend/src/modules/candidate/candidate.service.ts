@@ -257,6 +257,7 @@ export class CandidateService {
     const c = await this.prisma.$transaction(async (tx) => {
       const row = await tx.complaint.create({ data: { candidate_id: BigInt(candidateId), application_id: applicationId, complaint_type: type, content } });
       await this.audit.record({ type: "CANDIDATE", id: candidateId }, "COMPLAINT_SUBMIT", { table: "complaint", id: row.complaint_id }, `${type}${code ? `, hồ sơ ${code}` : ""}`, tx);
+      await this.audit.notifyCandidate(candidateId, "Đã nhận khiếu nại", `Nhà trường đã nhận yêu cầu của bạn${code ? ` (hồ sơ ${code})` : ""}. Bạn theo dõi trạng thái và câu trả lời tại mục Khiếu nại trên cổng thí sinh.`, tx);
       return row;
     });
     return { success: true, complaintId: id(c.complaint_id) };

@@ -144,7 +144,8 @@ export class AuthService {
     let account = await this.prisma.candidate_account.findFirst({ where: { email, deleted_at: null }, include: { candidate: true } });
     if (!account) {
       // Lần đầu đăng nhập Google: tạo tài khoản; hồ sơ cá nhân (bảng candidate) khai sau ở trang Hồ sơ cá nhân
-      account = await this.prisma.candidate_account.create({ data: { username: email, email, status: "ACTIVE" }, include: { candidate: true } });
+      // Màn hình đăng nhập Google ghi rõ "tiếp tục là đồng ý Chính sách bảo vệ dữ liệu cá nhân"
+      account = await this.prisma.candidate_account.create({ data: { username: email, email, status: "ACTIVE", privacy_consent_at: new Date() }, include: { candidate: true } });
     } else if (account.status === "LOCKED") {
       fail("ACCOUNT_LOCKED", LOCKED_BY_STAFF, HttpStatus.FORBIDDEN);
     } else if (account.status !== "ACTIVE") {
@@ -229,6 +230,7 @@ export class AuthService {
     if (!/^0\d{9}$/.test(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))
       fail("WEAK_PASSWORD", "Mật khẩu cần ít nhất 8 ký tự, gồm cả chữ và số.");
+    if (body.agreePrivacy !== true) fail("CONSENT_REQUIRED", "Bạn cần đồng ý với Chính sách bảo vệ dữ liệu cá nhân để tạo tài khoản.");
 
     const existing = await this.prisma.candidate_account.findFirst({ where: { email }, include: { candidate: true } });
     if (existing && (existing.status !== "PENDING_VERIFY" || existing.deleted_at))
@@ -240,14 +242,14 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 10);
     const accountId = await this.prisma.$transaction(async (tx) => {
       if (existing) {
-        await tx.candidate_account.update({ where: { account_id: existing.account_id }, data: { phone_number: phone, password_hash: passwordHash } });
+        await tx.candidate_account.update({ where: { account_id: existing.account_id }, data: { phone_number: phone, password_hash: passwordHash, privacy_consent_at: new Date() } });
         if (existing.candidate)
           await tx.candidate.update({ where: { candidate_id: existing.candidate.candidate_id }, data: { full_name: fullName, dob } });
         else await tx.candidate.create({ data: { account_id: existing.account_id, full_name: fullName, dob, nationality: "Việt Nam" } });
         return existing.account_id;
       }
       const acc = await tx.candidate_account.create({
-        data: { username: email, email, phone_number: phone, password_hash: passwordHash, status: "PENDING_VERIFY" },
+        data: { username: email, email, phone_number: phone, password_hash: passwordHash, status: "PENDING_VERIFY", privacy_consent_at: new Date() },
       });
       await tx.candidate.create({ data: { account_id: acc.account_id, full_name: fullName, dob, nationality: "Việt Nam" } });
       return acc.account_id;

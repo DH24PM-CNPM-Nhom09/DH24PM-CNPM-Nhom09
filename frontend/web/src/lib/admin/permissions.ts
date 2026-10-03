@@ -30,7 +30,9 @@ export type Permission =
   | "result:propose" // hội đồng: định điểm chuẩn, xếp hạng, thông qua kết quả (cấp 1)
   | "result:approve" // lãnh đạo: phê duyệt và công bố kết quả (cấp 2)
   | "decision:manage" // lập quyết định trúng tuyển, theo dõi xác nhận nhập học, nhận bản chính, hoàn tất nhập học
-  | "decision:sign"; // lãnh đạo ký ban hành quyết định trúng tuyển
+  | "decision:sign" // lãnh đạo ký ban hành quyết định trúng tuyển
+  | "complaint:view" // xem khiếu nại của thí sinh
+  | "complaint:handle"; // tiếp nhận, trả lời khiếu nại
 
 export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
   CAN_BO_TUYEN_SINH: [
@@ -49,9 +51,11 @@ export const PERMISSION_MATRIX: Record<RoleCode, Permission[]> = {
     "score:enter",
     "result:view",
     "decision:manage",
+    "complaint:view",
+    "complaint:handle",
   ],
-  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage", "score:enter", "result:view", "result:propose"],
-  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view", "result:view", "result:approve", "decision:sign"],
+  HOI_DONG: ["dashboard:view", "application:view", "batch:view", "appeal:view", "appeal:resolve", "supervisor:manage", "score:enter", "result:view", "result:propose", "complaint:view", "complaint:handle"],
+  LANH_DAO_KHOA: ["dashboard:view", "application:view", "batch:view", "batch:approve", "appeal:view", "audit:view", "result:view", "result:approve", "decision:sign", "complaint:view"],
   // Admin là quản trị KỸ THUẬT: cấp tài khoản, phân quyền, xem nhật ký — không
   // tham gia thẩm định hồ sơ (tách bạch trách nhiệm theo tài liệu Vai trò người dùng).
   ADMIN: ["dashboard:view", "batch:view", "account:manage", "audit:view", "candidate:view", "candidate:manage"],
