@@ -1,36 +1,47 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
-import { Request, Response } from 'express';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 
-/**
- * Chuan hoa format loi tra ve cho toan bo API, kem traceId de DevOps
- * (Vo Truong Hai, Nguyen Thanh Luan) gan vao he thong log/monitoring.
- */
+/** Chuẩn lỗi Frontend: { error_code, message, detail? } */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger('HttpException');
-
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const res = ctx.getResponse();
 
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
-    const message =
-      exception instanceof HttpException ? exception.getResponse() : 'Loi he thong khong xac dinh';
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let error_code = 'UNKNOWN';
+    let message = 'Đã có lỗi xảy ra';
+    let detail: string | undefined;
 
-    const traceId = (request.headers['x-trace-id'] as string) ?? crypto.randomUUID();
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const body = exception.getResponse();
+      if (typeof body === 'string') {
+        message = body;
+        error_code = HttpStatus[status] ?? 'ERROR';
+      } else if (typeof body === 'object' && body) {
+        const o = body as Record<string, unknown>;
+        error_code = String(o.error_code ?? o.code ?? HttpStatus[status] ?? 'ERROR');
+        if (Array.isArray(o.message)) {
+          message = (o.message as string[]).join(', ');
+        } else {
+          message = String(o.message ?? message);
+        }
+        detail = o.detail != null ? String(o.detail) : undefined;
+      }
+    } else if (exception instanceof Error) {
+      message = exception.message;
+    }
 
-    this.logger.error(
-      JSON.stringify({ traceId, path: request.url, method: request.method, status, message }),
-    );
-
-    response.status(status).json({
-      statusCode: status,
-      traceId,
-      path: request.url,
-      timestamp: new Date().toISOString(),
+    res.status(status).json({
+      error_code,
       message,
+      ...(detail ? { detail } : {}),
     });
   }
 }

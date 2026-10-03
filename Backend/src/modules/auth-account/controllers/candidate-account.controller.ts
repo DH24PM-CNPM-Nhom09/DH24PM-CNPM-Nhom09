@@ -1,22 +1,21 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { CandidateAccountService } from '../services/candidate-account.service';
-import { RegisterCandidateDto } from '../dto/register-candidate.dto';
-import { VerifyOtpDto } from '../dto/verify-otp.dto';
-import { Public } from '../../../common/decorators/public.decorator';
+import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
+import { UpdateProfileDto } from '../dto/update-profile.dto';
 
 @Controller('candidates')
 export class CandidateAccountController {
   constructor(private readonly candidateAccountService: CandidateAccountService) {}
 
-  @Public()
-  @Post('register')
-  register(@Body() dto: RegisterCandidateDto) {
-    return this.candidateAccountService.register(dto);
+  /** GET /api/v1/candidates/me */
+  @Get('me')
+  getMyProfile(@CurrentUser() user: JwtPayload) {
+    return this.candidateAccountService.getMyProfile(user);
   }
 
-  @Public()
-  @Post(':accountId/verify-otp')
-  verify(@Param('accountId') accountId: string, @Body() dto: VerifyOtpDto) {
-    return this.candidateAccountService.verifyRegistration(BigInt(accountId));
+  /** PATCH /api/v1/candidates/me */
+  @Patch('me')
+  updateMyProfile(@CurrentUser() user: JwtPayload, @Body() dto: UpdateProfileDto) {
+    return this.candidateAccountService.updateMyProfile(user, dto);
   }
 }

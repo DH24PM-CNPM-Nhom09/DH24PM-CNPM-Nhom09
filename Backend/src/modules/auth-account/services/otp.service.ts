@@ -1,41 +1,67 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 
-/**
- * OtpService
- * Business rule: moi (accountId, purpose) chi duoc 1 OTP con hieu luc tai
- * 1 thoi diem - tao OTP moi phai vo hieu OTP cu cung accountId + purpose.
- *
- * LUU Y: bang otp_verification trong ERD tong hop moi chi liet ke
- * (otp_id, account_id, purpose, expires_at). Truoc khi code that, bo sung
- * cot luu ma OTP (vi du otp_code_hash) vao schema - can QA (Lam Hoai An)
- * xac nhan lai cot chinh xac trong admission_db_v3.sql.
- */
 @Injectable()
 export class OtpService {
+  private readonly logger = new Logger(OtpService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
-  async generate(accountId: bigint, purpose: 'REGISTER' | 'RESET_PASSWORD') {
+  async generate(
+    accountId: bigint,
+    purpose: 'REGISTER' | 'RESET_PASSWORD',
+  ): Promise<{ plainOtp: string; expiresAt: Date }> {
     const ttlSeconds = Number(process.env.OTP_TTL_SECONDS ?? 300);
+    const plainOtp = crypto.randomInt(100000, 999999).toString();
+    const otpCodeHash = await bcrypt.hash(plainOtp, 10);
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
-    return this.prisma.$transaction(async (tx) => {
-      // Vo hieu moi OTP cu cung purpose truoc khi tao moi.
+    await this.prisma.$transaction(async (tx) => {
       await tx.otpVerification.deleteMany({ where: { accountId, purpose } });
-
-      const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-      return tx.otpVerification.create({ data: { accountId, purpose, expiresAt } });
+      await tx.otpVerification.create({
+        data: { accountId, purpose, otpCodeHash, expiresAt },
+      });
     });
+
+    if (process.env.OTP_DEV_LOG === 'true') {
+      this.logger.warn(`[DEV OTP] accountId=${accountId} purpose=${purpose} otp=${plainOtp}`);
+    }
+
+    return { plainOtp, expiresAt };
   }
 
-  async verify(accountId: bigint, purpose: 'REGISTER' | 'RESET_PASSWORD') {
+  async verify(
+    accountId: bigint,
+    purpose: 'REGISTER' | 'RESET_PASSWORD',
+    plainOtp: string,
+  ): Promise<true> {
     const otp = await this.prisma.otpVerification.findFirst({
       where: { accountId, purpose },
       orderBy: { otpId: 'desc' },
     });
 
-    if (!otp) throw new BadRequestException('Khong tim thay OTP, vui long yeu cau gui lai');
+    if (!otp) {
+      throw new BadRequestException({
+        error_code: 'OTP_NOT_FOUND',
+        message: 'Không tìm thấy OTP, vui lòng yêu cầu gửi lại',
+      });
+    }
+
     if (otp.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('OTP da het han, vui long yeu cau gui lai');
+      throw new BadRequestException({
+        error_code: 'OTP_EXPIRED',
+        message: 'OTP đã hết hạn, vui lòng yêu cầu gửi lại',
+      });
+    }
+
+    const match = await bcrypt.compare(plainOtp, otp.otpCodeHash);
+    if (!match) {
+      throw new BadRequestException({
+        error_code: 'OTP_INVALID',
+        message: 'Mã OTP không đúng',
+      });
     }
 
     await this.prisma.otpVerification.delete({ where: { otpId: otp.otpId } });

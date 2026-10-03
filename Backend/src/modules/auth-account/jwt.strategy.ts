@@ -1,7 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -9,11 +8,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET,
+      secretOrKey: process.env.JWT_SECRET ?? 'dev-secret-change-me',
     });
   }
 
-  async validate(payload: AuthenticatedUser): Promise<AuthenticatedUser> {
-    return payload;
+  validate(payload: { id: string; type: 'STAFF' | 'CANDIDATE'; roleCodes?: string[] }) {
+    if (!payload?.id || !payload?.type) {
+      throw new UnauthorizedException({
+        error_code: 'INVALID_TOKEN',
+        message: 'Token không hợp lệ',
+      });
+    }
+    return { id: payload.id, type: payload.type, roleCodes: payload.roleCodes ?? [] };
   }
 }

@@ -3,12 +3,6 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
-/**
- * Bao ve moi route can dang nhap (staff hoac candidate).
- * Ap dung global trong app.module.ts (APP_GUARD) - route public danh dau
- * bang @Public() se duoc bo qua (vd: /auth/login, /auth/google,
- * /candidates/register, /health).
- */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(private readonly reflector: Reflector) {

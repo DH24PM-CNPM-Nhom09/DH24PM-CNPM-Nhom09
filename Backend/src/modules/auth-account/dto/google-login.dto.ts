@@ -1,9 +1,12 @@
-import { IsIn, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class GoogleLoginDto {
   @IsString()
-  idToken: string;
+  @IsNotEmpty()
+  idToken!: string;
 
-  @IsIn(['STAFF', 'CANDIDATE'])
-  accountType: 'STAFF' | 'CANDIDATE';
+  /** STAFF | CANDIDATE — mặc định CANDIDATE cho cổng thí sinh */
+  @IsOptional()
+  @IsString()
+  accountType?: 'STAFF' | 'CANDIDATE';
 }

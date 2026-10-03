@@ -1,82 +1,163 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import { LoginDto } from '../dto/login.dto';
+import { OtpService } from './otp.service';
 import { GoogleLoginDto } from '../dto/google-login.dto';
+import { ForgotPasswordDto } from '../dto/forgot-password.dto';
+import { ResetPasswordDto } from '../dto/reset-password.dto';
 
-/**
- * AuthService - dang nhap kep: mat khau (du phong) + Google (chinh).
- *
- * Business rule (theo migration_v3_GD3.sql - hang 1):
- * password_hash la NULLABLE. Neu tai khoan co password_hash = NULL nghia la
- * tai khoan CHI dang ky qua Google -> phai chan dang nhap bang mat khau va
- * tra loi ro rang, KHONG duoc tra loi chung chung "sai mat khau" (gay nham
- * lan cho nguoi dung).
- */
 @Injectable()
 export class AuthService {
   private readonly googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly otpService: OtpService,
+  ) {}
 
-  async loginStaff(dto: LoginDto) {
-    const staff = await this.prisma.staffAccount.findUnique({
-      where: { email: dto.email },
-      include: { staffRoles: { include: { role: true } } },
-    });
-    if (!staff) throw new UnauthorizedException('Email hoac mat khau khong dung');
-
-    if (!staff.passwordHash) {
-      // Dung 1 loi rieng thay vi loi sai mat khau chung chung.
-      throw new BadRequestException({
-        code: 'ERR_PASSWORD_LOGIN_DISABLED',
-        message: 'Tai khoan nay chi dang nhap bang Google. Vui long dung nut "Dang nhap Google".',
+  /**
+   * POST /auth/google — body: { idToken }
+   * Response Frontend: { accessToken: string }
+   */
+  async loginWithGoogle(dto: GoogleLoginDto) {
+    const payload = await this.verifyGoogleIdToken(dto.idToken);
+    const email = (payload as { email?: string }).email;
+    if (!email) {
+      throw new UnauthorizedException({
+        error_code: 'INVALID_GOOGLE_TOKEN',
+        message: 'Google token không hợp lệ',
       });
     }
 
-    const passwordMatches = await bcrypt.compare(dto.password, staff.passwordHash);
-    if (!passwordMatches) throw new UnauthorizedException('Email hoac mat khau khong dung');
+    const accountType = dto.accountType ?? 'CANDIDATE';
 
-    const roleCodes = staff.staffRoles.map((sr) => sr.role.roleCode);
-    return this.issueJwt({ id: staff.staffAccountId.toString(), type: 'STAFF', roleCodes });
-  }
-
-  async loginWithGoogle(dto: GoogleLoginDto) {
-    const payload = await this.verifyGoogleIdToken(dto.idToken);
-    const email = (payload as any).email;
-    if (!email) throw new UnauthorizedException('Google token khong hop le');
-
-    if (dto.accountType === 'STAFF') {
+    if (accountType === 'STAFF') {
       const staff = await this.prisma.staffAccount.findUnique({
         where: { email },
         include: { staffRoles: { include: { role: true } } },
       });
-      if (!staff) throw new UnauthorizedException('Tai khoan can bo chua ton tai trong he thong');
+      if (!staff) {
+        throw new UnauthorizedException({
+          error_code: 'STAFF_NOT_FOUND',
+          message: 'Tài khoản cán bộ chưa tồn tại trong hệ thống',
+        });
+      }
       const roleCodes = staff.staffRoles.map((sr) => sr.role.roleCode);
-      return this.issueJwt({ id: staff.staffAccountId.toString(), type: 'STAFF', roleCodes });
+      return this.issueJwt({
+        id: staff.staffAccountId.toString(),
+        type: 'STAFF',
+        roleCodes,
+      });
     }
 
-    const candidateAccount = await this.prisma.candidateAccount.findUnique({ where: { email } });
-    if (!candidateAccount) throw new UnauthorizedException('Tai khoan chua dang ky, vui long dang ky truoc');
-    return this.issueJwt({ id: candidateAccount.accountId.toString(), type: 'CANDIDATE', roleCodes: [] });
+    // CANDIDATE — auto-provision nếu chưa có (Google lần đầu)
+    let account = await this.prisma.candidateAccount.findUnique({ where: { email } });
+    if (!account) {
+      const username = email.split('@')[0].slice(0, 40) + '_' + Date.now().toString(36).slice(-4);
+      account = await this.prisma.candidateAccount.create({
+        data: {
+          username,
+          email,
+          phoneNumber: `g_${Date.now()}`, // placeholder unique; user cập nhật sau
+          passwordHash: null,
+          status: 'DANG_HOAT_DONG',
+        },
+      });
+      await this.prisma.candidate.create({
+        data: {
+          accountId: account.accountId,
+          fullName: (payload as { name?: string }).name ?? email,
+        },
+      });
+    }
+
+    return this.issueJwt({
+      id: account.accountId.toString(),
+      type: 'CANDIDATE',
+      roleCodes: [],
+    });
+  }
+
+  /**
+   * POST /auth/forgot-password — body: { emailOrPhone }
+   */
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const account = await this.findAccountByEmailOrPhone(dto.emailOrPhone);
+    // Không lộ thông tin tài khoản có tồn tại hay không
+    if (!account) {
+      return { sent: true };
+    }
+
+    const { plainOtp } = await this.otpService.generate(account.accountId, 'RESET_PASSWORD');
+    // TODO: gửi email/SMS. Hiện OTP_DEV_LOG=true sẽ in ra console.
+    void plainOtp;
+
+    return { sent: true };
+  }
+
+  /**
+   * POST /auth/reset-password — body: { emailOrPhone, otp, newPassword }
+   */
+  async resetPassword(dto: ResetPasswordDto) {
+    const account = await this.findAccountByEmailOrPhone(dto.emailOrPhone);
+    if (!account) {
+      throw new BadRequestException({
+        error_code: 'ACCOUNT_NOT_FOUND',
+        message: 'Không tìm thấy tài khoản',
+      });
+    }
+
+    await this.otpService.verify(account.accountId, 'RESET_PASSWORD', dto.otp);
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.candidateAccount.update({
+      where: { accountId: account.accountId },
+      data: { passwordHash },
+    });
+
+    return { success: true };
   }
 
   async hashPassword(plain: string): Promise<string> {
     return bcrypt.hash(plain, 10);
   }
 
-  private async verifyGoogleIdToken(idToken: string) {
-    const ticket = await this.googleClient.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+  private async findAccountByEmailOrPhone(emailOrPhone: string) {
+    const v = emailOrPhone.trim();
+    return this.prisma.candidateAccount.findFirst({
+      where: {
+        OR: [{ email: v }, { phoneNumber: v }],
+      },
     });
-    return ticket.getPayload() ?? {};
+  }
+
+  private async verifyGoogleIdToken(idToken: string) {
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      return ticket.getPayload() ?? {};
+    } catch {
+      // Dev fallback: cho phép idToken dạng "dev:<email>" khi NODE_ENV=development
+      if (process.env.NODE_ENV === 'development' && idToken.startsWith('dev:')) {
+        return { email: idToken.slice(4), name: 'Dev User' };
+      }
+      throw new UnauthorizedException({
+        error_code: 'INVALID_GOOGLE_TOKEN',
+        message: 'Google token không hợp lệ hoặc đã hết hạn',
+      });
+    }
   }
 
   private issueJwt(user: { id: string; type: 'STAFF' | 'CANDIDATE'; roleCodes: string[] }) {
     const accessToken = this.jwt.sign(user);
-    return { accessToken, user };
+    return { accessToken };
   }
 }

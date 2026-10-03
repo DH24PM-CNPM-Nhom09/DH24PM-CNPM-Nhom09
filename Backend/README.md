@@ -1,35 +1,70 @@
-# DH24PM-CNPM-Nhom09
-## 👥 Danh Sách Thành Viên & Phân Công Vai Trò
+# Backend — Cầu nối Frontend (Candidate API)
 
-Dưới đây là danh sách thành viên tham gia dự án và vai trò đảm nhiệm:
+Backend NestJS **khớp 100% contract** của nhánh `Frontend`:
 
-| STT | Họ và Tên | Vai Trò | Nhiệm Vụ Chính | Liên Hệ |
-| :--- | :--- | :--- | :--- | :--- |
-| 1 | **Thái Hoàng Minh** | Team Lead | Chịu trách nhiệm quản lý backlog, làm cầu nối trao đổi với Giảng viên và các nhóm khác, điều phối tiến độ công việc và phân chia task trong Sprint. | minh_dpm235451@student.agu.edu.vn  |
-| 2 | **Châu Minh Tuệ** |  Frontend / Mobile Developers | Chịu trách nhiệm xây dựng giao diện người dùng web (Next.js) đảm bảo đồng bộ UI/UX theo Design System chung. | [Email](mailto:b@example.com) / [Frontend](./Frontend) |
-| 3 | **Nguyễn Phúc Khang** | Frontend / Mobile Developers | Chịu trách nhiệm xây dựng giao diện người dùng ứng dụng di động (Flutter)  | [Email](mailto:c@example.com) / [Frontend](./Frontend) |
-| 4 | **Lê Phước Hào**| Backend Developers | Chịu trách nhiệm xây dựng API, xử lý nghiệp vụ cốt lõi (Business Logic) bằng NestJS hoặc Spring Boot theo kiến trúc Clean Architecture / Modular Monolith. | [Email](mailto:d@example.com) / [Backend](./Backend) |
-| 5 | **Phạm Lư Gia Quân** | Backend Developers | Chịu trách nhiệm xây dựng API, xử lý nghiệp vụ cốt lõi (Business Logic) bằng NestJS hoặc Spring Boot theo kiến trúc Clean Architecture / Modular Monolith. | [Email](mailto:e@example.com) / [Backend](./Backend) |
-| 6 | **Phan Minh Trí** | Backend Developers | Chịu trách nhiệm xây dựng API, xử lý nghiệp vụ cốt lõi (Business Logic) bằng NestJS hoặc Spring Boot theo kiến trúc Clean Architecture / Modular Monolith. | [Email](mailto:b@example.com) / [Backend](./Backend) |
-| 7 | **Võ Trường Hải** | DevOps / Cloud Engineer | Chịu trách nhiệm cấu hình hạ tầng, thiết lập quy trình CI/CD (GitHub Actions), container hóa dịch vụ với Docker và quản lý môi trường triển khai. | [Email](mailto:b@example.com) / [DevOps-Infrastructure](./DevOps-Infrastructure) |
-| 8 | **Nguyễn Thành Luân** | DevOps / Cloud Engineer | Chịu trách nhiệm cấu hình hạ tầng, thiết lập quy trình CI/CD (GitHub Actions), container hóa dịch vụ với Docker và quản lý môi trường triển khai. | [Email](mailto:b@example.com) / [DevOps-Infrastructure](./DevOps-Infrastructure) |
-| 9 | **Lâm Hoài An** | QA / Security & Data Specialist | Chịu trách nhiệm viết Unit/Integration Tests, kiểm tra bảo mật, chuẩn hóa dữ liệu, thiết lập cơ sở dữ liệu (PostgreSQL/Redis) và kiểm soát chất lượng mã nguồn trước khi tạo Pull Request. | [Email](mailto:b@example.com) / [QA-Testing](./QA-Testing) |
----
+- `frontend/web/src/lib/api.ts`
+- `frontend/web/src/lib/types.ts`
 
-## 🔗 Liên Kết Đến Các Phân Hệ (Repository Links)
+## API đã implement
 
-Dự án được chia thành các phân hệ mã nguồn độc lập. Vui lòng truy cập theo các đường dẫn dưới đây để xem chi tiết mã nguồn của từng bộ phận:
+| Frontend hàm | Method + Path | Auth |
+|--------------|---------------|------|
+| `loginWithGoogle` | `POST /api/v1/auth/google` | Public |
+| `requestPasswordResetOtp` | `POST /api/v1/auth/forgot-password` | Public |
+| `resetPassword` | `POST /api/v1/auth/reset-password` | Public |
+| `getMyProfile` | `GET /api/v1/candidates/me` | Bearer |
+| `updateMyProfile` | `PATCH /api/v1/candidates/me` | Bearer |
+| `getMyApplication` | `GET /api/v1/applications/me` | Bearer |
+| `getMyDocuments` | `GET /api/v1/applications/me/documents` | Bearer |
+| `uploadDocument` | `POST /api/v1/applications/:id/documents` | Bearer + multipart |
+| `getMySupervisorRequest` | `GET /api/v1/applications/me/supervisor-request` | Bearer |
+| `submitComplaint` | `POST /api/v1/complaints` | Bearer |
+| Health | `GET /health` | Public |
 
-*   🌐 **Phân hệ Frontend:** [Xem Thư Mục Frontend](./Frontend)
-*   ⚙️ **Phân hệ Backend:** [Xem Thư Mục Backend](./Backend)
-*   ☁️ **Cấu hình DevOps/Infrastructure:** [Xem Thư Mục DevOps-Infrastructure](./DevOps-Infrastructure)
-*   🛡️ **Kịch bản Kiểm thử QA/Testing:** [Xem Thư Mục QA-Testing](./QA-Testing)
+## Đã sửa so với Backend cũ
 
----
+1. **OTP** — lưu `otp_code_hash`, verify đúng mã từ client  
+2. **Auth** — `forgot-password` / `reset-password` đúng body Frontend  
+3. **Profile** — `GET/PATCH /candidates/me` lấy identity từ JWT  
+4. **Application** — `/applications/me` trả **1 object** + enum map đúng `types.ts`  
+5. **Upload** — multipart `file` + `documentType`, giới hạn 5MB  
+6. **Supervisor / Complaint** — đủ endpoint Frontend gọi  
+7. **Lỗi** — `{ error_code, message, detail? }`  
+8. **Health** — `/health` ngoài prefix `/api/v1`  
 
-## 🛠️ Công Nghệ Sử Dụng
+## Chạy local
 
-*   **Frontend:** ...
-*   **Backend:** ...
-*   **DevOps:** ...
-*   **QA:** ...
+```bash
+cp .env.example .env
+# Sửa DATABASE_URL, JWT_SECRET, GOOGLE_CLIENT_ID
+
+# Chạy SQL bổ sung cột (nếu DB đã có sẵn)
+mysql -u ... admission_db < prisma/migration_frontend_bridge.sql
+
+npm install
+npx prisma generate
+npx prisma db push   # hoặc migrate
+npm run start:dev
+```
+
+## Bật Frontend thật
+
+Trong `frontend/web`:
+
+1. `.env.local`:
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api/v1
+```
+
+2. `src/lib/api.ts`:
+```ts
+const USE_MOCK = false;
+```
+
+3. Token: Backend trả `{ accessToken }` → Frontend lưu `localStorage.access_token`.
+
+## Dev không có Google OAuth
+
+`NODE_ENV=development` cho phép `idToken = "dev:email@example.com"` để test login.
+
+OTP khi `OTP_DEV_LOG=true` sẽ in ra console server.
