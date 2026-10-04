@@ -12,11 +12,9 @@ Trường Đại học An Giang. (Bản Next.js theo đúng phân công của le
 
 ## Vị trí đặt trong repo nhóm
 
-Theo README của nhóm, code Frontend web đặt trong nhánh **`Frontend`**, thư mục **`frontend/`**
-của repo: `https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/tree/Frontend/frontend`.
-
-Toàn bộ nội dung thư mục `tuyensinh-web-next/` này (trừ `node_modules`, `.next`) copy vào đúng
-thư mục `frontend/` đó trên nhánh `Frontend` rồi commit + push / tạo Pull Request.
+Code nằm ở nhánh **`frontend`**, thư mục **`frontend/web`** của repo nhóm:
+`https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09/tree/frontend/frontend/web`.
+API mà web gọi nằm ở `frontend/backend`; chạy cả hai bằng Docker theo `frontend/TRIEN_KHAI_DOCKER.md`.
 
 ## Bắt đầu
 

@@ -1,3 +1,11 @@
+// ============================================================================
+// Prisma schema - Phan he Quan ly Tuyen sinh Sau dai hoc
+// Nguon: ERD_PhanHe_TuyenSinh_GD3.md (40 bang / 10 mien) + migration_v3_GD3.sql
+// LUU Y: day la ban dung tu ERD tong hop (khong phai dump truc tiep tu
+// admission_db_v3.sql). Truoc khi migrate that, doi chieu lai tung cot voi
+// QA (Lam Hoai An) hoac chay `prisma db pull` tren DB that de doi chieu.
+// ============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,725 +15,554 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model admission_batch {
-  batch_id              BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_code            String                  @unique(map: "batch_code") @db.VarChar(30)
-  batch_name            String                  @db.VarChar(255)
-  degree_level          String                  @db.VarChar(10)
-  registration_start_at DateTime                @db.DateTime(0)
-  registration_end_at   DateTime                @db.DateTime(0)
-  exam_start_at         DateTime?               @db.DateTime(0)
-  exam_end_at           DateTime?               @db.DateTime(0)
-  legal_basis           String?                 @db.VarChar(100)
-  status                String                  @default("DRAFT") @db.VarChar(20)
-  deleted_at            DateTime?               @db.DateTime(0)
-  created_at            DateTime                @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  updated_at            DateTime                @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  admission_batch_major admission_batch_major[]
-  admission_decision    admission_decision[]
-  announcement          announcement[]
-  exam_room             exam_room[]
-  english_test_session  english_test_session[]
+// ================= MIEN 1: DANH MUC & CAU HINH DOT TUYEN SINH =================
+
+model AdmissionBatch {
+  batchId   BigInt    @id @default(autoincrement()) @map("batch_id")
+  batchCode String    @unique @map("batch_code") @db.VarChar(50)
+  degreeLevel String  @map("degree_level") @db.VarChar(30)
+  status    String    @db.VarChar(30)
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  batchMajors        AdmissionBatchMajor[]
+  examRooms          ExamRoom[]
+  admissionDecisions AdmissionDecision[]
+  announcements      Announcement[]
+
+  @@map("admission_batch")
 }
 
-model admission_batch_major {
-  batch_major_id       BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_id             BigInt                @db.UnsignedBigInt
-  major_id             BigInt                @db.UnsignedBigInt
-  quota                Int
-  benchmark_score      Decimal?              @db.Decimal(4, 2)
-  status               String                @default("CONFIGURING") @db.VarChar(20)
-  approved_by_staff_id BigInt?               @db.UnsignedBigInt
-  approved_at          DateTime?             @db.DateTime(0)
-  scores_published_at  DateTime?             @db.DateTime(0)
-  appeal_deadline      DateTime?             @db.DateTime(0)
-  result_return_note   String?               @db.VarChar(500)
-  staff_account        staff_account?        @relation(fields: [approved_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_bm_approved_staff")
-  admission_batch      admission_batch       @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_bm_batch")
-  admission_major      admission_major       @relation(fields: [major_id], references: [major_id], onUpdate: Restrict, map: "fk_bm_major")
-  admission_benchmark  admission_benchmark?
-  admission_committee  admission_committee[]
-  admission_condition  admission_condition[]
-  application          application[]
-  exam_subject         exam_subject[]
+model AdmissionMajor {
+  majorId     BigInt @id @default(autoincrement()) @map("major_id")
+  majorCode   String @unique @map("major_code") @db.VarChar(50)
+  degreeLevel String @map("degree_level") @db.VarChar(30)
+  status      String @db.VarChar(30)
 
-  @@unique([batch_id, major_id], map: "uq_batch_major")
-  @@index([approved_by_staff_id], map: "fk_bm_approved_staff")
-  @@index([major_id], map: "fk_bm_major")
+  batchMajors AdmissionBatchMajor[]
+
+  @@map("admission_major")
 }
 
-model admission_benchmark {
-  benchmark_id          BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_major_id        BigInt                @unique(map: "batch_major_id") @db.UnsignedBigInt
-  benchmark_value       Decimal               @db.Decimal(4, 2)
-  decided_by_staff_id   BigInt?               @db.UnsignedBigInt
-  decided_at            DateTime              @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  admission_batch_major admission_batch_major @relation(fields: [batch_major_id], references: [batch_major_id], onUpdate: Restrict, map: "fk_benchmark_bm")
-  staff_account         staff_account?        @relation(fields: [decided_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_benchmark_staff")
+model AdmissionBatchMajor {
+  batchMajorId   BigInt  @id @default(autoincrement()) @map("batch_major_id")
+  batchId        BigInt  @map("batch_id")
+  majorId        BigInt  @map("major_id")
+  quota          Int
+  benchmarkScore Decimal? @map("benchmark_score") @db.Decimal(5, 2)
+  status         String  @db.VarChar(30)
 
-  @@index([decided_by_staff_id], map: "fk_benchmark_staff")
+  batch       AdmissionBatch      @relation(fields: [batchId], references: [batchId])
+  major       AdmissionMajor      @relation(fields: [majorId], references: [majorId])
+  conditions  AdmissionCondition[]
+  committees  AdmissionCommittee[]
+  examSubjects ExamSubject[]
+  applications Application[]
+  benchmarks  AdmissionBenchmark[]
+
+  @@map("admission_batch_major")
 }
 
-model admission_committee {
-  committee_id          BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_major_id        BigInt?                @db.UnsignedBigInt
-  committee_name        String                 @db.VarChar(255)
-  decision_no           String?                @db.VarChar(50)
-  formed_at             DateTime?              @db.Date
-  status                String                 @default("ACTIVE") @db.VarChar(20)
-  admission_batch_major admission_batch_major? @relation(fields: [batch_major_id], references: [batch_major_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_committee_bm")
-  committee_member      committee_member[]
-  interview_schedule    interview_schedule[]
+model AdmissionCondition {
+  conditionId   BigInt   @id @default(autoincrement()) @map("condition_id")
+  batchMajorId  BigInt   @map("batch_major_id")
+  conditionCode String   @map("condition_code") @db.VarChar(50)
+  minGpa        Decimal? @map("min_gpa") @db.Decimal(3, 2)
 
-  @@index([batch_major_id], map: "fk_committee_bm")
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+
+  @@map("admission_condition")
 }
 
-model admission_condition {
-  condition_id          BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_major_id        BigInt                @db.UnsignedBigInt
-  condition_code        String                @db.VarChar(30)
-  description           String                @db.Text
-  min_gpa               Decimal?              @db.Decimal(3, 2)
-  required_certificate  String?               @db.VarChar(255)
-  is_mandatory          Boolean               @default(true)
-  admission_batch_major admission_batch_major @relation(fields: [batch_major_id], references: [batch_major_id], onUpdate: Restrict, map: "fk_cond_bm")
+model AdmissionCommittee {
+  committeeId   BigInt @id @default(autoincrement()) @map("committee_id")
+  batchMajorId  BigInt @map("batch_major_id")
+  committeeName String @map("committee_name") @db.VarChar(150)
+  status        String @db.VarChar(30)
 
-  @@index([batch_major_id], map: "fk_cond_bm")
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+  members    CommitteeMember[]
+  interviews InterviewSchedule[]
+
+  @@map("admission_committee")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model admission_decision {
-  decision_id          BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_id             BigInt                 @db.UnsignedBigInt
-  decision_no          String?                @unique(map: "decision_no") @db.VarChar(50)
-  decision_date        DateTime?              @db.Date
-  file_path            String?                @db.VarChar(500)
-  status               String                 @default("DRAFT") @db.VarChar(20)
-  signed_by_staff_id   BigInt?                @db.UnsignedBigInt
-  signed_at            DateTime?              @db.DateTime(0)
-  signature_ref        String?                @db.VarChar(255)
-  return_note          String?                @db.VarChar(500)
-  admission_batch      admission_batch        @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_decision_batch")
-  staff_account        staff_account?         @relation(fields: [signed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_decision_staff")
-  decision_application decision_application[]
+model CommitteeMember {
+  memberId        BigInt @id @default(autoincrement()) @map("member_id")
+  committeeId     BigInt @map("committee_id")
+  roleInCommittee String @map("role_in_committee") @db.VarChar(50)
 
-  @@index([batch_id], map: "fk_decision_batch")
-  @@index([signed_by_staff_id], map: "fk_decision_staff")
+  committee AdmissionCommittee @relation(fields: [committeeId], references: [committeeId])
+
+  @@map("committee_member")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model admission_major {
-  major_id              BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
-  major_code            String                  @unique(map: "major_code") @db.VarChar(20)
-  major_name            String                  @db.VarChar(255)
-  degree_level          String                  @db.VarChar(10)
-  faculty_name          String?                 @db.VarChar(255)
-  status                String                  @default("ACTIVE") @db.VarChar(20)
-  deleted_at            DateTime?               @db.DateTime(0)
-  admission_batch_major admission_batch_major[]
+model ExamSubject {
+  subjectId    BigInt  @id @default(autoincrement()) @map("subject_id")
+  batchMajorId BigInt  @map("batch_major_id")
+  examFormat   String  @map("exam_format") @db.VarChar(30)
+  weight       Decimal @db.Decimal(3, 2)
+
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+  scores     ExamScore[]
+
+  @@map("exam_subject")
 }
 
-model admission_result {
-  result_id                                                           BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id                                                      BigInt         @unique(map: "application_id") @db.UnsignedBigInt
-  result                                                              String         @db.VarChar(20)
-  approved_by_staff_id                                                BigInt?        @db.UnsignedBigInt
-  approved_by_leader_id                                               BigInt?        @db.UnsignedBigInt
-  approved_at                                                         DateTime?      @db.DateTime(0)
-  published_at                                                        DateTime?      @db.DateTime(0)
-  application                                                         application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_result_application")
-  staff_account_admission_result_approved_by_leader_idTostaff_account staff_account? @relation("admission_result_approved_by_leader_idTostaff_account", fields: [approved_by_leader_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_result_leader")
-  staff_account_admission_result_approved_by_staff_idTostaff_account  staff_account? @relation("admission_result_approved_by_staff_idTostaff_account", fields: [approved_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_result_staff")
+// ================= MIEN 2: NGUOI DUNG NOI BO & PHAN QUYEN =================
 
-  @@index([approved_by_leader_id], map: "fk_result_leader")
-  @@index([approved_by_staff_id], map: "fk_result_staff")
+model StaffAccount {
+  staffAccountId BigInt  @id @default(autoincrement()) @map("staff_account_id")
+  staffCode      String  @unique @map("staff_code") @db.VarChar(50)
+  email          String  @unique @db.VarChar(150)
+  // Nullable theo migration v3 - hang 1: tai khoan dang nhap bang Google se
+  // khong co password_hash.
+  passwordHash   String? @map("password_hash") @db.VarChar(255)
+  status         String  @db.VarChar(30)
+
+  staffRoles                  StaffRole[]
+  applicationReviews          ApplicationReview[]
+  supplementRequestsCreated   SupplementRequest[]
+  statusHistoryChanges        ApplicationStatusHistory[]
+  examScoresGraded            ExamScore[]
+  admissionBenchmarksDecided  AdmissionBenchmark[]
+  admissionResultsApproved    AdmissionResult[] @relation("ApprovedByStaff")
+  admissionResultsApprovedLd  AdmissionResult[] @relation("ApprovedByLeader")
+  decisionsSigned             AdmissionDecision[]
+  originalDocsVerified        OriginalDocumentSubmission[]
+  enrollmentsCompleted        EnrollmentCompletion[]
+  announcementsCreated        Announcement[]
+
+  @@map("staff_account")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model announcement {
-  announcement_id     BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_id            BigInt?          @db.UnsignedBigInt
-  title               String           @db.VarChar(255)
-  content             String           @db.Text
-  status              String           @default("DRAFT") @db.VarChar(20)
-  published_at        DateTime?        @db.DateTime(0)
-  created_by_staff_id BigInt?          @db.UnsignedBigInt
-  created_at          DateTime         @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  category            String           @default("TUYEN_SINH") @db.VarChar(20)
-  is_pinned           Boolean          @default(false)
-  updated_at          DateTime?        @db.DateTime(0)
-  admission_batch     admission_batch? @relation(fields: [batch_id], references: [batch_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_announcement_batch")
-  staff_account       staff_account?   @relation(fields: [created_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_announcement_staff")
+model Role {
+  roleId   BigInt @id @default(autoincrement()) @map("role_id")
+  roleCode String @unique @map("role_code") @db.VarChar(50)
+  roleName String @map("role_name") @db.VarChar(100)
 
-  @@index([batch_id], map: "fk_announcement_batch")
-  @@index([created_by_staff_id], map: "fk_announcement_staff")
-  @@index([status, published_at], map: "idx_announcement_status_published")
+  staffRoles StaffRole[]
+
+  @@map("role")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model application {
-  application_id               BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
-  application_code             String                        @unique(map: "application_code") @db.VarChar(30)
-  candidate_id                 BigInt                        @db.UnsignedBigInt
-  batch_major_id               BigInt                        @db.UnsignedBigInt
-  review_status                String                        @default("DRAFT") @db.VarChar(20)
-  admission_status             String                        @default("NONE") @db.VarChar(20)
-  assigned_staff_id            BigInt?                       @db.UnsignedBigInt
-  is_cancelled                 Boolean                       @default(false)
-  active_slot                  BigInt?                       @db.UnsignedBigInt
-  submitted_at                 DateTime?                     @db.DateTime(0)
-  deleted_at                   DateTime?                     @db.DateTime(0)
-  created_at                   DateTime                      @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  language_option              String?                       @db.VarChar(20)
-  language_note                String?                       @db.VarChar(500)
-  admission_result             admission_result?
-  staff_account                staff_account?                @relation(fields: [assigned_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_app_assigned_staff")
-  admission_batch_major        admission_batch_major         @relation(fields: [batch_major_id], references: [batch_major_id], onUpdate: Restrict, map: "fk_app_bm")
-  candidate                    candidate                     @relation(fields: [candidate_id], references: [candidate_id], onUpdate: Restrict, map: "fk_app_candidate")
-  application_document         application_document[]
-  application_education        application_education?
-  application_payment          application_payment[]
-  application_ranking          application_ranking?
-  application_review           application_review[]
-  application_status_history   application_status_history[]
-  complaint                    complaint[]
-  decision_application         decision_application[]
-  enrollment_completion        enrollment_completion?
-  enrollment_confirmation      enrollment_confirmation?
-  exam_assignment              exam_assignment?
-  exam_score                   exam_score[]
-  interview_schedule           interview_schedule[]
-  original_document_submission original_document_submission?
-  research_proposal            research_proposal?
-  supplement_request           supplement_request[]
-  waitlist                     waitlist?
-  english_test_registration    english_test_registration?
-  appeal_request               appeal_request?
+model StaffRole {
+  staffRoleId    BigInt @id @default(autoincrement()) @map("staff_role_id")
+  staffAccountId BigInt @map("staff_account_id")
+  roleId         BigInt @map("role_id")
 
-  @@unique([candidate_id, active_slot], map: "uq_candidate_active_slot")
-  @@index([admission_status], map: "idx_application_admission_status")
-  @@index([assigned_staff_id], map: "idx_application_assigned")
-  @@index([batch_major_id], map: "idx_application_batch_major")
-  @@index([review_status], map: "idx_application_review_status")
-  @@index([submitted_at], map: "idx_application_submitted_at")
+  staffAccount StaffAccount @relation(fields: [staffAccountId], references: [staffAccountId])
+  role         Role         @relation(fields: [roleId], references: [roleId])
+
+  @@map("staff_role")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model application_document {
-  document_id          BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id       BigInt              @db.UnsignedBigInt
-  document_type        String              @db.VarChar(30)
-  file_name            String              @db.VarChar(255)
-  file_path            String              @db.VarChar(500)
-  file_hash            String              @db.Char(64)
-  file_size_kb         Int
-  verify_status        String              @default("PENDING") @db.VarChar(20)
-  verify_note          String?             @db.VarChar(500)
-  verified_by_staff_id BigInt?             @db.UnsignedBigInt
-  verified_at          DateTime?           @db.DateTime(0)
-  uploaded_at          DateTime            @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  application          application         @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_doc_application")
-  staff_account        staff_account?      @relation(fields: [verified_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_doc_verified_staff")
-  research_proposal    research_proposal[]
+model SystemConfig {
+  configKey   String @id @map("config_key") @db.VarChar(100)
+  configValue String @map("config_value") @db.Text
 
-  @@index([application_id], map: "fk_doc_application")
-  @@index([verified_by_staff_id], map: "fk_doc_verified_staff")
+  @@map("system_config")
 }
 
-model application_education {
-  education_id     BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id   BigInt      @unique(map: "application_id") @db.UnsignedBigInt
-  degree_level     String      @db.VarChar(10)
-  institution_name String      @db.VarChar(255)
-  major_name       String      @db.VarChar(255)
-  graduation_year  Int         @db.SmallInt
-  gpa              Decimal?    @db.Decimal(4, 2)
-  gpa_scale        Decimal     @default(4.00) @db.Decimal(4, 2)
-  application      application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_edu_application")
+// ================= MIEN 3: TAI KHOAN & HO SO CA NHAN THI SINH =================
+
+model CandidateAccount {
+  accountId    BigInt  @id @default(autoincrement()) @map("account_id")
+  username     String  @unique @db.VarChar(50)
+  email        String  @unique @db.VarChar(150)
+  phoneNumber  String  @unique @map("phone_number") @db.VarChar(20)
+  // Nullable theo migration v3 - hang 1 (tuong tu staff_account).
+  passwordHash String? @map("password_hash") @db.VarChar(255)
+  status       String  @db.VarChar(30)
+
+  otps      OtpVerification[]
+  candidate Candidate?
+
+  @@map("candidate_account")
 }
 
-model application_payment {
-  payment_id       BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id   BigInt      @db.UnsignedBigInt
-  amount           Decimal     @db.Decimal(15, 2)
-  payment_method   String      @db.VarChar(30)
-  transaction_code String?     @unique(map: "transaction_code") @db.VarChar(100)
-  gateway_status   String      @default("PENDING") @db.VarChar(20)
-  receipt_no       String?     @db.VarChar(50)
-  paid_at          DateTime?   @db.DateTime(0)
-  fee_detail       String?     @db.Text
-  application      application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_payment_application")
+model OtpVerification {
+  otpId     BigInt   @id @default(autoincrement()) @map("otp_id")
+  accountId BigInt   @map("account_id")
+  purpose   String   @db.VarChar(30)
+  expiresAt DateTime @map("expires_at")
 
-  @@index([application_id], map: "fk_payment_application")
-  @@index([gateway_status], map: "idx_payment_status")
+  account CandidateAccount @relation(fields: [accountId], references: [accountId])
+
+  @@map("otp_verification")
 }
 
-model application_ranking {
-  ranking_id     BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id BigInt      @unique(map: "application_id") @db.UnsignedBigInt
-  total_score    Decimal     @default(0.00) @db.Decimal(6, 2)
-  rank_order     Int
-  application    application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_ranking_application")
+model Candidate {
+  candidateId BigInt @id @default(autoincrement()) @map("candidate_id")
+  accountId   BigInt @unique @map("account_id")
+  fullName    String @map("full_name") @db.VarChar(150)
+  idNumber    String @unique @map("id_number") @db.VarChar(20)
+
+  account      CandidateAccount @relation(fields: [accountId], references: [accountId])
+  applications Application[]
+
+  @@map("candidate")
 }
 
-model application_review {
-  review_id         BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id    BigInt         @db.UnsignedBigInt
-  reviewer_staff_id BigInt?        @db.UnsignedBigInt
-  review_type       String         @db.VarChar(20)
-  review_result     String         @db.VarChar(20)
-  note              String?        @db.Text
-  reviewed_at       DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  application       application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_review_application")
-  staff_account     staff_account? @relation(fields: [reviewer_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_review_staff")
+// ================= MIEN 4: HO SO, MINH CHUNG, LE PHI & NCS =================
 
-  @@index([reviewer_staff_id], map: "fk_review_staff")
-  @@index([application_id], map: "idx_review_application")
+model Application {
+  applicationId   BigInt  @id @default(autoincrement()) @map("application_id")
+  applicationCode String  @unique @map("application_code") @db.VarChar(50)
+  candidateId     BigInt  @map("candidate_id")
+  batchMajorId    BigInt  @map("batch_major_id")
+  reviewStatus    String  @default("DA_NOP") @map("review_status") @db.VarChar(30)
+  admissionStatus String? @map("admission_status") @db.VarChar(30)
+  isCancelled     Boolean @default(false) @map("is_cancelled")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  candidate   Candidate           @relation(fields: [candidateId], references: [candidateId])
+  batchMajor  AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+
+  documents           ApplicationDocument[]
+  researchProposal    ResearchProposal?
+  payments             ApplicationPayment[]
+  reviews              ApplicationReview[]
+  supplementRequests   SupplementRequest[]
+  statusHistory        ApplicationStatusHistory[]
+  examAssignment       ExamAssignment?
+  interviewSchedules   InterviewSchedule[]
+  examScores           ExamScore[]
+  ranking              ApplicationRanking?
+  waitlist             Waitlist?
+  admissionResult      AdmissionResult?
+  decisionDetails      DecisionApplication[]
+  enrollmentConfirmation      EnrollmentConfirmation?
+  originalDocumentSubmission  OriginalDocumentSubmission?
+  enrollmentCompletion        EnrollmentCompletion?
+
+  @@map("application")
 }
 
-model application_status_history {
-  history_id          BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id      BigInt         @db.UnsignedBigInt
-  old_status          String?        @db.VarChar(150)
-  new_status          String         @db.VarChar(150)
-  changed_by_type     String         @db.VarChar(20)
-  changed_by_staff_id BigInt?        @db.UnsignedBigInt
-  reason              String?        @db.VarChar(500)
-  changed_at          DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  application         application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_ash_application")
-  staff_account       staff_account? @relation(fields: [changed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_ash_staff")
+model ApplicationDocument {
+  documentId   BigInt @id @default(autoincrement()) @map("document_id")
+  applicationId BigInt @map("application_id")
+  documentType String @map("document_type") @db.VarChar(50)
+  fileHash     String @map("file_hash") @db.VarChar(64)
+  fileSizeKb   Int    @map("file_size_kb")
 
-  @@index([changed_by_staff_id], map: "fk_ash_staff")
-  @@index([application_id], map: "idx_status_history_application")
+  application       Application        @relation(fields: [applicationId], references: [applicationId])
+  researchProposals ResearchProposal[]
+
+  @@map("application_document")
 }
 
-model audit_log {
-  log_id       BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  actor_type   String   @db.VarChar(20)
-  actor_id     BigInt?  @db.UnsignedBigInt
-  action       String   @db.VarChar(100)
-  entity_table String?  @db.VarChar(100)
-  entity_id    BigInt?  @db.UnsignedBigInt
-  detail       String?  @db.Text
-  created_at   DateTime @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+model Lecturer {
+  lecturerId   BigInt @id @default(autoincrement()) @map("lecturer_id")
+  lecturerCode String @unique @map("lecturer_code") @db.VarChar(50)
+  email        String @unique @db.VarChar(150)
+  status       String @db.VarChar(30)
 
-  @@index([created_at], map: "idx_audit_created_at")
-  @@index([entity_table, entity_id], map: "idx_audit_entity")
+  proposedIn         ResearchProposal[]
+  supervisorRequests SupervisorRequest[]
+
+  @@map("lecturer")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model candidate {
-  candidate_id      BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  account_id        BigInt            @unique(map: "account_id") @db.UnsignedBigInt
-  full_name         String            @db.VarChar(255)
-  dob               DateTime          @db.Date
-  gender            String?           @db.VarChar(10)
-  id_number         String?           @unique(map: "id_number") @db.VarChar(20)
-  address           String?           @db.Text
-  nationality       String            @default("Việt Nam") @db.VarChar(50)
-  deleted_at        DateTime?         @db.DateTime(0)
-  application       application[]
-  candidate_account candidate_account @relation(fields: [account_id], references: [account_id], onUpdate: Restrict, map: "fk_candidate_account")
-  complaint         complaint[]
+model ResearchProposal {
+  proposalId           BigInt  @id @default(autoincrement()) @map("proposal_id")
+  applicationId        BigInt  @unique @map("application_id")
+  documentId           BigInt  @map("document_id")
+  preferredLecturerId  BigInt  @map("preferred_lecturer_id")
+  researchTopic        String  @map("research_topic") @db.VarChar(255)
+
+  application       Application          @relation(fields: [applicationId], references: [applicationId])
+  document          ApplicationDocument  @relation(fields: [documentId], references: [documentId])
+  preferredLecturer Lecturer             @relation(fields: [preferredLecturerId], references: [lecturerId])
+  supervisorRequests SupervisorRequest[]
+
+  @@map("research_proposal")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model candidate_account {
-  account_id         BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
-  username           String             @unique(map: "username") @db.VarChar(100)
-  email              String?            @unique(map: "email") @db.VarChar(255)
-  phone_number       String?            @unique(map: "phone_number") @db.VarChar(20)
-  password_hash      String?            @db.VarChar(255)
-  status             String             @default("PENDING_VERIFY") @db.VarChar(20)
-  failed_login_count Int                @default(0)
-  locked_until       DateTime?          @db.DateTime(0)
-  deleted_at         DateTime?          @db.DateTime(0)
-  created_at         DateTime           @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  privacy_consent_at DateTime?          @db.DateTime(0)
-  candidate          candidate?
-  otp_verification   otp_verification[]
+model SupervisorRequest {
+  requestId  BigInt @id @default(autoincrement()) @map("request_id")
+  proposalId BigInt @map("proposal_id")
+  lecturerId BigInt @map("lecturer_id")
+  status     String @db.VarChar(30)
+
+  proposal ResearchProposal @relation(fields: [proposalId], references: [proposalId])
+  lecturer Lecturer         @relation(fields: [lecturerId], references: [lecturerId])
+
+  @@map("supervisor_request")
 }
 
-model committee_member {
-  member_id           BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
-  committee_id        BigInt              @db.UnsignedBigInt
-  full_name           String              @db.VarChar(255)
-  lecturer_code       String?             @db.VarChar(30)
-  role_in_committee   String              @db.VarChar(20)
-  admission_committee admission_committee @relation(fields: [committee_id], references: [committee_id], onUpdate: Restrict, map: "fk_member_committee")
+model ApplicationPayment {
+  paymentId       BigInt   @id @default(autoincrement()) @map("payment_id")
+  applicationId   BigInt   @map("application_id")
+  amount          Decimal  @db.Decimal(12, 2)
+  paymentMethod   String   @map("payment_method") @db.VarChar(30)
+  // UNIQUE nhung cho phep nhieu NULL - dung hanh vi MySQL/MariaDB mac dinh
+  // (migration v3 - hang 6). KHONG duoc gan '' thay cho null.
+  transactionCode String?  @unique @map("transaction_code") @db.VarChar(100)
+  gatewayStatus   String   @map("gateway_status") @db.VarChar(30)
 
-  @@index([committee_id], map: "fk_member_committee")
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("application_payment")
 }
 
-model complaint {
-  complaint_id        BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  candidate_id        BigInt         @db.UnsignedBigInt
-  application_id      BigInt?        @db.UnsignedBigInt
-  complaint_type      String         @db.VarChar(30)
-  content             String         @db.Text
-  status              String         @default("PENDING") @db.VarChar(20)
-  response            String?        @db.Text
-  handled_by_staff_id BigInt?        @db.UnsignedBigInt
-  created_at          DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  resolved_at         DateTime?      @db.DateTime(0)
-  application         application?   @relation(fields: [application_id], references: [application_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_complaint_application")
-  candidate           candidate      @relation(fields: [candidate_id], references: [candidate_id], onUpdate: Restrict, map: "fk_complaint_candidate")
-  staff_account       staff_account? @relation(fields: [handled_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_complaint_staff")
+// ================= MIEN 5: THAM DINH & LICH SU TRANG THAI =================
 
-  @@index([application_id], map: "fk_complaint_application")
-  @@index([handled_by_staff_id], map: "fk_complaint_staff")
-  @@index([candidate_id], map: "idx_complaint_candidate")
-  @@index([status], map: "idx_complaint_status")
+model ApplicationReview {
+  reviewId         BigInt @id @default(autoincrement()) @map("review_id")
+  applicationId    BigInt @map("application_id")
+  reviewerStaffId  BigInt @map("reviewer_staff_id")
+  reviewResult     String @map("review_result") @db.VarChar(30)
+
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  reviewer    StaffAccount @relation(fields: [reviewerStaffId], references: [staffAccountId])
+
+  @@map("application_review")
 }
 
-model decision_application {
-  detail_id          BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
-  decision_id        BigInt             @db.UnsignedBigInt
-  application_id     BigInt             @db.UnsignedBigInt
-  application        application        @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_da_application")
-  admission_decision admission_decision @relation(fields: [decision_id], references: [decision_id], onUpdate: Restrict, map: "fk_da_decision")
+model SupplementRequest {
+  requestId          BigInt @id @default(autoincrement()) @map("request_id")
+  applicationId      BigInt @map("application_id")
+  requestedByStaffId BigInt @map("requested_by_staff_id")
+  status             String @db.VarChar(30)
 
-  @@unique([decision_id, application_id], map: "uq_decision_application")
-  @@index([application_id], map: "fk_da_application")
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  requestedBy StaffAccount @relation(fields: [requestedByStaffId], references: [staffAccountId])
+
+  @@map("supplement_request")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model enrollment_completion {
-  completion_id           BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id          BigInt         @unique(map: "application_id") @db.UnsignedBigInt
-  completed_by_staff_id   BigInt?        @db.UnsignedBigInt
-  completed_at            DateTime?      @db.DateTime(0)
-  transferred_to_training Boolean        @default(false)
-  transfer_ref            String?        @db.VarChar(100)
-  application             application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_completion_application")
-  staff_account           staff_account? @relation(fields: [completed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_completion_staff")
+model ApplicationStatusHistory {
+  historyId         BigInt   @id @default(autoincrement()) @map("history_id")
+  applicationId     BigInt   @map("application_id")
+  changedByStaffId  BigInt?  @map("changed_by_staff_id")
+  changedByType     String   @map("changed_by_type") @db.VarChar(30)
+  createdAt         DateTime @default(now()) @map("created_at")
 
-  @@index([completed_by_staff_id], map: "fk_completion_staff")
+  application Application   @relation(fields: [applicationId], references: [applicationId])
+  changedBy   StaffAccount? @relation(fields: [changedByStaffId], references: [staffAccountId])
+
+  @@index([createdAt])
+  @@map("application_status_history")
 }
 
-model enrollment_confirmation {
-  confirmation_id BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id  BigInt      @unique(map: "application_id") @db.UnsignedBigInt
-  deadline        DateTime    @db.DateTime(0)
-  confirmed_at    DateTime?   @db.DateTime(0)
-  status          String      @default("CHUA_XAC_NHAN") @db.VarChar(20)
-  application     application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_confirmation_application")
+// ================= MIEN 6: TO CHUC XET TUYEN / THI =================
+
+model ExamRoom {
+  roomId   BigInt @id @default(autoincrement()) @map("room_id")
+  batchId  BigInt @map("batch_id")
+  roomCode String @map("room_code") @db.VarChar(30)
+  capacity Int
+
+  batch       AdmissionBatch    @relation(fields: [batchId], references: [batchId])
+  assignments ExamAssignment[]
+
+  @@map("exam_room")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model exam_assignment {
-  assignment_id  BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id BigInt      @unique(map: "application_id") @db.UnsignedBigInt
-  room_id        BigInt      @db.UnsignedBigInt
-  sbd_code       String      @unique(map: "sbd_code") @db.VarChar(30)
-  seat_no        String?     @db.VarChar(10)
-  application    application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_assignment_application")
-  exam_room      exam_room   @relation(fields: [room_id], references: [room_id], onUpdate: Restrict, map: "fk_assignment_room")
+model ExamAssignment {
+  assignmentId  BigInt @id @default(autoincrement()) @map("assignment_id")
+  applicationId BigInt @unique @map("application_id")
+  roomId        BigInt @map("room_id")
+  sbdCode       String @unique @map("sbd_code") @db.VarChar(30)
 
-  @@index([room_id], map: "fk_assignment_room")
+  application Application @relation(fields: [applicationId], references: [applicationId])
+  room        ExamRoom    @relation(fields: [roomId], references: [roomId])
+
+  @@map("exam_assignment")
 }
 
-model exam_room {
-  room_id         BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_id        BigInt            @db.UnsignedBigInt
-  room_code       String            @db.VarChar(20)
-  location        String?           @db.VarChar(255)
-  capacity        Int
-  exam_assignment exam_assignment[]
-  admission_batch admission_batch   @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_room_batch")
+model InterviewSchedule {
+  scheduleId    BigInt @id @default(autoincrement()) @map("schedule_id")
+  applicationId BigInt @map("application_id")
+  committeeId   BigInt @map("committee_id")
+  status        String @db.VarChar(30)
 
-  @@unique([batch_id, room_code], map: "uq_batch_room")
+  application Application        @relation(fields: [applicationId], references: [applicationId])
+  committee   AdmissionCommittee @relation(fields: [committeeId], references: [committeeId])
+
+  @@map("interview_schedule")
 }
 
-model exam_score {
-  score_id        BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id  BigInt         @db.UnsignedBigInt
-  subject_id      BigInt         @db.UnsignedBigInt
-  score           Decimal        @db.Decimal(4, 2)
-  grader_staff_id BigInt?        @db.UnsignedBigInt
-  note            String?        @db.Text
-  graded_at       DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  application     application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_score_application")
-  staff_account   staff_account? @relation(fields: [grader_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_score_staff")
-  exam_subject    exam_subject   @relation(fields: [subject_id], references: [subject_id], onUpdate: Restrict, map: "fk_score_subject")
-  score_appeal    score_appeal[]
+model ExamScore {
+  scoreId        BigInt  @id @default(autoincrement()) @map("score_id")
+  applicationId  BigInt  @map("application_id")
+  subjectId      BigInt  @map("subject_id")
+  graderStaffId  BigInt  @map("grader_staff_id")
+  score          Decimal @db.Decimal(5, 2)
 
-  @@unique([application_id, subject_id], map: "uq_application_subject")
-  @@index([grader_staff_id], map: "fk_score_staff")
-  @@index([subject_id], map: "fk_score_subject")
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  subject     ExamSubject  @relation(fields: [subjectId], references: [subjectId])
+  grader      StaffAccount @relation(fields: [graderStaffId], references: [staffAccountId])
+  appeals     ScoreAppeal[]
+
+  @@map("exam_score")
 }
 
-model exam_subject {
-  subject_id            BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_major_id        BigInt                @db.UnsignedBigInt
-  subject_name          String                @db.VarChar(255)
-  exam_format           String                @db.VarChar(20)
-  weight                Decimal               @default(1.00) @db.Decimal(4, 2)
-  max_score             Decimal               @default(10.00) @db.Decimal(4, 2)
-  exam_score            exam_score[]
-  admission_batch_major admission_batch_major @relation(fields: [batch_major_id], references: [batch_major_id], onUpdate: Restrict, map: "fk_subject_bm")
+model ScoreAppeal {
+  appealId BigInt   @id @default(autoincrement()) @map("appeal_id")
+  scoreId  BigInt   @map("score_id")
+  oldScore Decimal  @map("old_score") @db.Decimal(5, 2)
+  newScore Decimal? @map("new_score") @db.Decimal(5, 2)
+  status   String   @db.VarChar(30)
 
-  @@index([batch_major_id], map: "fk_subject_bm")
+  score ExamScore @relation(fields: [scoreId], references: [scoreId])
+
+  @@map("score_appeal")
 }
 
-model interview_schedule {
-  schedule_id         BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id      BigInt              @db.UnsignedBigInt
-  committee_id        BigInt              @db.UnsignedBigInt
-  scheduled_at        DateTime            @db.DateTime(0)
-  location_or_link    String?             @db.VarChar(500)
-  status              String              @default("SCHEDULED") @db.VarChar(20)
-  application         application         @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_schedule_application")
-  admission_committee admission_committee @relation(fields: [committee_id], references: [committee_id], onUpdate: Restrict, map: "fk_schedule_committee")
+// ================= MIEN 7: XET TRUNG TUYEN =================
 
-  @@index([application_id], map: "fk_schedule_application")
-  @@index([committee_id], map: "fk_schedule_committee")
+model AdmissionBenchmark {
+  benchmarkId      BigInt  @id @default(autoincrement()) @map("benchmark_id")
+  batchMajorId     BigInt  @unique @map("batch_major_id")
+  decidedByStaffId BigInt  @map("decided_by_staff_id")
+  benchmarkValue   Decimal @map("benchmark_value") @db.Decimal(5, 2)
+
+  batchMajor AdmissionBatchMajor @relation(fields: [batchMajorId], references: [batchMajorId])
+  decidedBy  StaffAccount        @relation(fields: [decidedByStaffId], references: [staffAccountId])
+
+  @@map("admission_benchmark")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model lecturer {
-  lecturer_id        BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
-  lecturer_code      String               @unique(map: "lecturer_code") @db.VarChar(30)
-  full_name          String               @db.VarChar(255)
-  email              String?              @unique(map: "email") @db.VarChar(255)
-  faculty_name       String?              @db.VarChar(255)
-  status             String               @default("ACTIVE") @db.VarChar(20)
-  deleted_at         DateTime?            @db.DateTime(0)
-  research_proposal  research_proposal[]
-  supervisor_request supervisor_request[]
+model ApplicationRanking {
+  rankingId     BigInt  @id @default(autoincrement()) @map("ranking_id")
+  applicationId BigInt  @unique @map("application_id")
+  totalScore    Decimal @map("total_score") @db.Decimal(5, 2)
+  rankOrder     Int     @map("rank_order")
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("application_ranking")
 }
 
-model notification {
-  notification_id BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  recipient_type  String    @db.VarChar(20)
-  recipient_id    BigInt    @db.UnsignedBigInt
-  channel         String    @db.VarChar(20)
-  title           String?   @db.VarChar(255)
-  content         String    @db.Text
-  status          String    @default("PENDING") @db.VarChar(20)
-  sent_at         DateTime? @db.DateTime(0)
-  created_at      DateTime  @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  read_at         DateTime? @db.DateTime(0)
+model Waitlist {
+  waitlistId    BigInt @id @default(autoincrement()) @map("waitlist_id")
+  applicationId BigInt @unique @map("application_id")
+  status        String @db.VarChar(30)
 
-  @@index([created_at], map: "idx_notification_created")
-  @@index([recipient_type, recipient_id], map: "idx_notification_recipient")
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("waitlist")
 }
 
-model original_document_submission {
-  submission_id        BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id       BigInt         @unique(map: "application_id") @db.UnsignedBigInt
-  submitted_at         DateTime?      @db.DateTime(0)
-  verified_by_staff_id BigInt?        @db.UnsignedBigInt
-  verified_at          DateTime?      @db.DateTime(0)
-  status               String         @default("PENDING") @db.VarChar(20)
-  application          application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_submission_application")
-  staff_account        staff_account? @relation(fields: [verified_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_submission_staff")
+model AdmissionResult {
+  resultId           BigInt    @id @default(autoincrement()) @map("result_id")
+  applicationId      BigInt    @unique @map("application_id")
+  approvedByStaffId  BigInt?   @map("approved_by_staff_id")
+  approvedByLeaderId BigInt?   @map("approved_by_leader_id")
+  result             String    @db.VarChar(30)
+  publishedAt        DateTime? @map("published_at")
 
-  @@index([verified_by_staff_id], map: "fk_submission_staff")
+  application   Application   @relation(fields: [applicationId], references: [applicationId])
+  approvedBy    StaffAccount? @relation("ApprovedByStaff", fields: [approvedByStaffId], references: [staffAccountId])
+  approvedByLd  StaffAccount? @relation("ApprovedByLeader", fields: [approvedByLeaderId], references: [staffAccountId])
+
+  @@map("admission_result")
 }
 
-model otp_verification {
-  otp_id            BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  account_id        BigInt            @db.UnsignedBigInt
-  purpose           String            @db.VarChar(30)
-  otp_code_hash     String            @db.VarChar(255)
-  sent_count        Int               @default(1)
-  expires_at        DateTime          @db.DateTime(0)
-  verified_at       DateTime?         @db.DateTime(0)
-  candidate_account candidate_account @relation(fields: [account_id], references: [account_id], onUpdate: Restrict, map: "fk_otp_account")
+// ================= MIEN 8: RA QUYET DINH & NHAP HOC =================
 
-  @@index([account_id], map: "fk_otp_account")
-  @@index([expires_at], map: "idx_otp_expires")
+model AdmissionDecision {
+  decisionId     BigInt @id @default(autoincrement()) @map("decision_id")
+  batchId        BigInt @map("batch_id")
+  signedByStaffId BigInt @map("signed_by_staff_id")
+  decisionNo     String @unique @map("decision_no") @db.VarChar(50)
+  status         String @db.VarChar(30)
+
+  batch    AdmissionBatch        @relation(fields: [batchId], references: [batchId])
+  signedBy StaffAccount          @relation(fields: [signedByStaffId], references: [staffAccountId])
+  details  DecisionApplication[]
+
+  @@map("admission_decision")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model research_proposal {
-  proposal_id           BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id        BigInt               @unique(map: "application_id") @db.UnsignedBigInt
-  document_id           BigInt               @db.UnsignedBigInt
-  research_topic        String               @db.VarChar(500)
-  research_field        String?              @db.VarChar(255)
-  preferred_lecturer_id BigInt?              @db.UnsignedBigInt
-  application           application          @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_proposal_application")
-  application_document  application_document @relation(fields: [document_id], references: [document_id], onUpdate: Restrict, map: "fk_proposal_document")
-  lecturer              lecturer?            @relation(fields: [preferred_lecturer_id], references: [lecturer_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_proposal_lecturer")
-  supervisor_request    supervisor_request[]
+model DecisionApplication {
+  detailId      BigInt @id @default(autoincrement()) @map("detail_id")
+  decisionId    BigInt @map("decision_id")
+  applicationId BigInt @map("application_id")
 
-  @@index([document_id], map: "fk_proposal_document")
-  @@index([preferred_lecturer_id], map: "fk_proposal_lecturer")
+  decision    AdmissionDecision @relation(fields: [decisionId], references: [decisionId])
+  application Application       @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("decision_application")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model role {
-  role_id    BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
-  role_code  String       @unique(map: "role_code") @db.VarChar(30)
-  role_name  String       @db.VarChar(100)
-  staff_role staff_role[]
+model EnrollmentConfirmation {
+  confirmationId BigInt @id @default(autoincrement()) @map("confirmation_id")
+  applicationId  BigInt @unique @map("application_id")
+  status         String @db.VarChar(30)
+
+  application Application @relation(fields: [applicationId], references: [applicationId])
+
+  @@map("enrollment_confirmation")
 }
 
-model score_appeal {
-  appeal_id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  score_id             BigInt         @db.UnsignedBigInt
-  reason               String         @db.Text
-  old_score            Decimal        @db.Decimal(4, 2)
-  new_score            Decimal?       @db.Decimal(4, 2)
-  status               String         @default("PENDING") @db.VarChar(20)
-  created_at           DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  resolved_at          DateTime?      @db.DateTime(0)
-  resolved_by_staff_id BigInt?        @db.UnsignedBigInt
-  resolution_note      String?        @db.Text
-  exam_score           exam_score     @relation(fields: [score_id], references: [score_id], onUpdate: Restrict, map: "fk_appeal_score")
-  staff_account        staff_account? @relation(fields: [resolved_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_appeal_staff")
+model OriginalDocumentSubmission {
+  submissionId       BigInt  @id @default(autoincrement()) @map("submission_id")
+  applicationId      BigInt  @unique @map("application_id")
+  verifiedByStaffId  BigInt? @map("verified_by_staff_id")
+  status             String  @db.VarChar(30)
 
-  @@index([score_id], map: "fk_appeal_score")
-  @@index([resolved_by_staff_id], map: "fk_appeal_staff")
-  @@index([status], map: "idx_appeal_status")
+  application Application   @relation(fields: [applicationId], references: [applicationId])
+  verifiedBy  StaffAccount? @relation(fields: [verifiedByStaffId], references: [staffAccountId])
+
+  @@map("original_document_submission")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model staff_account {
-  staff_account_id                                                       BigInt                         @id @default(autoincrement()) @db.UnsignedBigInt
-  staff_code                                                             String                         @unique(map: "staff_code") @db.VarChar(30)
-  full_name                                                              String                         @db.VarChar(255)
-  email                                                                  String                         @unique(map: "email") @db.VarChar(255)
-  password_hash                                                          String?                        @db.VarChar(255)
-  status                                                                 String                         @default("ACTIVE") @db.VarChar(20)
-  deleted_at                                                             DateTime?                      @db.DateTime(0)
-  must_change_password                                                   Boolean                        @default(false)
-  password_changed_at                                                    DateTime?                      @db.DateTime(0)
-  failed_login_count                                                     Int                            @default(0)
-  locked_until                                                           DateTime?                      @db.DateTime(0)
-  admission_batch_major                                                  admission_batch_major[]
-  admission_benchmark                                                    admission_benchmark[]
-  admission_decision                                                     admission_decision[]
-  admission_result_admission_result_approved_by_leader_idTostaff_account admission_result[]             @relation("admission_result_approved_by_leader_idTostaff_account")
-  admission_result_admission_result_approved_by_staff_idTostaff_account  admission_result[]             @relation("admission_result_approved_by_staff_idTostaff_account")
-  announcement                                                           announcement[]
-  application                                                            application[]
-  application_document                                                   application_document[]
-  application_review                                                     application_review[]
-  application_status_history                                             application_status_history[]
-  complaint                                                              complaint[]
-  enrollment_completion                                                  enrollment_completion[]
-  exam_score                                                             exam_score[]
-  original_document_submission                                           original_document_submission[]
-  score_appeal                                                           score_appeal[]
-  staff_role                                                             staff_role[]
-  supplement_request                                                     supplement_request[]
-  english_test_registration                                              english_test_registration[]
-  appeal_request                                                         appeal_request[]
+model EnrollmentCompletion {
+  completionId      BigInt  @id @default(autoincrement()) @map("completion_id")
+  applicationId     BigInt  @unique @map("application_id")
+  completedByStaffId BigInt @map("completed_by_staff_id")
+  transferRef       String  @map("transfer_ref") @db.VarChar(100)
+
+  application Application  @relation(fields: [applicationId], references: [applicationId])
+  completedBy StaffAccount @relation(fields: [completedByStaffId], references: [staffAccountId])
+
+  @@map("enrollment_completion")
 }
 
-model staff_role {
-  staff_role_id    BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
-  staff_account_id BigInt        @db.UnsignedBigInt
-  role_id          BigInt        @db.UnsignedBigInt
-  role             role          @relation(fields: [role_id], references: [role_id], onUpdate: Restrict, map: "fk_sr_role")
-  staff_account    staff_account @relation(fields: [staff_account_id], references: [staff_account_id], onUpdate: Restrict, map: "fk_sr_staff")
+// ================= MIEN 9: THONG BAO & CONG BO =================
 
-  @@unique([staff_account_id, role_id], map: "uq_staff_role")
-  @@index([role_id], map: "fk_sr_role")
+model Announcement {
+  announcementId    BigInt @id @default(autoincrement()) @map("announcement_id")
+  batchId           BigInt @map("batch_id")
+  createdByStaffId  BigInt @map("created_by_staff_id")
+  status            String @db.VarChar(30)
+
+  batch     AdmissionBatch @relation(fields: [batchId], references: [batchId])
+  createdBy StaffAccount   @relation(fields: [createdByStaffId], references: [staffAccountId])
+
+  @@map("announcement")
 }
 
-model supervisor_request {
-  request_id        BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  proposal_id       BigInt            @db.UnsignedBigInt
-  lecturer_id       BigInt            @db.UnsignedBigInt
-  status            String            @default("PENDING") @db.VarChar(20)
-  requested_at      DateTime          @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  responded_at      DateTime?         @db.DateTime(0)
-  response_note     String?           @db.Text
-  lecturer          lecturer          @relation(fields: [lecturer_id], references: [lecturer_id], onUpdate: Restrict, map: "fk_sup_req_lecturer")
-  research_proposal research_proposal @relation(fields: [proposal_id], references: [proposal_id], onUpdate: Restrict, map: "fk_sup_req_proposal")
+model Notification {
+  notificationId BigInt @id @default(autoincrement()) @map("notification_id")
+  // KHONG co FK vat ly (thiet ke polymorphic co chu dich - migration v3 hang 2).
+  // Toan ven du lieu duoc dam bao o tang app (xem NotificationService).
+  recipientType  String @map("recipient_type") @db.VarChar(20)
+  recipientId    BigInt @map("recipient_id")
+  channel        String @db.VarChar(20)
+  status         String @db.VarChar(30)
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  @@index([lecturer_id], map: "fk_sup_req_lecturer")
-  @@index([proposal_id], map: "fk_sup_req_proposal")
+  @@map("notification")
 }
 
-model supplement_request {
-  request_id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id        BigInt         @db.UnsignedBigInt
-  requested_by_staff_id BigInt?        @db.UnsignedBigInt
-  content               String         @db.Text
-  deadline              DateTime       @db.DateTime(0)
-  status                String         @default("PENDING") @db.VarChar(20)
-  created_at            DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  responded_at          DateTime?      @db.DateTime(0)
-  application           application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_supplement_application")
-  staff_account         staff_account? @relation(fields: [requested_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_supplement_staff")
+// ================= MIEN 10: NHAT KY HE THONG =================
 
-  @@index([application_id], map: "fk_supplement_application")
-  @@index([requested_by_staff_id], map: "fk_supplement_staff")
-}
+model AuditLog {
+  logId       BigInt   @id @default(autoincrement()) @map("log_id")
+  // Polymorphic tuong tu Notification - validate o tang app (AuditLogService).
+  actorType   String   @map("actor_type") @db.VarChar(20)
+  actorId     BigInt?  @map("actor_id")
+  action      String   @db.VarChar(100)
+  entityTable String   @map("entity_table") @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at")
 
-model system_config {
-  config_key   String   @id @db.VarChar(100)
-  config_value String   @db.VarChar(500)
-  description  String?  @db.VarChar(255)
-  updated_at   DateTime @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-}
-
-model waitlist {
-  waitlist_id    BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id BigInt      @unique(map: "application_id") @db.UnsignedBigInt
-  rank_order     Int
-  status         String      @default("WAITING") @db.VarChar(20)
-  application    application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_waitlist_application")
-}
-
-/// Buổi thi đánh giá năng lực tiếng Anh (migration v9)
-model english_test_session {
-  session_id                BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
-  batch_id                  BigInt                      @db.UnsignedBigInt
-  session_code              String                      @db.VarChar(30)
-  test_at                   DateTime                    @db.DateTime(0)
-  room                      String                      @db.VarChar(100)
-  location                  String?                     @db.VarChar(255)
-  capacity                  Int
-  note                      String?                     @db.VarChar(500)
-  status                    String                      @default("SCHEDULED") @db.VarChar(20)
-  created_at                DateTime                    @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  admission_batch           admission_batch             @relation(fields: [batch_id], references: [batch_id], onUpdate: Restrict, map: "fk_test_session_batch")
-  english_test_registration english_test_registration[]
-
-  @@unique([batch_id, session_code], map: "uq_test_session_code")
-}
-
-/// Thí sinh dự thi tiếng Anh: số báo danh, ghế, kết quả (migration v9)
-model english_test_registration {
-  registration_id      BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id       BigInt               @unique(map: "application_id") @db.UnsignedBigInt
-  session_id           BigInt               @db.UnsignedBigInt
-  candidate_number     String               @unique(map: "candidate_number") @db.VarChar(30)
-  seat_no              Int
-  result               String               @default("PENDING") @db.VarChar(20)
-  score                Decimal?             @db.Decimal(5, 2)
-  note                 String?              @db.VarChar(500)
-  graded_by_staff_id   BigInt?              @db.UnsignedBigInt
-  graded_at            DateTime?            @db.DateTime(0)
-  assigned_at          DateTime             @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  application          application          @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_test_reg_application")
-  english_test_session english_test_session @relation(fields: [session_id], references: [session_id], onUpdate: Restrict, map: "fk_test_reg_session")
-  staff_account        staff_account?       @relation(fields: [graded_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_test_reg_staff")
-
-  @@index([session_id], map: "fk_test_reg_session")
-  @@index([graded_by_staff_id], map: "fk_test_reg_staff")
-}
-
-/// Đơn phúc khảo của thí sinh (một hồ sơ một đơn) — migration v10
-model appeal_request {
-  request_id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id        BigInt         @unique(map: "uq_appeal_request_application") @db.UnsignedBigInt
-  reason                String         @db.Text
-  fee_amount            Decimal        @db.Decimal(15, 2)
-  status                String         @default("CHO_NOP_PHI") @db.VarChar(20)
-  created_at            DateTime       @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
-  paid_at               DateTime?      @db.DateTime(0)
-  receipt_no            String?        @db.VarChar(50)
-  confirmed_by_staff_id BigInt?        @db.UnsignedBigInt
-  application           application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_appeal_request_application")
-  staff_account         staff_account? @relation(fields: [confirmed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_appeal_request_staff")
-
-  @@index([confirmed_by_staff_id], map: "fk_appeal_request_staff")
+  // idx_audit_created_at - migration v3, hang 5: phuc vu truy van audit_log
+  // theo thoi gian. Moi query loc/ sap xep theo thoi gian PHAI dung created_at.
+  @@index([createdAt], name: "idx_audit_created_at")
+  @@map("audit_log")
 }

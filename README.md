@@ -24,9 +24,3 @@ Dự án được chia thành các phân hệ mã nguồn độc lập. Vui lòn
 *   ⚙️ **Phân hệ Backend:** [Backend](https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/tree/Backend/src)
 *   ☁️ **Cấu hình DevOps:** [DevOps-Infrastructure](https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/tree/Devops/docker)
 *   🛡️ **Kịch bản Kiểm thử QA:** [QA-Testing](https://github.com/haidpm235414/DH24PM-CNPM-Nhom09/blob/QA/api-tests)
-
----
-
-## 🐳 Chạy bằng Docker
-
-`docker compose up -d --build` chạy đủ CSDL + backend + frontend. **Thành viên mới đọc [TRIEN_KHAI_DOCKER.md](TRIEN_KHAI_DOCKER.md)**: cài Docker Desktop, chạy lần đầu, tài khoản demo, lệnh hằng ngày, cách làm cho người làm frontend/backend, lỗi thường gặp, quy ước Git và đưa lên máy chủ.

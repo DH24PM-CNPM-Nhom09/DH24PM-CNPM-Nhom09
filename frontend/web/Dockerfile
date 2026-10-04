@@ -1,6 +1,6 @@
 # ============================================================================
 # Frontend Next.js — Cổng thí sinh + Cổng quản lý
-#   docker build -t tuyensinh-frontend --build-arg NEXT_PUBLIC_API_BASE_URL=https://<backend>/api/v1 ./frontend/web
+#   docker build -t tuyensinh-frontend --build-arg NEXT_PUBLIC_API_BASE_URL=https://<backend>/api/v1 ./web   (trong thư mục frontend/)
 # Biến NEXT_PUBLIC_* được "đóng" vào mã lúc build, đổi địa chỉ backend thì build lại.
 # Cổng 3000.
 # ============================================================================

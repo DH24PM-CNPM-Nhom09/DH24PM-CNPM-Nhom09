@@ -1,5 +1,0 @@
-# Chỉ dùng cho image CSDL (docker/db/Dockerfile, build ở thư mục gốc): gửi đúng các file SQL và script khởi tạo
-*
-!backend/database/*.sql
-!docker/initdb/
-!docker/db/
