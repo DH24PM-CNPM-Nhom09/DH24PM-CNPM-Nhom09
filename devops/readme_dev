@@ -1,0 +1,45 @@
+# Hệ thống quản lý tuyển sinh
+
+Hệ thống quản lý tuyển sinh: Backend NestJS + Prisma, Frontend Flutter.
+
+## 1. Cấu trúc repo
+| Thư mục | Nội dung |
+|---|---|
+| `Backend/` | API NestJS + Prisma |
+| `Frontend/` | Ứng dụng Flutter |
+| `Devops/` | Cấu hình và tài liệu DevOps |
+| `QA/` | Test case, kết quả kiểm thử |
+| `docs/` | Tài liệu thiết kế, mô tả API |
+
+## 2. Yêu cầu cài đặt
+- Git
+- Docker Desktop
+- Node.js (ghi phiên bản nhóm dùng)
+
+## 3. Chạy local
+1. Clone repo: `git clone https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09.git`
+2. Vào thư mục `Backend`, sao chép `.env.example` thành `.env` rồi điền giá trị.
+3. Chạy bằng Docker: `docker compose up`
+4. Mở `http://localhost:3000/health`. Có phản hồi là Backend đã chạy.
+
+## 4. Biến môi trường
+Danh sách biến nằm trong `Backend/.env.example`. Không đẩy file `.env` thật lên Git.
+
+| Biến | Ý nghĩa |
+|---|---|
+| `DATABASE_URL` | Chuỗi kết nối database |
+| (điền thêm theo `.env.example`) | |
+
+## 5. Migration và dữ liệu mẫu
+(Điền lệnh Prisma của nhóm sau khi kiểm tra)
+
+## 6. Deploy lên Render
+(Điền các bước và link môi trường sau khi deploy)
+
+## 7. Tài liệu API
+Xem tài liệu API do nhóm Backend viết trong thư mục `docs/`.
+
+## 8. Quy trình nhánh và Pull Request
+- Tạo nhánh từ `main`, đặt tên theo vai trò, ví dụ `devops/ten-viec`.
+- Mở Pull Request vào `main`, nhờ Team Lead review.
+- Không push thẳng vào `main`, không merge khi chưa được duyệt.
