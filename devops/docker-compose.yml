@@ -6,8 +6,8 @@ services:
     environment:
       MARIADB_ROOT_PASSWORD: root_password_doi_lai
       MARIADB_DATABASE: admission_db
-      MARIADB_USER: ptpm_user
-      MARIADB_PASSWORD: ptpm_password_doi_lai
+      MARIADB_USER: admission_user
+      MARIADB_PASSWORD: admission_pass
     ports:
       - "3306:3306"
     volumes:
@@ -19,7 +19,25 @@ services:
       retries: 5
 
   # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
   #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     NODE_ENV: development
+  #     PORT: 3000
+  #     DATABASE_URL: "mysql://admission_user:admission_pass@mariadb:3306/admission_db"
+  #     JWT_SECRET: "doi-chuoi-nay-truoc-khi-deploy-toi-thieu-32-ky-tu"
+  #     JWT_EXPIRES_IN: "8h"
+  #     GOOGLE_CLIENT_ID: "dien-google-client-id-cua-truong"
+  #     OTP_TTL_SECONDS: 300
+  #     CORS_ORIGIN: "http://localhost:3001,http://localhost:3000"
+  #     UPLOAD_DIR: "./uploads"
+  #     OTP_DEV_LOG: "true"
+  #   volumes:
+  #     - uploads_data:/app/uploads
   #   depends_on:
   #     mariadb:
   #       condition: service_healthy
@@ -32,3 +50,4 @@ services:
 
 volumes:
   mariadb_data:
+  uploads_data:
