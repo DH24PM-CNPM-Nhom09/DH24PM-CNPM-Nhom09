@@ -1,6 +1,7 @@
-node_modules/
-dist/
+node_modules
+dist
 .env
+uploads/*
+!uploads/.gitkeep
 *.log
-coverage/
-.DS_Store
+backups/
