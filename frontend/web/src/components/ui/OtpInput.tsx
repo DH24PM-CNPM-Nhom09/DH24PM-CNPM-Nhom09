@@ -38,6 +38,8 @@ export default function OtpInput({ length = 6, value, onChange }: { length?: num
             if (e.key === "Backspace" && !digits[i].trim() && i > 0) refs.current[i - 1]?.focus();
           }}
           inputMode="numeric"
+          autoComplete={i === 0 ? "one-time-code" : "off"}
+          aria-label={`Chữ số thứ ${i + 1} của mã xác thực`}
           maxLength={1}
           className="h-14 w-12 rounded-input border-[1.5px] border-gray-300 text-center text-xl font-bold text-gray-900 outline-none focus:border-accent"
         />
