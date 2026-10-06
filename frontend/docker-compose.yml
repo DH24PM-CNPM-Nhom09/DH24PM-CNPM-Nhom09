@@ -15,6 +15,8 @@ services:
     build:
       context: .
       dockerfile: docker/db/Dockerfile
+      additional_contexts:
+        sqlfiles: ../backend/database
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Đặt DB_ROOT_PASSWORD trong file .env}
@@ -35,7 +37,7 @@ services:
       start_period: 30s
 
   backend:
-    build: ./backend
+    build: ../backend
     restart: unless-stopped
     depends_on:
       db:

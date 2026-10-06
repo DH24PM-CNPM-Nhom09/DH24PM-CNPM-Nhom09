@@ -130,7 +130,7 @@ Nếu frontend trong Docker đang chạy thì tắt trước cho khỏi tranh c�
 
 ```bash
 docker compose up -d db                  # chỉ chạy CSDL trong Docker
-cd backend
+cd ../backend
 copy .env.example .env
 ```
 
@@ -168,8 +168,8 @@ Vẫn không được: gửi vào nhóm kết quả của `docker compose ps` v�
 
 - Repo có 5 nhánh, mỗi phân hệ một nhánh và một thư mục: `frontend`, `backend`, `devops`, `qa`, cộng với `main` để gộp chung. Không ai push thẳng vào `main`; mọi thay đổi vào `main` đi qua Pull Request.
 - Trước khi làm: lấy `main` mới nhất về nhánh của mình (`git checkout frontend` → `git pull` → `git merge origin/main`), rồi chỉ sửa trong thư mục của phân hệ mình.
-- Phần web nằm trọn trong `frontend/`: `web/` (giao diện Next.js), `backend/` (API NestJS riêng của web, khác với thư mục `backend/` ở ngoài của nhóm backend), `docker/` và `docker-compose.yml`.
-- **Không bao giờ** đưa lên GitHub: `frontend/.env`, `frontend/backend/.env`, `frontend/web/.env.local`, thư mục `uploads/`, `backups/`, mật khẩu ứng dụng Gmail, khóa Google. Các tệp này đã có trong `.gitignore`; kiểm tra `git status` trước khi commit.
+- Phần web nằm trọn trong `frontend/`: `web/` (giao diện Next.js)
+- **Không bao giờ** đưa lên GitHub: `frontend/.env`, `backend/.env`, `frontend/web/.env.local`, thư mục `uploads/`, `backups/`, mật khẩu ứng dụng Gmail, khóa Google. Các tệp này đã có trong `.gitignore`; kiểm tra `git status` trước khi commit.
 
 ## 7. Biến môi trường
 
@@ -202,7 +202,7 @@ Khi chạy backend ngoài compose thì đặt trực tiếp `DATABASE_URL` (`mys
 **Render (không chạy được file docker-compose)** — tạo 3 dịch vụ riêng từ cùng repo:
 
 1. **CSDL** — Private Service, Docker, Dockerfile `frontend/docker/db/Dockerfile`, build context là thư mục `frontend`. Biến: `MARIADB_ROOT_PASSWORD`, `MARIADB_DATABASE=admission_db`, `MARIADB_USER`, `MARIADB_PASSWORD`. **Gắn ổ lưu trữ bền vững vào `/var/lib/mysql`**, nếu không mỗi lần khởi động lại sẽ mất toàn bộ dữ liệu.
-2. **Backend** — Web Service, Docker, thư mục `frontend/backend`. Health check path `/health`. Biến như mục 7, `DATABASE_URL` trỏ tới tên nội bộ của dịch vụ CSDL. **Gắn ổ lưu trữ bền vững vào `/app/uploads`** (tệp minh chứng của thí sinh).
+2. **Backend** — Web Service, Docker, thư mục `backend`. Health check path `/health`. Biến như mục 7, `DATABASE_URL` trỏ tới tên nội bộ của dịch vụ CSDL. **Gắn ổ lưu trữ bền vững vào `/app/uploads`** (tệp minh chứng của thí sinh).
 3. **Frontend** — Web Service, Docker, thư mục `frontend/web`, khai báo `NEXT_PUBLIC_API_BASE_URL` trỏ tới địa chỉ HTTPS của backend (cần có lúc build).
 
 Ổ lưu trữ bền vững thường chỉ có ở gói trả phí; gói miễn phí phù hợp để demo, không phù hợp để chạy thật. Sau khi chạy: `npm run db:seed` một lần trong shell của dịch vụ backend.

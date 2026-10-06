@@ -1,7 +1,0 @@
-node_modules
-dist
-.env
-uploads/*
-!uploads/.gitkeep
-*.log
-backups/

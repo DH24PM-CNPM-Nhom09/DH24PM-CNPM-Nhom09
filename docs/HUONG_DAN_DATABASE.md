@@ -46,7 +46,7 @@ docker start admission-mariadb
 
 > Mật khẩu `root` chỉ dùng trên máy cá nhân. Không dùng cho server thật.
 
-**Muốn dùng docker-compose của DevOps thay vì lệnh trên:** file `devops/docker-compose.yml` có sẵn service `mariadb` (user `admission_user`, mật khẩu trong file). Dùng cách nào cũng được, nhưng đừng chạy cả hai cùng lúc vì cùng chiếm cổng 3306. Nếu dùng compose, thay `DATABASE_URL` bên dưới theo user và mật khẩu trong file đó.
+**Muốn dùng docker-compose của nhóm thay vì lệnh trên:** file `frontend/docker-compose.yml` chạy MariaDB ở cổng 3307 (user `tuyensinh`, mật khẩu là `DB_PASSWORD` trong `frontend/.env`) và tự nạp sẵn schema v3 → v11, xem `frontend/TRIEN_KHAI_DOCKER.md`. Dùng cách nào cũng được, nhưng nếu dùng compose thì `DATABASE_URL` bên dưới phải đổi theo user, mật khẩu và cổng 3307.
 
 ## 4. Nạp các file SQL
 
