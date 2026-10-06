@@ -12,7 +12,7 @@ Hệ thống gồm 3 phần, mỗi phần chạy trong một "container":
 | Backend NestJS (API của web) | `backend/Dockerfile` | 4000 | Kiểm tra sống: `GET /health`; tệp thí sinh tải lên lưu ở `/app/uploads` |
 | Frontend Next.js | `web/Dockerfile` | 3000 | Địa chỉ backend được "đóng" vào lúc build |
 
-Mục lục: [1. Cài Docker](#1-cài-docker-một-lần) · [2. Chạy lần đầu](#2-chạy-hệ-thống-lần-đầu) · [3. Dùng hằng ngày](#3-dùng-hằng-ngày) · [4. Theo vai trò](#4-cách-làm-theo-vai-trò-trong-nhóm) · [5. Lỗi thường gặp](#5-lỗi-thường-gặp) · [6. Quy ước Git](#6-quy-ước-git-của-nhóm) · [7. Biến môi trường](#7-biến-môi-trường) · [8. Đưa lên máy chủ](#8-đưa-lên-máy-chủ--dịch-vụ-đám-mây)
+Mục lục: [1. Cài Docker](#1-cài-docker-một-lần) · [2. Chạy lần đầu](#2-chạy-hệ-thống-lần-đầu) · [3. Dùng hằng ngày](#3-dùng-hằng-ngày) · [4. Theo vai trò](#4-cách-làm-theo-vai-trò-trong-nhóm) · [5. Lỗi thường gặp](#5-lỗi-thường-gặp) · [6. Quy ước Git](#6-quy-ước-git-của-nhóm) · [7. Biến môi trường](#7-biến-môi-trường) · [8. Đưa lên máy chủ](#8-đưa-lên-máy-chủ--dịch-vụ-đám-mây) · [9. Tên miền riêng](#9-đưa-lên-mạng-bằng-tên-miền-riêng-cloudflare-tunnel)
 
 ---
 
@@ -208,3 +208,44 @@ Khi chạy backend ngoài compose thì đặt trực tiếp `DATABASE_URL` (`mys
 Ổ lưu trữ bền vững thường chỉ có ở gói trả phí; gói miễn phí phù hợp để demo, không phù hợp để chạy thật. Sau khi chạy: `npm run db:seed` một lần trong shell của dịch vụ backend.
 
 **Trước khi dùng thật:** xem mục "Trước khi triển khai thật" trong `backend/README.md` — tắt `DEV_AUTH_BYPASS`, đổi toàn bộ mật khẩu / khóa bí mật, chạy sau HTTPS, sao lưu định kỳ (lệnh sao lưu ở mục 3, chép tệp sao lưu sang nơi khác), rà soát trang Chính sách bảo vệ dữ liệu cá nhân (`/privacy`).
+
+## 9. Đưa lên mạng bằng tên miền riêng (Cloudflare Tunnel)
+
+Chạy web ngay trên máy mình mà người khác vẫn vào được bằng link riêng, ví dụ `https://tuyensinh.<tên-miền>`. Không cần mở cổng modem, không cần IP tĩnh. Máy phải bật và đang chạy Docker thì link mới vào được. Dữ liệu (CSDL và tệp tải lên) nằm trên chính máy đó.
+
+Dùng 2 địa chỉ: `tuyensinh.<tên-miền>` cho giao diện web và `tuyensinh-api.<tên-miền>` cho API.
+
+**Bước 1 — Đưa tên miền vào Cloudflare (một lần):** tạo tài khoản miễn phí ở https://dash.cloudflare.com → **Add a domain** → nhập tên miền → chọn gói **Free** → Cloudflare cho 2 nameserver. Vào trang quản lý tên miền ở nhà đăng ký (ví dụ iNET), đổi nameserver sang 2 địa chỉ đó. Đợi Cloudflare báo tên miền **Active** (vài phút đến vài giờ).
+
+**Bước 2 — Tạo tunnel:** trong Cloudflare vào **Networking → Tunnels** (giao diện cũ: **Zero Trust → Networks → Tunnels**) → **Create a tunnel** → loại **Cloudflared** → đặt tên, ví dụ `tuyensinh` → ở bước chọn môi trường chọn **Docker**. Cloudflare hiện một lệnh dạng `docker run cloudflare/cloudflared:latest tunnel --no-autoupdate run --token eyJ...`. **Chỉ chép chuỗi dài sau chữ `--token`**, không chạy lệnh đó.
+
+**Bước 3 — Thêm 2 địa chỉ (Routes → Add route → Published application):**
+
+| Subdomain | Domain | Service URL |
+| :--- | :--- | :--- |
+| `tuyensinh` | tên miền của bạn | `http://frontend:3000` |
+| `tuyensinh-api` | tên miền của bạn | `http://backend:4000` |
+
+(`frontend`, `backend` là tên dịch vụ trong `docker-compose.yml`, giữ đúng như vậy.)
+
+**Bước 4 — Sửa `frontend/.env`:**
+
+```
+FRONTEND_URL=https://tuyensinh.<tên-miền>
+BACKEND_PUBLIC_URL=https://tuyensinh-api.<tên-miền>
+CLOUDFLARE_TUNNEL_TOKEN=<chuỗi đã chép ở bước 2>
+```
+
+**Bước 5 — Chạy (trong thư mục `frontend/`):**
+
+```bash
+docker compose --profile tunnel up -d --build
+```
+
+Mở `https://tuyensinh.<tên-miền>` là xong. Gửi link này cho mọi người. Những lần sau chỉ cần `docker compose --profile tunnel up -d`. Muốn tạm ẩn khỏi mạng mà web trên máy vẫn chạy: `docker compose stop tunnel`.
+
+**Lưu ý:**
+- `CLOUDFLARE_TUNNEL_TOKEN` là khóa bí mật: ai có nó có thể cho máy của họ nhận thay các địa chỉ trên tên miền của bạn. Chỉ để trong `.env`, không gửi ai, không đưa lên GitHub. Lộ thì vào tunnel trong Cloudflare tạo token mới.
+- Đổi `FRONTEND_URL` / `BACKEND_PUBLIC_URL` thì phải có `--build` để frontend nhận địa chỉ mới.
+- Link công khai thì ai cũng vào được: để `DEMO_LOGIN=false` nếu không muốn hiện tài khoản demo, đổi mật khẩu các tài khoản demo, và nhắc mọi người không tải giấy tờ thật (CCCD, bằng cấp) lên bản demo.
+- Đăng nhập Google thật: thêm `https://tuyensinh.<tên-miền>` vào **Authorized JavaScript origins** của Client ID (xem `backend/README.md`, Bước 3c).
