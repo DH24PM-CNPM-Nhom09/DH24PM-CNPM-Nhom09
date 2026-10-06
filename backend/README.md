@@ -1,6 +1,6 @@
 # Backend — Hệ thống Quản lý Tuyển sinh Sau đại học
 
-> Thư mục này nằm ở `frontend/backend` trong repo nhóm: là API riêng mà web `frontend/web` gọi tới, tách biệt với thư mục `backend/` của nhóm backend. Chạy bằng Docker: xem `frontend/TRIEN_KHAI_DOCKER.md`.
+> API NestJS của hệ thống tuyển sinh: web `frontend/web` gọi tới thư mục này. Chạy bằng Docker: xem `frontend/TRIEN_KHAI_DOCKER.md`.
 
 NestJS 10 + Prisma 6 + MariaDB, viết bám CSDL `admission_db` v3 của nhóm, kèm `migration_v4_backend.sql` và `migration_v5_announcement.sql` (chỉ thêm, không xóa gì).
 Phục vụ cả hai phân hệ: **Quản lý** (`/admin` trên web) và **Thí sinh**.

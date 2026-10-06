@@ -14,7 +14,7 @@ Trường Đại học An Giang. (Bản Next.js theo đúng phân công của le
 
 Code nằm ở nhánh **`frontend`**, thư mục **`frontend/web`** của repo nhóm:
 `https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09/tree/frontend/frontend/web`.
-API mà web gọi nằm ở `frontend/backend`; chạy cả hai bằng Docker theo `frontend/TRIEN_KHAI_DOCKER.md`.
+API mà web gọi nằm ở `backend`; chạy cả hai bằng Docker theo `frontend/TRIEN_KHAI_DOCKER.md`.
 
 ## Bắt đầu
 
