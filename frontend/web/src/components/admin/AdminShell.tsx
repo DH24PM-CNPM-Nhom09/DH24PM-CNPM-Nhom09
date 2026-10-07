@@ -117,14 +117,14 @@ function ShellInner({ children }: { children: ReactNode }) {
 
   const sidebar = (
     <div className="flex h-full flex-col bg-navy-900 text-white">
-      <div className="flex items-center gap-3 px-5 pb-6 pt-6">
+      <div className="flex shrink-0 items-center gap-3 px-5 pb-5 pt-6">
         <BrandMark size={40} onDark />
         <div className="leading-tight">
           <p className="text-sm font-bold">Cổng Quản lý</p>
           <p className="text-xs text-white/60">Tuyển sinh Sau đại học</p>
         </div>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 px-3" aria-label="Điều hướng quản lý">
+      <nav className="admin-nav-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-2" aria-label="Điều hướng quản lý">
         {items.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
           return (
@@ -132,7 +132,7 @@ function ShellInner({ children }: { children: ReactNode }) {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-input px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+              className={`flex shrink-0 items-center gap-3 rounded-input px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
                 active ? "bg-white text-navy-900" : "text-white/75 hover:bg-white/10 hover:text-white"
               }`}
             >
@@ -146,7 +146,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       </nav>
 
       {USE_MOCK && (
-        <div className="mx-3 mb-3 rounded-input border border-white/10 px-3 py-2.5 text-xs text-white/60">
+        <div className="mx-3 mb-3 shrink-0 rounded-input border border-white/10 px-3 py-2.5 text-xs text-white/60">
           Đang chạy dữ liệu mẫu.{" "}
           <button type="button" onClick={() => setResetOpen(true)} className="inline-flex items-center gap-1 font-semibold text-white/90 underline-offset-2 hover:underline">
             <IconRefresh size={12} /> Khôi phục
@@ -154,7 +154,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <div className="border-t border-white/10 p-3">
+      <div className="shrink-0 border-t border-white/10 p-3">
         <div className="flex items-center gap-3 rounded-input px-2 py-2">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold">{initials(ctx.staff.fullName)}</div>
           <div className="min-w-0 flex-1 leading-tight">
