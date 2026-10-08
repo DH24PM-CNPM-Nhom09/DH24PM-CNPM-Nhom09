@@ -2,15 +2,15 @@
 
 Tài liệu này giúp mọi thành viên chạy **toàn bộ hệ thống tuyển sinh sau đại học trên máy mình chỉ bằng vài lệnh**, không cần cài XAMPP, Node.js hay MariaDB. Phần cuối dành cho người đưa hệ thống lên máy chủ.
 
-> Toàn bộ phần web nằm trong thư mục **`frontend/`** của repo, nhánh **`frontend`**. Mọi đường dẫn và lệnh trong tài liệu này đều tính từ thư mục `frontend/` (cùng chỗ với `docker-compose.yml`). Thư mục `backend/`, `devops/`, `qa/` ở ngoài là của các nhóm khác, không liên quan tới các lệnh dưới đây.
+> Bản chạy được đầy đủ nằm ở nhánh **`main`**. Các lệnh `docker compose` chạy **trong thư mục `frontend/`** (cùng chỗ với `docker-compose.yml`). Đường dẫn tệp trong tài liệu này tính từ **thư mục gốc repo**: `backend/` là API NestJS, `frontend/web/` là giao diện Next.js, `frontend/docker/` là cấu hình CSDL.
 
 Hệ thống gồm 3 phần, mỗi phần chạy trong một "container":
 
 | Phần | Dockerfile | Cổng trên máy bạn | Ghi chú |
 | :--- | :--- | :--- | :--- |
-| CSDL MariaDB 10.11 | `docker/db/Dockerfile` (build ở thư mục **`frontend/`**) | 3307 (chỉ máy bạn mở được) | Tự tạo đủ 45 bảng, 13 trigger từ `backend/database` (v3 → v11) ở lần chạy đầu |
+| CSDL MariaDB 10.11 | `frontend/docker/db/Dockerfile` (lấy tệp SQL từ `backend/database`) | 3307 (chỉ máy bạn mở được) | Tự tạo đủ 45 bảng, 13 trigger từ `backend/database` (v3 → v11) ở lần chạy đầu |
 | Backend NestJS (API của web) | `backend/Dockerfile` | 4000 | Kiểm tra sống: `GET /health`; tệp thí sinh tải lên lưu ở `/app/uploads` |
-| Frontend Next.js | `web/Dockerfile` | 3000 | Địa chỉ backend được "đóng" vào lúc build |
+| Frontend Next.js | `frontend/web/Dockerfile` | 3000 | Địa chỉ backend được "đóng" vào lúc build |
 
 Mục lục: [1. Cài Docker](#1-cài-docker-một-lần) · [2. Chạy lần đầu](#2-chạy-hệ-thống-lần-đầu) · [3. Dùng hằng ngày](#3-dùng-hằng-ngày) · [4. Theo vai trò](#4-cách-làm-theo-vai-trò-trong-nhóm) · [5. Lỗi thường gặp](#5-lỗi-thường-gặp) · [6. Quy ước Git](#6-quy-ước-git-của-nhóm) · [7. Biến môi trường](#7-biến-môi-trường) · [8. Đưa lên máy chủ](#8-đưa-lên-máy-chủ--dịch-vụ-đám-mây) · [9. Tên miền riêng](#9-đưa-lên-mạng-bằng-tên-miền-riêng-cloudflare-tunnel)
 
@@ -37,8 +37,8 @@ Máy nên có từ 8 GB RAM. Nếu máy chậm: Docker Desktop → Settings → 
 ## 2. Chạy hệ thống lần đầu
 
 ```bash
-git clone -b frontend https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09.git
-cd DH24PM-CNPM-Nhom09/frontend           # mọi lệnh sau đều chạy trong thư mục này
+git clone https://github.com/DH24PM-CNPM-Nhom09/DH24PM-CNPM-Nhom09.git
+cd DH24PM-CNPM-Nhom09/frontend           # mọi lệnh docker compose đều chạy trong thư mục này
 
 copy .env.example .env                   # macOS/Linux: cp .env.example .env
 ```
@@ -142,9 +142,9 @@ DATABASE_URL="mysql://tuyensinh:<DB_PASSWORD>@127.0.0.1:3307/admission_db"
 
 Rồi `npm install` → `npx prisma generate` → `npm run dev` (backend tự chạy lại khi lưu tệp). Ai vẫn quen dùng XAMPP thì cứ giữ `DATABASE_URL` trỏ về XAMPP như trong `backend/README.md`, hai cách dùng song song được.
 
-**Thêm bảng/cột mới vào CSDL:** tạo tệp `backend/database/migration_vNN_<tên>.sql` (chỉ `CREATE`/`ALTER ... ADD`, không xóa), thêm tên tệp vào `backend/prisma/update.ts` và `docker/initdb/01-admission-db.sh`, cập nhật `backend/prisma/schema.prisma`. Trong tệp SQL **không được có dấu `;` bên trong chuỗi hoặc chú thích** (lệnh `db:update` tách câu theo dấu `;`).
+**Thêm bảng/cột mới vào CSDL:** tạo tệp `backend/database/migration_vNN_<tên>.sql` (chỉ `CREATE`/`ALTER ... ADD`, không xóa), thêm tên tệp vào `backend/prisma/update.ts` và `frontend/docker/initdb/01-admission-db.sh`, cập nhật `backend/prisma/schema.prisma`. Trong tệp SQL **không được có dấu `;` bên trong chuỗi hoặc chú thích** (lệnh `db:update` tách câu theo dấu `;`).
 
-**Phân quyền:** ma trận quyền ở `backend/src/common/permissions.ts` và `web/src/lib/admin/permissions.ts` phải luôn giống nhau. Sửa bên này thì sửa cả bên kia.
+**Phân quyền:** ma trận quyền ở `backend/src/common/permissions.ts` và `frontend/web/src/lib/admin/permissions.ts` phải luôn giống nhau. Sửa bên này thì sửa cả bên kia.
 
 ## 5. Lỗi thường gặp
 
@@ -166,7 +166,7 @@ Vẫn không được: gửi vào nhóm kết quả của `docker compose ps` v�
 
 ## 6. Quy ước Git của nhóm
 
-- Repo có 5 nhánh, mỗi phân hệ một nhánh và một thư mục: `frontend`, `backend`, `devops`, `qa`, cộng với `main` để gộp chung. Không ai push thẳng vào `main`; mọi thay đổi vào `main` đi qua Pull Request.
+- Repo có 5 nhánh: `main` là bản gộp chung chạy được đầy đủ; `frontend`, `backend`, `devops`, `qa` là nhánh làm việc của từng phân hệ. Không ai push thẳng vào `main`; mọi thay đổi vào `main` đi qua Pull Request (GitHub Actions tự build và chạy thử Docker cho mỗi Pull Request).
 - Trước khi làm: lấy `main` mới nhất về nhánh của mình (`git checkout frontend` → `git pull` → `git merge origin/main`), rồi chỉ sửa trong thư mục của phân hệ mình.
 - Phần web nằm trọn trong `frontend/`: `web/` (giao diện Next.js)
 - **Không bao giờ** đưa lên GitHub: `frontend/.env`, `backend/.env`, `frontend/web/.env.local`, thư mục `uploads/`, `backups/`, mật khẩu ứng dụng Gmail, khóa Google. Các tệp này đã có trong `.gitignore`; kiểm tra `git status` trước khi commit.
@@ -201,7 +201,7 @@ Khi chạy backend ngoài compose thì đặt trực tiếp `DATABASE_URL` (`mys
 
 **Render (không chạy được file docker-compose)** — tạo 3 dịch vụ riêng từ cùng repo:
 
-1. **CSDL** — Private Service, Docker, Dockerfile `frontend/docker/db/Dockerfile`, build context là thư mục `frontend`. Biến: `MARIADB_ROOT_PASSWORD`, `MARIADB_DATABASE=admission_db`, `MARIADB_USER`, `MARIADB_PASSWORD`. **Gắn ổ lưu trữ bền vững vào `/var/lib/mysql`**, nếu không mỗi lần khởi động lại sẽ mất toàn bộ dữ liệu.
+1. **CSDL** — `frontend/docker/db/Dockerfile` cần thêm build context phụ `sqlfiles=backend/database` (docker compose tự truyền); nơi triển khai không hỗ trợ build context phụ thì dùng một dịch vụ MariaDB/MySQL sẵn có rồi chạy lần lượt `backend/database/admission_db_v3.sql`, v4 → v11. Biến khi chạy image: `MARIADB_ROOT_PASSWORD`, `MARIADB_DATABASE=admission_db`, `MARIADB_USER`, `MARIADB_PASSWORD`. **Gắn ổ lưu trữ bền vững vào `/var/lib/mysql`**, nếu không mỗi lần khởi động lại sẽ mất toàn bộ dữ liệu.
 2. **Backend** — Web Service, Docker, thư mục `backend`. Health check path `/health`. Biến như mục 7, `DATABASE_URL` trỏ tới tên nội bộ của dịch vụ CSDL. **Gắn ổ lưu trữ bền vững vào `/app/uploads`** (tệp minh chứng của thí sinh).
 3. **Frontend** — Web Service, Docker, thư mục `frontend/web`, khai báo `NEXT_PUBLIC_API_BASE_URL` trỏ tới địa chỉ HTTPS của backend (cần có lúc build).
 
