@@ -1,9 +1,10 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, num, str } from "../../common/util";
-import { appealTransferNote } from "../../common/admission";
+import { appealTransferNote, recalcApplicationTotalScore } from "../../common/admission";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
@@ -96,6 +97,11 @@ export class AppealsService {
         data: { status, new_score: newScore, resolved_at: new Date(), resolved_by_staff_id: BigInt(me.staffAccountId), resolution_note: note },
       });
       if (res.count === 0) conflict("ALREADY_RESOLVED", "Đơn này vừa được người khác xử lý.");
+      // Thay trigger #3+#4: cập nhật exam_score và tính lại total_score (Filess.io free không có TRIGGER)
+      if (status === "RESOLVED_CHANGED") {
+        await tx.exam_score.update({ where: { score_id: p.score_id }, data: { score: new Prisma.Decimal(newScore.toFixed(2)) } });
+        await recalcApplicationTotalScore(tx, p.exam_score.application_id);
+      }
       await this.audit.record(
         { type: "STAFF", id: me.staffAccountId },
         "APPEAL_RESOLVE",

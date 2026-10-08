@@ -68,3 +68,36 @@ export function weightedTotal(scores: { score: number; weight: number }[]) {
 
 /** Nội dung chuyển khoản lệ phí phúc khảo: "PK" + mã hồ sơ bỏ dấu gạch */
 export const appealTransferNote = (applicationCode: string) => ("PK" + applicationCode.replace(/[^A-Za-z0-9]/g, "")).slice(0, 25);
+
+/**
+ * Thay thế trigger #4 / stored procedure sp_recalc_application_total_score.
+ * Filess.io (bản free) không cho tạo TRIGGER/PROCEDURE (cần SUPER), nên tính
+ * lại total_score trong application code sau mỗi lần INSERT/UPDATE exam_score.
+ * rank_order = 1 chỉ là giá trị khởi tạo; bước xếp hạng (UC-TT-02) sẽ gán lại.
+ */
+export async function recalcApplicationTotalScore(
+  tx: { exam_score: { findMany: Function }; application_ranking: { upsert: Function } },
+  applicationId: bigint,
+) {
+  const scores = await tx.exam_score.findMany({
+    where: { application_id: applicationId },
+    include: { exam_subject: { select: { weight: true } } },
+  });
+  const total =
+    Math.round(
+      scores.reduce((s: number, x: { score: unknown; exam_subject: { weight: unknown } }) => s + Number(x.score) * Number(x.exam_subject.weight), 0) * 100,
+    ) / 100;
+  await tx.application_ranking.upsert({
+    where: { application_id: applicationId },
+    create: { application_id: applicationId, total_score: total, rank_order: 1 },
+    update: { total_score: total }, // number OK; Prisma coerce to Decimal
+  });
+  return total;
+}
+
+/** Map kết quả xét tuyển -> application.admission_status (thay trigger #5) */
+export function admissionStatusFromResult(result: string): "ADMITTED" | "WAITLISTED" | "NONE" {
+  if (result === "TRUNG_TUYEN") return "ADMITTED";
+  if (result === "DU_BI") return "WAITLISTED";
+  return "NONE";
+}
