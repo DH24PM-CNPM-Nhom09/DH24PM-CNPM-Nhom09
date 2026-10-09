@@ -55,6 +55,25 @@ export interface Candidate {
   nationality?: string;
   accountCreatedAt?: string;
   hasPassword?: boolean;
+  /** Khai theo CCCD ở bước Minh chứng */
+  idIssueDate?: string | null;
+  idIssuePlace?: string | null;
+  birthplace?: string | null;
+  ethnicity?: string | null;
+  permanentAddress?: string | null;
+}
+
+/** Thông tin thí sinh khai lại theo CCCD + cam kết (bước Minh chứng) */
+export interface DeclarationInput {
+  idNumber: string;
+  idIssueDate: string;
+  idIssuePlace: string;
+  birthplace: string;
+  ethnicity: string;
+  phoneNumber: string;
+  permanentAddress: string;
+  address: string;
+  confirm: boolean;
 }
 
 export interface CandidateNotification {
@@ -181,6 +200,8 @@ export interface FullApplication {
   admission?: AdmissionView | null;
   /** Hồ sơ đã hủy do thí sinh từ chối / quá hạn xác nhận nhập học */
   declined?: boolean;
+  /** Lúc thí sinh khai thông tin theo CCCD và tích ô cam kết */
+  declarationConfirmedAt?: string | null;
 }
 
 export type AdmissionResultCode = "TRUNG_TUYEN" | "DU_BI" | "KHONG_TRUNG_TUYEN";

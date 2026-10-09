@@ -58,6 +58,11 @@ export class CandidateService {
       email: account.email,
       phoneNumber: account.phone_number,
       nationality: c?.nationality ?? "Việt Nam",
+      idIssueDate: ymd(c?.id_issue_date) ?? null,
+      idIssuePlace: c?.id_issue_place ?? null,
+      birthplace: c?.birthplace ?? null,
+      ethnicity: c?.ethnicity ?? null,
+      permanentAddress: c?.permanent_address ?? null,
       accountCreatedAt: isoReq(account.created_at),
       hasPassword: Boolean(account.password_hash),
     };

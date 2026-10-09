@@ -121,11 +121,13 @@ export default function PrintApplicationForm() {
           <Line label="Họ và tên" value={me.fullName.toUpperCase()} />
           <Line label="Giới tính" value={me.gender ? GENDER[me.gender] : ""} />
           <Line label="Ngày sinh" value={fmtDob(me.dob)} />
-          <Line label="Nơi sinh" />
-          <Line label="Dân tộc" />
+          <Line label="Nơi sinh" value={me.birthplace} />
+          <Line label="Dân tộc" value={me.ethnicity} />
           <Line label="Quốc tịch" value={me.nationality} />
           <Line label="Số CCCD" value={me.idNumber} />
-          <Line label="Ngày cấp" />
+          <Line label="Ngày cấp" value={me.idIssueDate ? fmtDob(me.idIssueDate) : null} />
+          <Line label="Nơi cấp" value={me.idIssuePlace} wide />
+          <Line label="Nơi thường trú" value={me.permanentAddress} wide />
           <Line label="Địa chỉ liên hệ" value={me.address} wide />
           <Line label="Điện thoại" value={me.phoneNumber} />
           <Line label="Email" value={me.email} />

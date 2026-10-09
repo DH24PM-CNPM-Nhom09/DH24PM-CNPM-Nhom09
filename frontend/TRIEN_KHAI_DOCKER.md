@@ -8,7 +8,7 @@ Hệ thống gồm 3 phần, mỗi phần chạy trong một "container":
 
 | Phần | Dockerfile | Cổng trên máy bạn | Ghi chú |
 | :--- | :--- | :--- | :--- |
-| CSDL MariaDB 10.11 | `frontend/docker/db/Dockerfile` (lấy tệp SQL từ `backend/database`) | 3307 (chỉ máy bạn mở được) | Tự tạo đủ 45 bảng, 13 trigger từ `backend/database` (v3 → v11) ở lần chạy đầu |
+| CSDL MariaDB 10.11 | `frontend/docker/db/Dockerfile` (lấy tệp SQL từ `backend/database`) | 3307 (chỉ máy bạn mở được) | Tự tạo đủ 45 bảng, 13 trigger từ `backend/database` (v3 → v12) ở lần chạy đầu |
 | Backend NestJS (API của web) | `backend/Dockerfile` | 4000 | Kiểm tra sống: `GET /health`; tệp thí sinh tải lên lưu ở `/app/uploads` |
 | Frontend Next.js | `frontend/web/Dockerfile` | 3000 | Địa chỉ backend được "đóng" vào lúc build |
 
@@ -201,7 +201,7 @@ Khi chạy backend ngoài compose thì đặt trực tiếp `DATABASE_URL` (`mys
 
 **Render (không chạy được file docker-compose)** — tạo 3 dịch vụ riêng từ cùng repo:
 
-1. **CSDL** — `frontend/docker/db/Dockerfile` cần thêm build context phụ `sqlfiles=backend/database` (docker compose tự truyền); nơi triển khai không hỗ trợ build context phụ thì dùng một dịch vụ MariaDB/MySQL sẵn có rồi chạy lần lượt `backend/database/admission_db_v3.sql`, v4 → v11. Biến khi chạy image: `MARIADB_ROOT_PASSWORD`, `MARIADB_DATABASE=admission_db`, `MARIADB_USER`, `MARIADB_PASSWORD`. **Gắn ổ lưu trữ bền vững vào `/var/lib/mysql`**, nếu không mỗi lần khởi động lại sẽ mất toàn bộ dữ liệu.
+1. **CSDL** — `frontend/docker/db/Dockerfile` cần thêm build context phụ `sqlfiles=backend/database` (docker compose tự truyền); nơi triển khai không hỗ trợ build context phụ thì dùng một dịch vụ MariaDB/MySQL sẵn có rồi chạy lần lượt `backend/database/admission_db_v3.sql`, v4 → v12. Biến khi chạy image: `MARIADB_ROOT_PASSWORD`, `MARIADB_DATABASE=admission_db`, `MARIADB_USER`, `MARIADB_PASSWORD`. **Gắn ổ lưu trữ bền vững vào `/var/lib/mysql`**, nếu không mỗi lần khởi động lại sẽ mất toàn bộ dữ liệu.
 2. **Backend** — Web Service, Docker, thư mục `backend`. Health check path `/health`. Biến như mục 7, `DATABASE_URL` trỏ tới tên nội bộ của dịch vụ CSDL. **Gắn ổ lưu trữ bền vững vào `/app/uploads`** (tệp minh chứng của thí sinh).
 3. **Frontend** — Web Service, Docker, thư mục `frontend/web`, khai báo `NEXT_PUBLIC_API_BASE_URL` trỏ tới địa chỉ HTTPS của backend (cần có lúc build).
 

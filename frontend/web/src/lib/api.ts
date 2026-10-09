@@ -7,7 +7,7 @@
 //   NEXT_PUBLIC_USE_MOCK=false
 //   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
-import type { Application, ApplicationDocument, Candidate, CandidateNotification, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorOverview, SupervisorRequest } from "./types";
+import type { Application, ApplicationDocument, Candidate, CandidateNotification, DeclarationInput, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorOverview, SupervisorRequest } from "./types";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -133,6 +133,7 @@ export async function getMyProfile(): Promise<Candidate> {
       nationality: "Việt Nam",
       accountCreatedAt: "2026-08-20T03:00:00Z",
       hasPassword: true,
+      ...mockDeclaration,
     });
   }
   return request<Candidate>("/candidates/me");
@@ -297,6 +298,19 @@ export async function saveLanguageChoice(option: LanguageOption, note: string): 
   return request<FullApplication>("/applications/me/language", { method: "PUT", body: JSON.stringify({ option, note }) });
 }
 
+let mockDeclaration: Partial<Candidate> = {};
+
+/** Khai thông tin theo CCCD + tích cam kết (bước Minh chứng)          PUT /applications/me/declaration */
+export async function saveDeclaration(payload: DeclarationInput): Promise<FullApplication> {
+  if (USE_MOCK) {
+    const { confirm, ...rest } = payload;
+    mockDeclaration = rest;
+    if (mockApp) mockApp.declarationConfirmedAt = confirm ? new Date().toISOString() : null;
+    return delay(mockFull());
+  }
+  return request<FullApplication>("/applications/me/declaration", { method: "PUT", body: JSON.stringify(payload) });
+}
+
 export async function saveResearchProposal(payload: ResearchProposalInput): Promise<FullApplication> {
   if (USE_MOCK) {
     if (mockApp) mockApp.proposal = { ...payload, lecturerName: payload.preferredLecturerId ? "PGS.TS Trần Văn Long" : null, supervisorStatus: null };
@@ -309,6 +323,7 @@ export async function submitMyApplication(): Promise<FullApplication> {
   if (USE_MOCK) {
     const a = mockFull();
     if (a.missingDocuments.length) throw { error_code: "APPLICATION_INCOMPLETE", message: "Chưa nộp được hồ sơ. Còn thiếu minh chứng bắt buộc." };
+    if (!a.declarationConfirmedAt) throw { error_code: "APPLICATION_INCOMPLETE", message: "Chưa nộp được hồ sơ. Chưa khai thông tin cá nhân theo CCCD và tích ô cam kết ở bước Minh chứng." };
     const now = new Date().toISOString();
     mockApp = {
       ...a,
