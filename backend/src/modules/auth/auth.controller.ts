@@ -28,6 +28,12 @@ export class AuthController {
     return this.auth.staffMe(asStaff(user).staffAccountId);
   }
 
+  /** Trang cá nhân của cán bộ đang đăng nhập: thông tin tài khoản, đăng nhập gần đây, việc của tôi, hoạt động gần đây */
+  @Get("staff/me/profile")
+  staffProfile(@CurrentUser() user: AuthUser) {
+    return this.auth.staffProfile(asStaff(user).staffAccountId);
+  }
+
   @Post("staff/change-password")
   @HttpCode(200)
   @AllowPendingPasswordChange()

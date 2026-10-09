@@ -134,6 +134,38 @@ export class AuthService {
     return toStaffDto(staff);
   }
 
+  async staffProfile(staffId: number) {
+    const sid = BigInt(staffId);
+    const staff = await this.prisma.staff_account.findUniqueOrThrow({
+      where: { staff_account_id: sid },
+      include: { staff_role: { include: { role: true } } },
+    });
+    const mine = { actor_type: "STAFF", actor_id: sid };
+    const since30 = new Date(Date.now() - 30 * 86_400_000);
+    const [logins, activity, actions30, underReview, reviewsDone] = await Promise.all([
+      this.prisma.audit_log.findMany({ where: { ...mine, action: "STAFF_LOGIN" }, orderBy: { created_at: "desc" }, take: 5 }),
+      this.prisma.audit_log.findMany({ where: { ...mine, action: { not: "STAFF_LOGIN" } }, orderBy: { created_at: "desc" }, take: 10 }),
+      this.prisma.audit_log.count({ where: { ...mine, action: { not: "STAFF_LOGIN" }, created_at: { gte: since30 } } }),
+      this.prisma.application.count({ where: { assigned_staff_id: sid, review_status: "UNDER_REVIEW", is_cancelled: false, deleted_at: null } }),
+      this.prisma.application_review.count({ where: { reviewer_staff_id: sid } }),
+    ]);
+    const log = (l: (typeof activity)[number]) => ({
+      logId: Number(l.log_id),
+      action: l.action,
+      entityTable: l.entity_table,
+      entityId: l.entity_id === null ? null : Number(l.entity_id),
+      detail: l.detail,
+      createdAt: l.created_at.toISOString(),
+    });
+    return {
+      staff: toStaffDto(staff),
+      passwordChangedAt: staff.password_changed_at?.toISOString() ?? null,
+      recentLogins: logins.map((l) => ({ at: l.created_at.toISOString(), detail: l.detail })),
+      stats: { underReview, reviewsDone, actionsLast30Days: actions30 },
+      recentActivity: activity.map(log),
+    };
+  }
+
   // ======================================================================== Thí sinh
   private candidateToken(accountId: bigint) {
     return this.jwt.signAsync({ sub: Number(accountId), typ: "CANDIDATE" });

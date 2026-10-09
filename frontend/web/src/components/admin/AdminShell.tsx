@@ -43,7 +43,7 @@ const NAV: { href: string; label: string; perm: Permission | Permission[]; icon:
   { href: "/admin/audit-log", label: "Nhật ký hệ thống", perm: "audit:view", icon: IconList },
 ];
 
-function initials(name: string) {
+export function initials(name: string) {
   const parts = name.replace(/^(PGS\.TS|TS\.|ThS\.)\s*/, "").trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
@@ -155,12 +155,21 @@ function ShellInner({ children }: { children: ReactNode }) {
       )}
 
       <div className="shrink-0 border-t border-white/10 p-3">
-        <div className="flex items-center gap-3 rounded-input px-2 py-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold">{initials(ctx.staff.fullName)}</div>
-          <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-[13px] font-semibold">{ctx.staff.fullName}</p>
-            <p className="truncate text-xs text-white/60">{ctx.staff.roles.map((r) => ROLE_LABEL[r]).join(", ")}</p>
-          </div>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/admin/profile"
+            aria-current={pathname === "/admin/profile" ? "page" : undefined}
+            title="Trang cá nhân"
+            className={`flex min-w-0 flex-1 items-center gap-3 rounded-input px-2 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+              pathname === "/admin/profile" ? "bg-white/15" : "hover:bg-white/10"
+            }`}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold">{initials(ctx.staff.fullName)}</div>
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-[13px] font-semibold">{ctx.staff.fullName}</p>
+              <p className="truncate text-xs text-white/60">{ctx.staff.roles.map((r) => ROLE_LABEL[r]).join(", ")}</p>
+            </div>
+          </Link>
           <Link href="/admin/change-password" className="rounded-md p-2 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
             <IconKey size={17} />
           </Link>
@@ -195,6 +204,14 @@ function ShellInner({ children }: { children: ReactNode }) {
               <IconMenu size={20} />
             </button>
             <span className="text-sm font-bold text-gray-900">Cổng Quản lý Tuyển sinh</span>
+            <Link
+              href="/admin/profile"
+              className="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-navy-800 text-xs font-bold text-white"
+              aria-label="Trang cá nhân"
+              title="Trang cá nhân"
+            >
+              {initials(ctx.staff.fullName)}
+            </Link>
           </header>
           <main className="mx-auto w-full max-w-[1320px] px-4 py-6 md:px-8 md:py-8">{children}</main>
         </div>

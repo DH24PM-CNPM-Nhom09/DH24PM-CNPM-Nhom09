@@ -1516,6 +1516,40 @@ export async function listAuditLogs(query: { q?: string; actorType?: string; pag
   });
 }
 
+// ============================================================================
+// Trang cá nhân cán bộ                                GET /auth/staff/me/profile
+// ============================================================================
+export interface StaffProfile {
+  staff: StaffAccount;
+  passwordChangedAt: string | null;
+  recentLogins: { at: string; detail: string | null }[];
+  stats: { underReview: number; reviewsDone: number; actionsLast30Days: number };
+  recentActivity: Omit<AuditLog, "actorType" | "actorId">[];
+}
+
+export async function getMyStaffProfile(): Promise<StaffProfile> {
+  if (!USE_MOCK) return request<StaffProfile>("/auth/staff/me/profile");
+  const me = currentStaff();
+  const db = getDb();
+  const mine = db.auditLogs
+    .filter((l) => l.actorType === "STAFF" && l.actorId === me.staffAccountId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const work = mine.filter((l) => l.action !== "STAFF_LOGIN");
+  const strip = ({ actorType: _t, actorId: _i, ...rest }: AuditLog) => rest;
+  return delay({
+    staff: structuredClone(me),
+    passwordChangedAt: null,
+    recentLogins: mine.filter((l) => l.action === "STAFF_LOGIN").slice(0, 5).map((l) => ({ at: l.createdAt, detail: l.detail })),
+    stats: {
+      underReview: db.applications.filter((a) => a.reviewStatus === "UNDER_REVIEW" && a.assignedStaffId === me.staffAccountId).length,
+      reviewsDone: work.filter((l) => l.entityTable === "application").length,
+      actionsLast30Days: work.filter((l) => l.createdAt >= since30).length,
+    },
+    recentActivity: work.slice(0, 10).map(strip),
+  });
+}
+
 /** Mock: khôi phục dữ liệu mẫu ban đầu (dùng trước buổi demo) */
 export async function resetMockData() {
   if (!USE_MOCK) return;

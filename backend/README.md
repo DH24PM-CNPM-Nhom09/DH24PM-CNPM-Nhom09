@@ -199,6 +199,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 |---|---|---|
 | POST | `/auth/staff/login`, `/auth/staff/google` | công khai |
 | GET | `/auth/staff/me` | cán bộ |
+| GET | `/auth/staff/me/profile` (trang cá nhân: thông tin tài khoản, đăng nhập gần đây, việc của tôi, hoạt động gần đây) | cán bộ |
 | POST | `/auth/register`, `/auth/register/verify`, `/auth/register/resend` | công khai (thí sinh) |
 | GET | `/public/auth-config` (Google Client ID cho frontend) | công khai |
 | POST | `/auth/google`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password` | công khai (thí sinh) |
