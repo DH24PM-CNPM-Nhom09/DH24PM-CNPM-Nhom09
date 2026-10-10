@@ -13,6 +13,7 @@ import {
   vnTime,
   weightedTotal,
   workingSlots,
+  recalcApplicationTotalScore,
 } from "../../common/admission";
 import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
@@ -342,9 +343,10 @@ export class ScoringService {
           const note = absent ? ABSENT_NOTE : String(it.note ?? "").trim().slice(0, 500) || null;
           const old = a.exam_score.find((s) => s.subject_id === subj.subject_id);
           if (old && Number(old.score) === score && (old.note ?? null) === note) continue;
-          // INSERT/UPDATE exam_score -> trigger #4 tự tính lại application_ranking.total_score
+          // Thay trigger #4: cập nhật điểm rồi tính lại total_score trong code
           if (old) await tx.exam_score.update({ where: { score_id: old.score_id }, data: { score: new Prisma.Decimal(score.toFixed(2)), note, grader_staff_id: BigInt(me.staffAccountId), graded_at: new Date() } });
           else await tx.exam_score.create({ data: { application_id: a.application_id, subject_id: subj.subject_id, score: new Prisma.Decimal(score.toFixed(2)), note, grader_staff_id: BigInt(me.staffAccountId) } });
+          await recalcApplicationTotalScore(tx, a.application_id);
           if (subj.exam_format === "PHONG_VAN" && iv) await tx.interview_schedule.update({ where: { schedule_id: iv.schedule_id }, data: { status: "COMPLETED" } });
           changed++;
         }

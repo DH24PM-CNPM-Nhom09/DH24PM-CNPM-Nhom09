@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { ABSENT_NOTE, eligibleWhere, PENDING_REVIEW, RESULT_VI, vnTime, weightedTotal } from "../../common/admission";
+import { ABSENT_NOTE, admissionStatusFromResult, eligibleWhere, PENDING_REVIEW, RESULT_VI, vnTime, weightedTotal } from "../../common/admission";
 import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
@@ -238,6 +238,13 @@ export class ResultsService {
           where: { application_id: { in: results.map((r) => r.application_id) }, published_at: null },
           data: { approved_by_leader_id: BigInt(me.staffAccountId), approved_at: now, published_at: now },
         });
+        // Thay trigger #5: Filess.io free không hỗ trợ TRIGGER — đồng bộ admission_status trong code
+        for (const r of results) {
+          await tx.application.update({
+            where: { application_id: r.application_id },
+            data: { admission_status: admissionStatusFromResult(r.result) },
+          });
+        }
         const bmVal = bm.admission_benchmark ? Number(bm.admission_benchmark.benchmark_value) : null;
         for (const r of results) {
           const a = r.application;
@@ -284,8 +291,9 @@ export class ResultsService {
     for (const w of queue) {
       if (gap <= 0) break;
       await tx.waitlist.update({ where: { waitlist_id: w.waitlist_id }, data: { status: "PROMOTED" } });
-      // Đổi DU_BI -> TRUNG_TUYEN trên kết quả đã công bố -> trigger #5 đặt admission_status = ADMITTED
+      // Đổi DU_BI -> TRUNG_TUYEN; thay trigger #5: set admission_status = ADMITTED trong code
       await tx.admission_result.update({ where: { application_id: w.application_id }, data: { result: "TRUNG_TUYEN" } });
+      await tx.application.update({ where: { application_id: w.application_id }, data: { admission_status: "ADMITTED" } });
       await this.audit.notifyCandidate(
         id(w.application.candidate_id),
         "Kết quả xét tuyển: Trúng tuyển (gọi từ danh sách dự bị)",

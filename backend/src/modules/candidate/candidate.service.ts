@@ -184,6 +184,23 @@ export class CandidateService {
           ? await this.prisma.application_document.findFirst({ where: { application_id: app.application_id, document_type: documentType, verify_status: "INVALID" } })
           : null;
       const saved = await this.prisma.$transaction(async (tx) => {
+        // Thay trigger #2: giới hạn tổng dung lượng minh chứng ≤ 30MB (Filess.io free không có TRIGGER)
+        if (!replace) {
+          const agg = await tx.application_document.aggregate({
+            where: { application_id: app.application_id },
+            _sum: { file_size_kb: true },
+          });
+          const totalKb = (agg._sum.file_size_kb ?? 0) + sizeKb;
+          if (totalKb > 30720) fail("TOTAL_SIZE_EXCEEDED", "Tổng dung lượng minh chứng của một hồ sơ vượt quá 30MB theo quy định.");
+        } else {
+          // Khi nộp lại: trừ dung lượng file cũ rồi cộng file mới
+          const agg = await tx.application_document.aggregate({
+            where: { application_id: app.application_id, document_id: { not: replace.document_id } },
+            _sum: { file_size_kb: true },
+          });
+          const totalKb = (agg._sum.file_size_kb ?? 0) + sizeKb;
+          if (totalKb > 30720) fail("TOTAL_SIZE_EXCEEDED", "Tổng dung lượng minh chứng của một hồ sơ vượt quá 30MB theo quy định.");
+        }
         const data = { file_name: fileName, file_path: rel, file_hash: hash, file_size_kb: sizeKb, verify_status: "PENDING", verify_note: null, verified_by_staff_id: null, verified_at: null, uploaded_at: new Date() };
         const doc = replace
           ? await tx.application_document.update({ where: { document_id: replace.document_id }, data })

@@ -450,6 +450,16 @@ export class ApplicationFlowService {
     const a = await this.loadDraft(candidateId);
     await this.prisma.$transaction(async (tx) => {
       await tx.application.update({ where: { application_id: a.application_id }, data: { is_cancelled: true } });
+      // Thay trigger #9: ghi lịch sử khi hủy nháp (is_cancelled đổi)
+      await tx.application_status_history.create({
+        data: {
+          application_id: a.application_id,
+          old_status: `review=${a.review_status};admission=${a.admission_status};cancelled=0`,
+          new_status: `review=${a.review_status};admission=${a.admission_status};cancelled=1`,
+          changed_by_type: "CANDIDATE",
+          reason: "Thí sinh hủy hồ sơ nháp",
+        },
+      });
       await this.audit.record({ type: "CANDIDATE", id: candidateId }, "APPLICATION_DRAFT_CANCEL", { table: "application", id: a.application_id }, `Hủy hồ sơ nháp ${a.application_code}`, tx);
     });
     return { success: true };

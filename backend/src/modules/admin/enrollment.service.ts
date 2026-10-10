@@ -194,13 +194,14 @@ export class EnrollmentService {
         if (!valid.length) fail("NO_CANDIDATE", "Quyết định không còn thí sinh trúng tuyển hợp lệ.", HttpStatus.CONFLICT);
         const now = new Date();
         const deadline = deadlineAfterDays(now, days);
-        // ISSUED -> trigger #8 bảo đảm admission_status = ADMITTED cho các hồ sơ trong quyết định
+        // ISSUED — thay trigger #8: set admission_status = ADMITTED trong code (Filess.io free không có TRIGGER)
         await tx.admission_decision.update({
           where: { decision_id: d.decision_id },
           data: { status: "ISSUED", signed_by_staff_id: BigInt(me.staffAccountId), signed_at: now, signature_ref: `KS-${id(d.decision_id)}-${now.getTime().toString(36).toUpperCase()}`, return_note: null },
         });
         for (const x of valid) {
           const a = x.application;
+          await tx.application.update({ where: { application_id: a.application_id }, data: { admission_status: "ADMITTED" } });
           await tx.enrollment_confirmation.upsert({
             where: { application_id: a.application_id },
             create: { application_id: a.application_id, deadline },
@@ -275,8 +276,9 @@ export class EnrollmentService {
       if (accept) {
         if (c.status !== "CHUA_XAC_NHAN") conflict("INVALID_STATE", "Bạn đã phản hồi trước đó.");
         if (c.deadline.getTime() < Date.now()) fail("DEADLINE_PASSED", "Đã quá hạn xác nhận nhập học. Liên hệ Phòng Đào tạo Sau đại học.", HttpStatus.CONFLICT);
-        // DA_XAC_NHAN -> trigger #6 đặt admission_status = CONFIRMED
+        // DA_XAC_NHAN — thay trigger #6: set admission_status = CONFIRMED trong code
         await tx.enrollment_confirmation.update({ where: { confirmation_id: c.confirmation_id }, data: { status: "DA_XAC_NHAN", confirmed_at: new Date() } });
+        await tx.application.update({ where: { application_id: a.application_id }, data: { admission_status: "CONFIRMED" } });
         await tx.original_document_submission.upsert({ where: { application_id: a.application_id }, create: { application_id: a.application_id }, update: {} });
         await this.audit.record({ type: "CANDIDATE", id: candidateId }, "ENROLL_CONFIRM", { table: "enrollment_confirmation", id: c.confirmation_id }, `${a.application_code}: xác nhận nhập học`, tx);
         await this.audit.notifyCandidate(
@@ -290,8 +292,9 @@ export class EnrollmentService {
       if (c.status === "TU_CHOI_QUA_HAN") conflict("INVALID_STATE", "Bạn đã từ chối nhập học trước đó.");
       if (a.enrollment_completion?.completed_at) conflict("INVALID_STATE", "Bạn đã hoàn tất nhập học, liên hệ Phòng Đào tạo Sau đại học nếu muốn thôi học.");
       if (reason.length < 5) fail("VALIDATION", "Cho biết lý do không nhập học (ít nhất 5 ký tự).");
-      // TU_CHOI_QUA_HAN -> trigger #6 đặt is_cancelled = 1 (giải phóng chỗ)
+      // TU_CHOI_QUA_HAN — thay trigger #6: set is_cancelled = 1 trong code
       await tx.enrollment_confirmation.update({ where: { confirmation_id: c.confirmation_id }, data: { status: "TU_CHOI_QUA_HAN" } });
+      await tx.application.update({ where: { application_id: a.application_id }, data: { is_cancelled: true } });
       await this.audit.record({ type: "CANDIDATE", id: candidateId }, "ENROLL_DECLINE", { table: "enrollment_confirmation", id: c.confirmation_id }, `${a.application_code}: từ chối nhập học — ${reason}`, tx);
       await this.audit.notifyCandidate(candidateId, "Đã ghi nhận từ chối nhập học", `Hồ sơ ${a.application_code}: bạn đã từ chối nhập học ngành ${a.admission_batch_major.admission_major.major_name}. Chỗ của bạn được chuyển cho thí sinh dự bị.`, tx);
       const promoted = await this.results.promoteFromWaitlist(tx, a.batch_major_id, { type: "SYSTEM", id: null });
@@ -315,6 +318,8 @@ export class EnrollmentService {
         const bms = new Set<bigint>();
         for (const c of rows) {
           await tx.enrollment_confirmation.update({ where: { confirmation_id: c.confirmation_id }, data: { status: "TU_CHOI_QUA_HAN" } });
+          // Thay trigger #6: set is_cancelled khi quá hạn không xác nhận
+          await tx.application.update({ where: { application_id: c.application_id }, data: { is_cancelled: true } });
           await this.audit.notifyCandidate(
             id(c.application.candidate_id),
             "Quá hạn xác nhận nhập học",
@@ -368,12 +373,13 @@ export class EnrollmentService {
       const prefix = `HV-${b.batch_code}-`;
       const last = await tx.enrollment_completion.findFirst({ where: { transfer_ref: { startsWith: prefix } }, orderBy: { transfer_ref: "desc" } });
       const ref = `${prefix}${String((last ? Number(last.transfer_ref!.slice(prefix.length)) || 0 : 0) + 1).padStart(4, "0")}`;
-      // Tạo dòng rồi mới điền completed_at -> trigger #7 (AFTER UPDATE) đặt admission_status = ENROLLED
+      // Thay trigger #7: set admission_status = ENROLLED trong code (Filess.io free không có TRIGGER)
       const row = a.enrollment_completion ?? (await tx.enrollment_completion.create({ data: { application_id: a.application_id } }));
       await tx.enrollment_completion.update({
         where: { completion_id: row.completion_id },
         data: { completed_at: new Date(), completed_by_staff_id: BigInt(me.staffAccountId), transfer_ref: ref, transferred_to_training: true },
       });
+      await tx.application.update({ where: { application_id: a.application_id }, data: { admission_status: "ENROLLED" } });
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "ENROLL_COMPLETE", { table: "enrollment_completion", id: row.completion_id }, `${a.application_code}: hoàn tất nhập học, mã học viên ${ref}`, tx);
       await this.audit.notifyCandidate(
         id(a.candidate_id),
