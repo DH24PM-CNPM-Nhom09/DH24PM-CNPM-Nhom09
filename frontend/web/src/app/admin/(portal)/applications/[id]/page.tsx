@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
+import DocAutoRead from "@/components/admin/DocAutoRead";
 import { IconAlert, IconCheck, IconChevronLeft, IconClock, IconFile } from "@/components/admin/Icons";
 import { Btn, DocBadge, ErrorBox, fieldCls, Label, Modal, Notice, Panel, ReviewBadge, Skeleton, useToast } from "@/components/admin/ui";
 import { confirmPayment, fetchDocumentFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
@@ -382,10 +383,20 @@ function DetailInner() {
               <Field label="Ngày sinh">{fmtDate(c.dob)}</Field>
               <Field label="Giới tính">{c.gender === "NU" ? "Nữ" : c.gender === "NAM" ? "Nam" : c.gender === "KHAC" ? "Khác" : "—"}</Field>
               <Field label="Số CCCD">{c.idNumber ?? "—"}</Field>
+              <Field label="Ngày cấp CCCD">{c.idIssueDate ? fmtDate(c.idIssueDate) : "—"}</Field>
+              <Field label="Nơi cấp CCCD">{c.idIssuePlace ?? "—"}</Field>
+              <Field label="Nơi sinh">{c.birthplace ?? "—"}</Field>
+              <Field label="Dân tộc">{c.ethnicity ?? "—"}</Field>
               <Field label="Email">{c.email ?? "—"}</Field>
               <Field label="Điện thoại">{c.phoneNumber ?? "—"}</Field>
-              <Field label="Địa chỉ">{c.address ?? "—"}</Field>
+              <Field label="Nơi thường trú">{c.permanentAddress ?? "—"}</Field>
+              <Field label="Địa chỉ liên hệ">{c.address ?? "—"}</Field>
             </dl>
+            <p className={`mt-4 text-xs ${c.declarationConfirmedAt ? "text-[#166534]" : "text-gray-500"}`}>
+              {c.declarationConfirmedAt
+                ? `✓ Thí sinh đã cam kết thông tin khai và minh chứng là đúng sự thật lúc ${fmtDateTime(c.declarationConfirmedAt)}.`
+                : "Hồ sơ nộp trước khi có mục cam kết thông tin theo CCCD."}
+            </p>
             <h3 className="mb-3 mt-6 border-t border-gray-100 pt-5 text-sm font-bold text-gray-900">Học vấn kê khai</h3>
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Cơ sở đào tạo">{c.graduatedFrom ?? "Chưa kê khai"}</Field>
@@ -774,6 +785,7 @@ function DetailInner() {
         {dialog?.kind === "preview" && (
           <div>
             <DocPreview doc={dialog.doc} />
+            <DocAutoRead doc={dialog.doc} candidate={c} />
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Dung lượng">{fmtSize(dialog.doc.fileSizeKb)}</Field>
               <Field label="Tải lên lúc">{fmtDateTime(dialog.doc.uploadedAt)}</Field>

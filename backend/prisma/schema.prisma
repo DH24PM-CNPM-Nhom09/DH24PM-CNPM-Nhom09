@@ -179,6 +179,8 @@ model application {
   created_at                   DateTime                      @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
   language_option              String?                       @db.VarChar(20)
   language_note                String?                       @db.VarChar(500)
+  /// Lúc thí sinh cam kết thông tin khai và minh chứng là đúng sự thật (UTC)
+  declaration_confirmed_at     DateTime?                     @db.DateTime(0)
   admission_result             admission_result?
   staff_account                staff_account?                @relation(fields: [assigned_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_app_assigned_staff")
   admission_batch_major        admission_batch_major         @relation(fields: [batch_major_id], references: [batch_major_id], onUpdate: Restrict, map: "fk_app_bm")
@@ -325,6 +327,16 @@ model candidate {
   address           String?           @db.Text
   nationality       String            @default("Việt Nam") @db.VarChar(50)
   deleted_at        DateTime?         @db.DateTime(0)
+  /// Ngày cấp CCCD
+  id_issue_date     DateTime?         @db.Date
+  /// Nơi cấp CCCD (ghi ở mặt sau thẻ)
+  id_issue_place    String?           @db.VarChar(255)
+  /// Nơi sinh (tỉnh, thành phố)
+  birthplace        String?           @db.VarChar(255)
+  /// Dân tộc
+  ethnicity         String?           @db.VarChar(50)
+  /// Nơi thường trú theo CCCD
+  permanent_address String?           @db.Text
   application       application[]
   candidate_account candidate_account @relation(fields: [account_id], references: [account_id], onUpdate: Restrict, map: "fk_candidate_account")
   complaint         complaint[]

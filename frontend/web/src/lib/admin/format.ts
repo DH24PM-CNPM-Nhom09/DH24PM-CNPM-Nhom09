@@ -147,6 +147,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   PAYMENT_CONFIRM: "Xác nhận đã thu lệ phí",
   PAYMENT_SETTINGS_UPDATE: "Cập nhật lệ phí & tài khoản nhận",
   APPLICATION_LANGUAGE: "Thí sinh khai ngoại ngữ",
+  APPLICATION_DECLARATION: "Thí sinh khai thông tin theo CCCD và cam kết",
   MAJOR_CREATE: "Thêm ngành đào tạo",
   MAJOR_UPDATE: "Sửa ngành đào tạo",
   COMMITTEE_CREATE: "Lập tiểu ban xét tuyển",

@@ -121,11 +121,12 @@ export default function AppLayout({ children, allowGuest = false }: { children: 
               href={item.to}
               onClick={onNavigate}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-input px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+              className={`relative flex items-center gap-3 rounded-input px-4 py-3 text-[15px] font-semibold transition-colors ${
                 active ? "bg-accent-50 text-accent" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <span className="text-base">{item.icon}</span>
+              {active && <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-accent" aria-hidden="true" />}
+              <span className="w-6 shrink-0 text-center text-lg leading-none">{item.icon}</span>
               {item.label}
               {item.to === "/announcements" && <Badge n={unread} />}
             </Link>
@@ -164,12 +165,29 @@ export default function AppLayout({ children, allowGuest = false }: { children: 
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1280px]">
-        {/* Sidebar - desktop */}
-        <aside className="sticky top-16 hidden h-[calc(100vh-64px)] w-[240px] shrink-0 border-r border-gray-200 bg-white py-6 md:block">
-          <nav className="flex flex-col gap-1 px-3">
+      <div className="flex">
+        {/* Sidebar - desktop: sát mép trái, cao hết màn hình */}
+        <aside className="sticky top-16 hidden h-[calc(100vh-64px)] w-[272px] shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
+          <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy-800 text-sm font-bold text-white">{initials(name)}</div>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[15px] font-bold text-gray-900">{name || "Thí sinh"}</p>
+              <p className="mt-0.5 text-xs text-gray-500">Thí sinh dự tuyển sau đại học</p>
+            </div>
+          </div>
+          <p className="px-6 pb-2 pt-5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Chức năng</p>
+          <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3" aria-label="Điều hướng thí sinh">
             <NavLinks />
           </nav>
+          <div className="m-3 shrink-0 rounded-card border border-accent/20 bg-accent-50 p-4">
+            <p className="text-sm font-bold text-gray-900">Cần hỗ trợ?</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-600">
+              Gửi câu hỏi ở mục Khiếu nại / Phúc khảo, hoặc liên hệ Phòng Đào tạo Sau đại học, 18 Ung Văn Khiêm, Long Xuyên.
+            </p>
+            <Link href="/announcements?category=QUY_DINH" className="mt-2 inline-block text-xs font-bold text-accent hover:underline">
+              Xem quy định tuyển sinh →
+            </Link>
+          </div>
         </aside>
 
         {/* Sidebar - mobile drawer */}
@@ -185,8 +203,8 @@ export default function AppLayout({ children, allowGuest = false }: { children: 
         )}
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
-          {children}
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8 xl:px-12">
+          <div className="mx-auto max-w-[1100px]">{children}</div>
           <footer className="mx-auto mt-10 max-w-[1100px] border-t border-gray-200 pt-4 pb-20 text-center text-xs text-gray-500 md:pb-4">
             Phòng Đào tạo Sau đại học — Trường Đại học An Giang, ĐHQG-HCM ·{" "}
             <Link href="/privacy" className="font-semibold hover:text-accent hover:underline">

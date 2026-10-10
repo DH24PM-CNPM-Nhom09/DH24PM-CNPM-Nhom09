@@ -9,6 +9,8 @@ import Button from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Alert, errMsg } from "@/components/auth/AuthBits";
 import DocSlot from "@/components/application/DocSlot";
+import IdCardAutoFill from "@/components/application/IdCardAutoFill";
+import DeclarationForm, { declFromProfile, issuePlace, validateDecl, type DeclErrors, type DeclForm } from "@/components/application/DeclarationForm";
 import {
   cancelMyDraft,
   deleteMyDocument,
@@ -16,6 +18,7 @@ import {
   getMyFullApplication,
   getMyProfile,
   saveApplicationDraft,
+  saveDeclaration,
   saveLanguageChoice,
   saveResearchProposal,
   submitMyApplication,
@@ -77,6 +80,9 @@ function WizardInner() {
   const [lang, setLang] = useState<{ option: LanguageOption | ""; note: string }>({ option: "", note: "" });
   const [langError, setLangError] = useState("");
   const [agree, setAgree] = useState(false);
+  const [decl, setDecl] = useState<DeclForm | null>(null);
+  const [declErrors, setDeclErrors] = useState<DeclErrors>({});
+  const [commit, setCommit] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -91,6 +97,8 @@ function WizardInner() {
     Promise.all([getMyProfile(), getMyFullApplication(), getOpenBatches()])
       .then(([p, a, b]) => {
         setProfile(p);
+        setDecl(declFromProfile(p));
+        setCommit(Boolean(a && !a.declined && a.declarationConfirmedAt));
         setBatches(b);
         // Hồ sơ đã từ chối nhập học không chặn việc đăng ký đợt mới
         setApp(a && a.declined ? null : a);
@@ -114,7 +122,7 @@ function WizardInner() {
               preferredLecturerId: a.proposal.preferredLecturerId ? String(a.proposal.preferredLecturerId) : "",
             });
           // Mở lại đúng bước còn dang dở
-          setStep(!a.language?.option ? "language" : a.missingDocuments.length ? "documents" : a.degreeLevel === "TIEN_SI" && !a.proposal ? "research" : "review");
+          setStep(!a.language?.option ? "language" : a.missingDocuments.length || !a.declarationConfirmedAt ? "documents" : a.degreeLevel === "TIEN_SI" && !a.proposal ? "research" : "review");
         } else {
           const want = Number(params.get("batch"));
           const pick = b.find((x) => x.batchId === want) ?? (b.length === 1 ? b[0] : null);
@@ -248,6 +256,73 @@ function WizardInner() {
       await refresh();
     } catch (e) {
       setError(errMsg(e, "Không xóa được tệp."));
+    }
+  }
+
+  // ------------------------------------------------------------------ khai thông tin theo CCCD + cam kết, rồi sang bước sau
+  /** Kiểm tra mục 1; lỗi thì cuộn lên khối thông tin cá nhân */
+  function checkDecl(): boolean {
+    if (!decl || !profile) return false;
+    const errs = validateDecl(decl, profile.dob);
+    setDeclErrors(errs);
+    if (Object.keys(errs).length) {
+      setError("Kiểm tra lại mục 1. Thông tin cá nhân: còn ô chưa điền đúng.");
+      document.getElementById("decl-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return false;
+    }
+    return true;
+  }
+
+  function declPayload(confirm: boolean) {
+    const d = decl!;
+    return {
+      idNumber: d.idNumber.replace(/\s/g, ""),
+      idIssueDate: d.idIssueDate,
+      idIssuePlace: issuePlace(d),
+      birthplace: d.birthplace.trim(),
+      ethnicity: d.ethnicity.trim(),
+      phoneNumber: d.phoneNumber.replace(/[\s.]/g, ""),
+      permanentAddress: d.permanentAddress.trim(),
+      address: (d.sameAddress ? d.permanentAddress : d.address).trim(),
+      confirm,
+    };
+  }
+
+  /** In đơn đăng ký: lưu mục 1 trước để đơn in ra có đủ thông tin */
+  async function printForm() {
+    if (!app || !checkDecl()) return;
+    const w = window.open("about:blank", "_blank");
+    setBusy(true);
+    setError("");
+    try {
+      const a = await saveDeclaration(declPayload(false));
+      setApp(a);
+      setCommit(false);
+      setProfile(await getMyProfile());
+      if (w) w.location.href = "/application/print";
+      else window.location.href = "/application/print";
+    } catch (e) {
+      w?.close();
+      setError(errMsg(e, "Không lưu được thông tin cá nhân để in đơn."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDeclarationAndContinue() {
+    if (!app || !checkDecl()) return;
+    if (!commit) return setError("Tích ô cam kết ở cuối trang trước khi tiếp tục.");
+    setBusy(true);
+    setError("");
+    try {
+      const a = await saveDeclaration(declPayload(true));
+      setApp(a);
+      setProfile(await getMyProfile());
+      go(steps[stepIndex + 1]);
+    } catch (e) {
+      setError(errMsg(e, "Không lưu được thông tin cá nhân, vui lòng thử lại."));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -631,15 +706,42 @@ function WizardInner() {
         {/* ---------------- Bước: minh chứng */}
         {step === "documents" && app && (
           <div>
-            <h2 className="text-base font-bold text-gray-900">Tải minh chứng</h2>
+            <h2 className="text-base font-bold text-gray-900">Thông tin cá nhân và minh chứng</h2>
+            <p className="mt-1 text-sm text-gray-500">Khai thông tin cá nhân theo CCCD, tải các minh chứng, rồi tích ô cam kết ở cuối trang.</p>
+            {decl && profile && (
+              <div className="mt-5">
+                <DeclarationForm
+                  value={decl}
+                  onChange={(v) => {
+                    setDecl(v);
+                    if (Object.keys(declErrors).length) setDeclErrors(validateDecl(v, profile.dob));
+                  }}
+                  errors={declErrors}
+                  profile={profile}
+                  disabled={expired}
+                  autoFill={
+                    <IdCardAutoFill
+                      value={decl}
+                      profile={profile}
+                      disabled={expired}
+                      onApply={(v) => {
+                        setDecl(v);
+                        if (Object.keys(declErrors).length) setDeclErrors(validateDecl(v, profile.dob));
+                      }}
+                    />
+                  }
+                />
+              </div>
+            )}
+            <h3 className="mt-7 text-[15px] font-bold text-gray-900">2. Tải minh chứng</h3>
             <p className="mt-1 text-sm text-gray-500">Tệp PDF, JPG hoặc PNG, tối đa 5MB mỗi tệp, tổng tối đa 30MB. Bản scan cần rõ nét, đủ trang, có dấu và chữ ký.</p>
             <div className="mt-4 flex flex-col gap-2 rounded-input bg-navy-50 px-4 py-3 text-[13px] text-navy-800 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                <span className="font-semibold">Đơn đăng ký dự tuyển</span> được điền sẵn từ thông tin bạn đã khai. In ra, ký tên, chụp lại rồi tải lên mục bên dưới.
+                <span className="font-semibold">Đơn đăng ký dự tuyển</span> được điền sẵn từ mục 1 và các bước trước. Bấm in (hệ thống tự lưu mục 1), ký tên, chụp lại rồi tải lên mục bên dưới.
               </span>
-              <Link href="/application/print" target="_blank" className="shrink-0 rounded-input bg-navy-800 px-4 py-2 text-center text-[13px] font-bold text-white hover:bg-navy-900">
+              <button type="button" onClick={printForm} disabled={busy} className="shrink-0 rounded-input bg-navy-800 px-4 py-2 text-center text-[13px] font-bold text-white hover:bg-navy-900 disabled:opacity-60">
                 In đơn đăng ký
-              </Link>
+              </button>
             </div>
             <div className="mt-5 flex flex-col gap-3">
               {app.requiredDocuments.map((t) => (
@@ -690,6 +792,14 @@ function WizardInner() {
               )}
               {optType && docErrors[optType] && <p className="text-xs font-medium text-danger">{docErrors[optType]}</p>}
             </div>
+
+            <label className={`mt-7 flex items-start gap-3 rounded-input border p-4 text-sm leading-relaxed ${commit ? "border-success/40 bg-success-50" : "border-accent/30 bg-accent-50"}`}>
+              <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[#E8734A]" checked={commit} disabled={expired} onChange={(e) => setCommit(e.target.checked)} />
+              <span className="text-gray-800">
+                <span className="font-bold">Tôi cam kết các thông tin trên là đúng sự thật.</span> Các thông tin cá nhân đã khai và minh chứng đã tải lên là của tôi, trung thực, đầy đủ; nếu
+                có sai lệch tôi xin chịu hoàn toàn trách nhiệm và chấp nhận hủy kết quả xét tuyển.
+              </span>
+            </label>
           </div>
         )}
 
@@ -749,14 +859,23 @@ function WizardInner() {
               <p className="mt-1 text-sm text-gray-500">Sau khi nộp, bạn không sửa được hồ sơ, trừ khi cán bộ yêu cầu bổ sung minh chứng.</p>
             </div>
 
-            <Summary title="Thông tin cá nhân" edit={<Link href="/profile?next=/application/new" className="text-[13px] font-semibold text-accent hover:underline">Sửa</Link>}>
+            <Summary title="Thông tin cá nhân" edit={app.canEdit ? <EditBtn onClick={() => go("documents")} /> : null}>
               <Item label="Họ và tên">{profile.fullName}</Item>
               <Item label="Ngày sinh">{fmtDate(profile.dob)}</Item>
               <Item label="Giới tính">{GENDER_LABEL[profile.gender ?? ""] ?? "—"}</Item>
               <Item label="Số CCCD">{profile.idNumber}</Item>
+              <Item label="Ngày cấp">{profile.idIssueDate ? fmtDate(profile.idIssueDate) : "—"}</Item>
+              <Item label="Nơi cấp" wide>
+                {profile.idIssuePlace ?? "—"}
+              </Item>
+              <Item label="Nơi sinh">{profile.birthplace ?? "—"}</Item>
+              <Item label="Dân tộc">{profile.ethnicity ?? "—"}</Item>
               <Item label="Điện thoại">{profile.phoneNumber}</Item>
               <Item label="Email">{profile.email}</Item>
-              <Item label="Địa chỉ" wide>
+              <Item label="Nơi thường trú" wide>
+                {profile.permanentAddress ?? "—"}
+              </Item>
+              <Item label="Địa chỉ liên hệ" wide>
                 {profile.address}
               </Item>
             </Summary>
@@ -888,10 +1007,14 @@ function WizardInner() {
           )}
           {step === "documents" && app && (
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <Button disabled={app.missingDocuments.length > 0 || uploading !== null} onClick={() => go(steps[stepIndex + 1])}>
-                Tiếp tục
+              <Button loading={busy} disabled={app.missingDocuments.length > 0 || uploading !== null || !commit || expired} onClick={saveDeclarationAndContinue}>
+                Lưu và tiếp tục
               </Button>
-              {app.missingDocuments.length > 0 && <span className="text-xs text-gray-500">Còn thiếu: {app.missingDocuments.map((t) => DOC_LABEL[t]).join(", ")}</span>}
+              {app.missingDocuments.length > 0 ? (
+                <span className="text-xs text-gray-500">Còn thiếu: {app.missingDocuments.map((t) => DOC_LABEL[t]).join(", ")}</span>
+              ) : (
+                !commit && <span className="text-xs text-gray-500">Tích ô cam kết để tiếp tục</span>
+              )}
             </div>
           )}
           {step === "research" && (
@@ -900,7 +1023,7 @@ function WizardInner() {
             </Button>
           )}
           {step === "review" && app && (
-            <Button loading={busy} disabled={!agree || expired || !app.language.option || app.missingDocuments.length > 0 || (app.degreeLevel === "TIEN_SI" && !app.proposal)} onClick={submit}>
+            <Button loading={busy} disabled={!agree || expired || !app.language.option || app.missingDocuments.length > 0 || !app.declarationConfirmedAt || (app.degreeLevel === "TIEN_SI" && !app.proposal)} onClick={submit}>
               Nộp hồ sơ
             </Button>
           )}

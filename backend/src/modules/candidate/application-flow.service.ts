@@ -230,6 +230,8 @@ export class ApplicationFlowService {
       admission: await admissionView(this.prisma, this.config, a.application_id),
       /** Hồ sơ đã bị hủy do thí sinh từ chối / quá hạn xác nhận nhập học */
       declined: a.is_cancelled,
+      /** Lúc thí sinh khai thông tin theo CCCD và tích ô cam kết (bước Minh chứng) */
+      declarationConfirmedAt: iso(a.declaration_confirmed_at),
     };
   }
 
@@ -400,6 +402,64 @@ export class ApplicationFlowService {
     return this.toFull((await this.loadDraft(candidateId))!);
   }
 
+  // ------------------------------------------------------------------ khai thông tin theo CCCD + cam kết
+  /**
+   * Bước Minh chứng: thí sinh khai lại thông tin cá nhân theo CCCD (số, ngày cấp, nơi cấp, nơi sinh,
+   * dân tộc, thường trú, liên hệ) và tích ô cam kết thông tin là đúng sự thật.
+   * confirm=false: chỉ lưu thông tin (VD trước khi in đơn), bỏ dấu cam kết cũ vì thông tin có thể đã đổi.
+   */
+  async saveDeclaration(me: CandidateUser, body: Record<string, unknown>) {
+    const candidateId = this.requireProfile(me);
+    const a = await this.loadDraft(candidateId);
+    this.assertOpen(a);
+    const clean = (v: unknown, max: number) => str(v).trim().replace(/\s+/g, " ").slice(0, max);
+    const idNumber = str(body.idNumber).replace(/\s/g, "");
+    const issueDateRaw = str(body.idIssueDate);
+    const issueDate = new Date(`${issueDateRaw}T00:00:00Z`);
+    const idIssuePlace = clean(body.idIssuePlace, 255);
+    const birthplace = clean(body.birthplace, 255);
+    const ethnicity = clean(body.ethnicity, 50);
+    const phone = str(body.phoneNumber).replace(/[\s.]/g, "");
+    const permanentAddress = clean(body.permanentAddress, 1000);
+    const address = clean(body.address, 1000);
+
+    const errors: string[] = [];
+    if (!/^\d{12}$/.test(idNumber)) errors.push("Số CCCD phải gồm đúng 12 chữ số");
+    const c = await this.prisma.candidate.findUniqueOrThrow({ where: { candidate_id: BigInt(candidateId) } });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDateRaw) || Number.isNaN(issueDate.getTime())) errors.push("Ngày cấp CCCD không hợp lệ");
+    else if (issueDate > new Date()) errors.push("Ngày cấp CCCD không được sau ngày hôm nay");
+    else if (c.dob && issueDate < c.dob) errors.push("Ngày cấp CCCD không được trước ngày sinh");
+    if (idIssuePlace.length < 3) errors.push("Chọn hoặc ghi nơi cấp CCCD");
+    if (birthplace.length < 2) errors.push("Nhập nơi sinh");
+    if (ethnicity.length < 2) errors.push("Nhập dân tộc");
+    if (!/^0\d{9}$/.test(phone)) errors.push("Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0");
+    if (permanentAddress.length < 5) errors.push("Nhập nơi thường trú theo CCCD");
+    if (address.length < 5) errors.push("Nhập địa chỉ liên hệ");
+    if (errors.length) fail("VALIDATION", `${errors.join(". ")}.`);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (await tx.candidate.count({ where: { id_number: idNumber, candidate_id: { not: BigInt(candidateId) } } }))
+        conflict("DUPLICATE_ID_NUMBER", "Số CCCD đã được dùng cho hồ sơ khác.");
+      if (await tx.candidate_account.count({ where: { phone_number: phone, account_id: { not: c.account_id } } }))
+        conflict("DUPLICATE_PHONE", "Số điện thoại đã được dùng cho tài khoản khác.");
+      await tx.candidate.update({
+        where: { candidate_id: BigInt(candidateId) },
+        data: { id_number: idNumber, id_issue_date: issueDate, id_issue_place: idIssuePlace, birthplace, ethnicity, permanent_address: permanentAddress, address },
+      });
+      await tx.candidate_account.update({ where: { account_id: c.account_id }, data: { phone_number: phone } });
+      const confirmed = body.confirm === true;
+      await tx.application.update({ where: { application_id: a.application_id }, data: { declaration_confirmed_at: confirmed ? new Date() : null } });
+      await this.audit.record(
+        { type: "CANDIDATE", id: candidateId },
+        "APPLICATION_DECLARATION",
+        { table: "application", id: a.application_id },
+        `${a.application_code}: khai thông tin theo CCCD${confirmed ? " và cam kết đúng sự thật" : " (chưa cam kết)"}`,
+        tx,
+      );
+    });
+    return this.toFull((await this.loadDraft(candidateId))!);
+  }
+
   // ------------------------------------------------------------------ bước 4: nộp
   async submit(me: CandidateUser, body: Record<string, unknown>) {
     const candidateId = this.requireProfile(me);
@@ -412,6 +472,7 @@ export class ApplicationFlowService {
     const missProfile = await this.missingProfile(candidateId);
     if (missProfile.length) problems.push(`Hồ sơ cá nhân còn thiếu: ${missProfile.join(", ")}`);
     if (!a.application_education) problems.push("Chưa khai quá trình đào tạo");
+    if (!a.declaration_confirmed_at) problems.push("Chưa khai thông tin cá nhân theo CCCD và tích ô cam kết ở bước Minh chứng");
     if (!a.language_option) problems.push("Chưa khai thông tin ngoại ngữ (có chứng chỉ / được miễn / đăng ký dự thi)");
     else if (a.language_option === "EXEMPT" && (a.language_note ?? "").trim().length < 5) problems.push("Chưa ghi rõ lý do được miễn ngoại ngữ");
     const have = new Set(a.application_document.map((d) => d.document_type));

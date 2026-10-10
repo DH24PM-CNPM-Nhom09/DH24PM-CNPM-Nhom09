@@ -80,6 +80,20 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
 
+  # Đưa web lên mạng bằng tên miền riêng qua Cloudflare Tunnel (không cần mở cổng modem).
+  # Chỉ chạy khi gọi kèm --profile tunnel và đã có CLOUDFLARE_TUNNEL_TOKEN trong .env.
+  # Cấu hình tên miền trong Cloudflare: xem TRIEN_KHAI_DOCKER.md mục 9.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      frontend:
+        condition: service_started
+
 volumes:
   db_data:
   uploads:

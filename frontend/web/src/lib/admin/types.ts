@@ -99,6 +99,14 @@ export interface AdminCandidate {
   email: string | null;
   phoneNumber: string | null;
   address: string | null;
+  /** Khai theo CCCD ở bước Minh chứng (v12). Hồ sơ cũ có thể chưa có */
+  idIssueDate?: string | null;
+  idIssuePlace?: string | null;
+  birthplace?: string | null;
+  ethnicity?: string | null;
+  permanentAddress?: string | null;
+  /** Lúc thí sinh tích ô cam kết thông tin là đúng sự thật */
+  declarationConfirmedAt?: string | null;
   /** Học vấn kê khai lúc nộp hồ sơ (UC-DK-02, bảng application_education — v4). null = chưa kê khai */
   graduatedFrom: string | null;
   graduatedMajor: string | null;

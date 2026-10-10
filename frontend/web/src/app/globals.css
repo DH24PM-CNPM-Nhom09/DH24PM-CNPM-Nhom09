@@ -9,3 +9,16 @@ body {
 ::placeholder {
   @apply text-gray-400;
 }
+
+/* Thanh cuộn mảnh cho menu bên trái cổng quản lý (khi màn hình thấp, menu cuộn được, nút Đăng xuất luôn hiện) */
+.admin-nav-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.25) transparent;
+}
+.admin-nav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.admin-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.25);
+  border-radius: 9999px;
+}

@@ -34,7 +34,7 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 9 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 10 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
@@ -46,6 +46,7 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source 
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v9_english_test.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v10_admission_results.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v11_privacy.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v12_candidate_declaration.sql"
 ```
 
 Kiểm tra: CSDL `admission_db` có **45 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration` + bảng đơn phúc khảo `appeal_request`).
@@ -70,7 +71,7 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
 > **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
-> lệnh này chạy migration v5 → v11, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+> lệnh này chạy migration v5 → v12, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
 
 ### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
 
@@ -139,7 +140,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 
 ## Trước khi triển khai thật (bắt buộc)
 
-1. Tạo CSDL mới, chạy đủ các file SQL v3 → v11, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
+1. Tạo CSDL mới, chạy đủ các file SQL v3 → v12, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
 2. Quản trị vào **Tài khoản cán bộ** cấp tài khoản cho từng cán bộ bằng email công tác thật (nên chọn chỉ đăng nhập Google).
 3. `backend/.env`: `DEV_AUTH_BYPASS=false`, đổi `JWT_SECRET` thành chuỗi ngẫu nhiên dài, điền `GOOGLE_CLIENT_ID`, `SMTP_USER`, `SMTP_PASS`.
 4. Frontend `.env.local`: `NEXT_PUBLIC_DEMO_LOGIN=false` (ẩn khung tài khoản demo ở trang đăng nhập cán bộ).
@@ -199,6 +200,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 |---|---|---|
 | POST | `/auth/staff/login`, `/auth/staff/google` | công khai |
 | GET | `/auth/staff/me` | cán bộ |
+| GET | `/auth/staff/me/profile` (trang cá nhân: thông tin tài khoản, đăng nhập gần đây, việc của tôi, hoạt động gần đây) | cán bộ |
 | POST | `/auth/register`, `/auth/register/verify`, `/auth/register/resend` | công khai (thí sinh) |
 | GET | `/public/auth-config` (Google Client ID cho frontend) | công khai |
 | POST | `/auth/google`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password` | công khai (thí sinh) |
@@ -248,7 +250,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | PATCH | `/notifications/:id/read`, `/notifications/me/read-all` | thí sinh |
 | POST | `/applications/:id/documents` (multipart: `file`, `documentType`), `/applications/me/supplement`, `/complaints` | thí sinh |
 | GET | `/applications/me/full`, `/applications/me/checklist`, `/lecturers` | thí sinh |
-| POST/PUT/DELETE | `/applications/me/draft`, `/applications/me/language`, `/applications/me/proposal`, `/applications/me/documents/:id`, `/applications/me/submit`, `/applications/me/cancel` | thí sinh |
+| POST/PUT/DELETE | `/applications/me/draft`, `/applications/me/language`, `/applications/me/declaration` (khai thông tin theo CCCD + cam kết), `/applications/me/proposal`, `/applications/me/documents/:id`, `/applications/me/submit`, `/applications/me/cancel` | thí sinh |
 | GET | `/health` (ngoài tiền tố) | công khai |
 
 ## Lệnh hữu ích
@@ -259,7 +261,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
 | `npm run db:backup` | Sao lưu CSDL (kèm trigger, thủ tục) và thư mục tệp minh chứng vào `backups/` — chỉ tạo bản mới |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v11, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v12, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm
