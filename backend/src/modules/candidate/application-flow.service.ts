@@ -8,6 +8,7 @@ import { env, SystemConfigService } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
 import { dec, id, iso, isoReq, num, parseReviewStatus, str, transferNote } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
+import { removeFile } from "../../common/file-store";
 import { ApplicationsService } from "../admin/applications.service";
 import { admissionView } from "./admission-view";
 
@@ -365,9 +366,7 @@ export class ApplicationFlowService {
       await tx.application_document.delete({ where: { document_id: d.document_id } });
       await this.audit.record({ type: "CANDIDATE", id: candidateId }, "DOCUMENT_DELETE", { table: "application_document", id: d.document_id }, `${d.application.application_code}: xóa ${d.file_name} (hồ sơ nháp)`, tx);
     });
-    const root = path.resolve(env.uploadDir());
-    const abs = path.resolve(root, d.file_path);
-    if (abs.startsWith(root + path.sep)) fs.rm(abs, { force: true }, () => undefined);
+    removeFile(this.prisma, d.file_path);
     return { success: true };
   }
 

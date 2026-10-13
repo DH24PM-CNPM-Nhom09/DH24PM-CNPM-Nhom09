@@ -340,7 +340,7 @@ export class AuthService {
    * dùng địa chỉ bịa nên KHÔNG BAO GIỜ được gửi email thật.
    */
   async emailVerified(accountId: bigint) {
-    if (!env.devBypass()) return true;
+    if (!env.verifiedEmailOnly()) return true;
     return (await this.prisma.otp_verification.count({ where: { account_id: accountId, purpose: "REGISTER", verified_at: { not: null } } })) > 0;
   }
 

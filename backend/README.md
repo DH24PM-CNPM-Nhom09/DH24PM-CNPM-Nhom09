@@ -34,7 +34,7 @@ backend/
 
 ### Bước 2 — Tạo CSDL
 
-Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 10 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
+Mở PowerShell **trong thư mục `backend`**, chạy lần lượt 11 lệnh (thay `C:\xampp` bằng nơi bạn cài XAMPP, ví dụ `D:\xampp`):
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/admission_db_v3.sql"
@@ -47,9 +47,10 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source 
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v10_admission_results.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v11_privacy.sql"
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v12_candidate_declaration.sql"
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "source database/migration_v13_stored_file.sql"
 ```
 
-Kiểm tra: CSDL `admission_db` có **45 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration` + bảng đơn phúc khảo `appeal_request`).
+Kiểm tra: CSDL `admission_db` có **46 bảng** (40 bảng gốc + `application_education` + `complaint` + 2 bảng thi tiếng Anh `english_test_session`, `english_test_registration` + bảng đơn phúc khảo `appeal_request` + bảng `stored_file` lưu tệp minh chứng khi `UPLOAD_STORAGE=db`).
 
 Có thể làm bằng phpMyAdmin thay cho 2 lệnh trên: bật Apache, mở http://localhost/phpmyadmin, vào tab **Import**, chọn file v3 rồi bấm **Import**; làm lại với file v4.
 Bắt buộc dùng `--default-character-set=utf8mb4` (phpMyAdmin mặc định đã đúng). Thiếu nó, tiếng Việt trong CSDL sẽ bị lỗi font.
@@ -71,7 +72,7 @@ Mở http://localhost:4000/health. Thấy `{"status":"ok","database":"up"}` là 
 Không muốn dữ liệu mẫu thì chạy `npm run db:seed` thay cho `db:seed:demo`. Lệnh này chỉ tạo 1 tài khoản quản trị: `quantri@agu.edu.vn` / `Admin@123`.
 
 > **Đã cài từ bản trước (CSDL đang có dữ liệu)?** Không cần tạo lại. Chỉ chạy `npm install` rồi `npm run db:update`:
-> lệnh này chạy migration v5 → v12, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
+> lệnh này chạy migration v5 → v13, sửa lỗi font cột quốc tịch và nạp thông báo mẫu. Chạy lại nhiều lần vẫn an toàn, không xóa gì.
 
 ### Bước 3b — Gửi email thật qua Gmail (mã xác thực, thông báo hồ sơ)
 
@@ -140,7 +141,7 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 
 ## Trước khi triển khai thật (bắt buộc)
 
-1. Tạo CSDL mới, chạy đủ các file SQL v3 → v12, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
+1. Tạo CSDL mới, chạy đủ các file SQL v3 → v13, rồi `npm run db:seed` (KHÔNG chạy `db:seed:demo`). Lệnh này chỉ tạo 1 tài khoản quản trị `quantri@agu.edu.vn`, bị bắt đổi mật khẩu ở lần đăng nhập đầu.
 2. Quản trị vào **Tài khoản cán bộ** cấp tài khoản cho từng cán bộ bằng email công tác thật (nên chọn chỉ đăng nhập Google).
 3. `backend/.env`: `DEV_AUTH_BYPASS=false`, đổi `JWT_SECRET` thành chuỗi ngẫu nhiên dài, điền `GOOGLE_CLIENT_ID`, `SMTP_USER`, `SMTP_PASS`.
 4. Frontend `.env.local`: `NEXT_PUBLIC_DEMO_LOGIN=false` (ẩn khung tài khoản demo ở trang đăng nhập cán bộ).
@@ -260,8 +261,9 @@ Khi triển khai thật, đặt `DEV_AUTH_BYPASS=false` để tắt hẳn các t
 | `npm run dev` | Chạy và tự khởi động lại khi sửa code |
 | `npm run build` rồi `npm start` | Chạy bản build |
 | `npm run typecheck` | Kiểm tra kiểu TypeScript |
+| `npm run start:hosted` | Dùng trên Render: tự tạo bảng khi CSDL MySQL/MariaDB còn trống (`database/hosted/admission_db_mysql.sql`), tạo tài khoản quản trị hoặc dữ liệu mẫu, rồi chạy backend — xem `frontend/TRIEN_KHAI_MIEN_PHI.md` |
 | `npm run db:backup` | Sao lưu CSDL (kèm trigger, thủ tục) và thư mục tệp minh chứng vào `backups/` — chỉ tạo bản mới |
-| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v12, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
+| `npm run db:update` | Cập nhật CSDL đang có dữ liệu lên bản mới nhất (migration v5–v13, thông báo mẫu) rồi tự chạy `prisma generate` — tắt backend trước khi chạy — chỉ thêm, không xóa |
 | `npm run db:pull` rồi `npm run prisma:generate` | Khi CSDL đổi cấu trúc: cập nhật `schema.prisma` từ CSDL |
 
 ## Chưa làm

@@ -4,6 +4,10 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/exception.filter";
 import { authRateLimit, securityHeaders } from "./common/security";
+import { normalizeDatabaseUrl } from "./common/db-url";
+
+// Chuỗi kết nối kiểu Aiven (?ssl-mode=REQUIRED) -> tham số Prisma hiểu được, trước khi Prisma khởi tạo
+normalizeDatabaseUrl();
 
 // Phòng hờ: nếu có BigInt lọt ra ngoài mapper thì vẫn trả JSON được
 (BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {

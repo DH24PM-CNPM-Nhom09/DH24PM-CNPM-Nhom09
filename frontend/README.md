@@ -8,7 +8,7 @@ Người phụ trách: Nguyễn Phúc Khang (nhánh `frontend`).
 | :--- | :--- |
 | `frontend/web/` | Giao diện Next.js 14 + Tailwind (cổng thí sinh `/`, cổng cán bộ `/admin`) |
 | `backend/` (ở thư mục gốc repo) | API NestJS + Prisma mà web gọi tới |
-| `backend/database/` | CSDL `admission_db`: bản gốc v3 của nhóm + các migration v4 → v12 (chỉ thêm, không xóa) |
+| `backend/database/` | CSDL `admission_db`: bản gốc v3 của nhóm + các migration v4 → v13 (chỉ thêm, không xóa) |
 | `frontend/docker/`, `frontend/docker-compose.yml` | Chạy cả CSDL + API + web bằng một lệnh |
 
 ## Chạy nhanh bằng Docker
@@ -30,4 +30,5 @@ Mở http://localhost:3000 (thí sinh) và http://localhost:3000/admin/login (c�
 - Ảnh được xử lý ngay trong trình duyệt, không gửi lên máy chủ. Thư viện (jsQR, Tesseract.js, pdf.js) tự tải từ CDN jsDelivr ở lần bấm đầu tiên nên máy cần có mạng. Mã nguồn: `web/src/lib/idcard-parse.ts`, `web/src/lib/idcard-reader.ts`.
 
 Hướng dẫn đầy đủ cho cả nhóm (cài Docker, tài khoản demo, lỗi thường gặp, đưa lên máy chủ): [TRIEN_KHAI_DOCKER.md](TRIEN_KHAI_DOCKER.md).
+Đưa web lên mạng miễn phí với tên miền riêng (Render + Aiven MySQL + Resend gửi OTP): [TRIEN_KHAI_MIEN_PHI.md](TRIEN_KHAI_MIEN_PHI.md).
 Chạy không dùng Docker (XAMPP + Node.js): [backend/README.md](../backend/README.md) và [web/ADMIN_README.md](web/ADMIN_README.md).

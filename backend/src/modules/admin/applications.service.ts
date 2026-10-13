@@ -10,6 +10,7 @@ import { conflict, fail, notFound } from "../../common/errors";
 import { ABSENT_NOTE } from "../../common/admission";
 import { blockReason, REVIEW_VI, STAFF_ACTIONS, TRANSITIONS, type ReviewAction, type ReviewFacts, type ReviewStatus } from "../../common/review-rules";
 import { dec, id, iso, isoReq, num, parseReviewStatus, toInt, transferNote, ymd } from "../../common/util";
+import { contentType, readFile } from "../../common/file-store";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
 import { toAuditDto, toBatchDto, toBatchMajorDto, toHistoryDto, toMajorDto } from "./mappers";
 
@@ -556,14 +557,13 @@ export class ApplicationsService {
     return { success: true };
   }
 
-  /** Đường dẫn tệp trên đĩa — chặn mọi đường dẫn thoát ra ngoài thư mục upload */
+  /** Nội dung tệp minh chứng (trên đĩa hoặc trong CSDL tùy UPLOAD_STORAGE) */
   async documentFile(documentId: number) {
     const doc = await this.prisma.application_document.findUnique({ where: { document_id: BigInt(documentId) } });
     if (!doc) notFound("Không tìm thấy minh chứng.");
-    const root = path.resolve(env.uploadDir());
-    const abs = path.resolve(root, doc.file_path);
-    if (!abs.startsWith(root + path.sep) || !fs.existsSync(abs)) notFound("Tệp minh chứng không còn trên máy chủ.");
-    return { abs, fileName: doc.file_name };
+    const data = await readFile(this.prisma, doc.file_path);
+    if (!data) notFound("Tệp minh chứng không còn trên máy chủ.");
+    return { data, fileName: doc.file_name, type: contentType(doc.file_path) };
   }
 
   // ------------------------------------------------------------------ thẩm định

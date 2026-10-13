@@ -22,6 +22,13 @@ export const env = {
   devBypass: () => String(process.env.DEV_AUTH_BYPASS ?? "").toLowerCase() === "true",
   googleClientId: () => process.env.GOOGLE_CLIENT_ID ?? "",
   uploadDir: () => process.env.UPLOAD_DIR || "./uploads",
+  /**
+   * Chỉ gửi email tới tài khoản đã chứng minh sở hữu email (nhập đúng mã đăng ký / đăng nhập Google thật).
+   * Bật khi có dữ liệu mẫu (DEV_AUTH_BYPASS hoặc SEED_DEMO=true): địa chỉ trong dữ liệu mẫu là bịa,
+   * không bao giờ được nhận email thật.
+   */
+  verifiedEmailOnly: () =>
+    String(process.env.DEV_AUTH_BYPASS ?? "").toLowerCase() === "true" || String(process.env.SEED_DEMO ?? "").toLowerCase() === "true",
 };
 
 @Global()
