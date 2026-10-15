@@ -242,6 +242,7 @@ export class EnrollmentService {
         fullName: a.candidate.full_name,
         dob: ymd(a.candidate.dob),
         gender: a.candidate.gender,
+        idNumber: a.candidate.id_number,
         majorCode: a.admission_batch_major.admission_major.major_code,
         majorName: a.admission_batch_major.admission_major.major_name,
         total: a.application_ranking ? Number(a.application_ranking.total_score) : null,

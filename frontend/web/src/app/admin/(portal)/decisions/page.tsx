@@ -7,6 +7,7 @@ import { Btn, EmptyState, ErrorBox, fieldCls, Label, Modal, Notice, PageHeader, 
 import {
   completeEnrollment,
   createDecision,
+  getDecisionDetail,
   getDecisions,
   listScoringBatches,
   processOverdue,
@@ -21,6 +22,8 @@ import {
 } from "@/lib/admin/api";
 import { errorMessage, fmtDate, fmtDateTime } from "@/lib/admin/format";
 import { useAsync } from "@/lib/admin/useAsync";
+import { downloadAdmissionLetters, type LetterData } from "@/lib/admission-letter-pdf";
+import { safeFileName } from "@/lib/cdn";
 
 const DECISION_TONE: Record<DecisionStatus, "gray" | "amber" | "red" | "green" | "blue"> = { DRAFT: "gray", PENDING_SIGN: "amber", FAILED_SIGN: "red", SIGNED: "blue", ISSUED: "green" };
 const CONFIRM_LABEL = { CHUA_XAC_NHAN: "Chờ xác nhận", DA_XAC_NHAN: "Đã xác nhận", TU_CHOI_QUA_HAN: "Từ chối / quá hạn" } as const;
@@ -55,6 +58,45 @@ function Inner() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
+
+  /** Giấy báo trúng tuyển PDF của 1 quyết định đã ban hành (cả danh sách, hoặc 1 thí sinh) */
+  async function letters(decisionId: number, onlyCode?: string) {
+    const key = onlyCode ? `letter-${onlyCode}` : `letters-${decisionId}`;
+    setBusy(key);
+    try {
+      const det = await getDecisionDetail(decisionId);
+      const byCode = new Map((d?.admitted ?? []).map((r) => [r.applicationCode, r]));
+      const list: LetterData[] = det.rows
+        .filter((r) => !r.cancelled && (!onlyCode || r.applicationCode === onlyCode))
+        .filter((r) => byCode.get(r.applicationCode)?.confirmation?.status !== "TU_CHOI_QUA_HAN")
+        .map((r) => {
+          const e = byCode.get(r.applicationCode);
+          return {
+            fullName: r.fullName,
+            dob: r.dob,
+            gender: r.gender,
+            idNumber: r.idNumber ?? null,
+            applicationCode: r.applicationCode,
+            degreeLevel: det.batch.degreeLevel,
+            batchName: det.batch.batchName,
+            majorName: r.majorName,
+            majorCode: r.majorCode,
+            total: r.total,
+            decisionNo: det.decisionNo ?? "",
+            decisionDate: det.decisionDate,
+            deadline: e?.confirmation?.deadline ?? null,
+            confirmedAt: e?.confirmation?.confirmedAt ?? null,
+            studentCode: e?.completion?.transferRef ?? null,
+          };
+        });
+      await downloadAdmissionLetters(list, onlyCode ? undefined : `Giay-bao-trung-tuyen-QD-${safeFileName(det.decisionNo ?? String(decisionId))}`);
+      toast(`Đã tạo ${list.length} giấy báo trúng tuyển.`);
+    } catch (e) {
+      toast(errorMessage(e, "Không tạo được giấy báo."), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act<T>(key: string, fn: () => Promise<T>, okMsg: string | ((r: T) => string)) {
     setBusy(key);
@@ -145,6 +187,11 @@ function Inner() {
                       <Link href={`/admin/decision-print?id=${x.decisionId}`} target="_blank">
                         <Btn size="sm">{x.status === "ISSUED" ? "Xem / in" : "Xem dự thảo"}</Btn>
                       </Link>
+                      {x.status === "ISSUED" && (
+                        <Btn size="sm" variant="outline" loading={busy === `letters-${x.decisionId}`} onClick={() => letters(x.decisionId)}>
+                          Giấy báo trúng tuyển (PDF)
+                        </Btn>
+                      )}
                       {canManage && (x.status === "DRAFT" || x.status === "FAILED_SIGN") && (
                         <>
                           <Btn size="sm" onClick={() => (setErr(""), setForm({ target: x, decisionNo: x.decisionNo ?? "", decisionDate: x.decisionDate ?? "" }))}>
@@ -241,6 +288,16 @@ function Inner() {
                           )}
                         </td>
                         <td className="px-4 py-2.5 text-right">
+                          {(() => {
+                            const dec = d.decisions.find((x) => x.status === "ISSUED" && x.decisionNo === r.decisionNo);
+                            return dec && r.confirmation?.status !== "TU_CHOI_QUA_HAN" ? (
+                              <div className="mb-1.5 flex justify-end">
+                                <Btn size="sm" variant="ghost" loading={busy === `letter-${r.applicationCode}`} onClick={() => letters(dec.decisionId, r.applicationCode)}>
+                                  Giấy báo PDF
+                                </Btn>
+                              </div>
+                            ) : null;
+                          })()}
                           {canManage && r.confirmation?.status === "DA_XAC_NHAN" && !r.completion && (
                             <div className="flex justify-end gap-2">
                               {r.originals?.status !== "VERIFIED" ? (

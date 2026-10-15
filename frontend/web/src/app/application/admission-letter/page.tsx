@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getMyFullApplication, getMyProfile } from "@/lib/api";
+import { downloadAdmissionLetters } from "@/lib/admission-letter-pdf";
 import type { Candidate, FullApplication } from "@/lib/types";
 
 /** Giấy báo trúng tuyển — thí sinh in sau khi Quyết định công nhận trúng tuyển được ký ban hành */
@@ -23,6 +24,8 @@ export default function AdmissionLetterPage() {
   const [me, setMe] = useState<Candidate | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfErr, setPdfErr] = useState("");
 
   useEffect(() => {
     Promise.all([getMyFullApplication(), getMyProfile()])
@@ -50,16 +53,53 @@ export default function AdmissionLetterPage() {
     );
   const degree = app.degreeLevel === "TIEN_SI" ? "tiến sĩ" : "thạc sĩ";
 
+  async function downloadPdf() {
+    if (!app || !me || !e || !r) return;
+    setPdfBusy(true);
+    setPdfErr("");
+    try {
+      await downloadAdmissionLetters([
+        {
+          fullName: me.fullName,
+          dob: me.dob,
+          gender: me.gender,
+          idNumber: me.idNumber,
+          applicationCode: app.applicationCode,
+          degreeLevel: app.degreeLevel,
+          batchName: app.batch.batchName,
+          majorName: app.major.majorName,
+          majorCode: app.major.majorCode,
+          total: r.total,
+          decisionNo: e.decisionNo ?? "",
+          decisionDate: e.decisionDate,
+          deadline: e.deadline,
+          confirmedAt: e.confirmedAt,
+          studentCode: e.studentCode,
+        },
+      ]);
+    } catch (x) {
+      setPdfErr(x instanceof Error ? x.message : "Không tạo được tệp PDF.");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 py-6 print:bg-white print:py-0">
       <div className="mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-3 px-4 print:hidden">
-        <p className="text-sm text-gray-600">Kiểm tra thông tin rồi bấm In (có thể chọn “Lưu thành PDF”).</p>
+        <div>
+          <p className="text-sm text-gray-600">Kiểm tra thông tin rồi bấm Tải PDF (hoặc In).</p>
+          {pdfErr && <p className="mt-1 text-xs font-medium text-danger">{pdfErr}</p>}
+        </div>
         <div className="flex gap-2">
           <Link href="/application" className="rounded-input border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
             ← Quay lại
           </Link>
-          <button type="button" onClick={() => window.print()} className="rounded-input bg-accent px-4 py-2 text-sm font-bold text-white hover:bg-accent-dark">
-            In giấy báo
+          <button type="button" onClick={() => window.print()} className="rounded-input border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            In
+          </button>
+          <button type="button" onClick={downloadPdf} disabled={pdfBusy} className="rounded-input bg-accent px-4 py-2 text-sm font-bold text-white hover:bg-accent-dark disabled:opacity-60">
+            {pdfBusy ? "Đang tạo PDF…" : "⬇ Tải giấy báo (PDF)"}
           </button>
         </div>
       </div>

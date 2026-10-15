@@ -298,7 +298,7 @@ function EnrollmentCard({ app, e, onChange }: { app: FullApplication; e: NonNull
       </p>
       {!declined && (
         <Link href="/application/admission-letter" target="_blank" className="mt-2 inline-block text-[13px] font-semibold text-accent hover:underline">
-          In giấy báo trúng tuyển →
+          Xem và tải giấy báo trúng tuyển (PDF) →
         </Link>
       )}
 

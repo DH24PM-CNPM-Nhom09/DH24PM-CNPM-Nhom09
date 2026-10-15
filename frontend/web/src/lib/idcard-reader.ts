@@ -7,14 +7,8 @@
 // Thư viện và dữ liệu ngôn ngữ chỉ được tải (từ CDN jsDelivr) khi bấm dùng lần đầu,
 // không làm nặng trang. Tệp PDF: lấy trang 1 bằng pdf.js.
 // ============================================================================
+import { CDN, globalLib as g, loadScript } from "./cdn";
 import { findInDocument, parseCccdQr, parseCccdText, type DocumentFindings, type IdCardFields } from "./idcard-parse";
-
-const CDN = {
-  jsqr: "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
-  tesseract: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
-  pdfjs: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
-  pdfWorker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js",
-};
 
 type JsQR = (data: Uint8ClampedArray, w: number, h: number, opts?: { inversionAttempts?: string }) => { data: string } | null;
 interface TesseractLike {
@@ -27,32 +21,6 @@ interface PdfJsLike {
 interface PdfPage {
   getViewport: (o: { scale: number }) => { width: number; height: number };
   render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
-}
-
-const loaded = new Map<string, Promise<void>>();
-function loadScript(src: string): Promise<void> {
-  if (!loaded.has(src)) {
-    loaded.set(
-      src,
-      new Promise<void>((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = src;
-        s.async = true;
-        s.crossOrigin = "anonymous";
-        s.onload = () => resolve();
-        s.onerror = () => {
-          loaded.delete(src);
-          reject(new Error("Không tải được công cụ đọc tự động. Kiểm tra kết nối mạng rồi thử lại."));
-        };
-        document.head.appendChild(s);
-      }),
-    );
-  }
-  return loaded.get(src)!;
-}
-
-function g<T>(name: string): T {
-  return (window as unknown as Record<string, T>)[name];
 }
 
 /** Ảnh hoặc PDF (trang 1) -> canvas, cạnh dài tối đa maxSide px */
