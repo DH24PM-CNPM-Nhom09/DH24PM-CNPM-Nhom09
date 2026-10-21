@@ -1,0 +1,35 @@
+name: tuyensinh_mobile
+description: "Ứng dụng di động Cổng Tuyển Sinh Sau Đại Học - dành cho Thí sinh (dùng chung API với web)"
+publish_to: 'none'
+version: 2.0.0+2
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.6.0
+  http_parser: ^4.1.2
+  shared_preferences: ^2.5.6
+  image_picker: ^1.2.4
+  file_picker: ^13.1.0
+  mobile_scanner: ^7.4.2
+  pdf: ^3.13.1
+  printing: ^5.15.1
+  qr_flutter: ^4.1.0
+  url_launcher: ^6.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  # Phông Roboto (có đủ dấu tiếng Việt) để tạo PDF giấy báo / điều kiện tuyển sinh
+  assets:
+    - assets/fonts/
