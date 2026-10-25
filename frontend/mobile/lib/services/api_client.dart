@@ -38,36 +38,52 @@ class ApiClient {
 
   bool get isLoggedIn => _token != null && _token!.isNotEmpty;
 
+  /// Bộ nhớ trên máy (token, địa chỉ máy chủ). Lỗi đọc/ghi không được làm treo hay sập app:
+  /// khi đó app vẫn chạy, chỉ là phải đăng nhập lại ở lần mở sau.
+  Future<SharedPreferences?> _prefs() async {
+    try {
+      return await SharedPreferences.getInstance().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> load() async {
-    final p = await SharedPreferences.getInstance();
-    _token = p.getString(_kToken);
-    final saved = p.getString(_kApiBase);
-    if (saved != null && saved.trim().isNotEmpty) apiBase = saved.trim();
+    final p = await _prefs();
+    if (p == null) return;
+    try {
+      _token = p.getString(_kToken);
+      final saved = p.getString(_kApiBase);
+      if (saved != null && saved.trim().isNotEmpty) apiBase = saved.trim();
+    } catch (_) {}
   }
 
   Future<void> saveToken(String token) async {
     _token = token;
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_kToken, token);
+    try {
+      await (await _prefs())?.setString(_kToken, token);
+    } catch (_) {}
   }
 
   Future<void> clearToken() async {
     _token = null;
-    final p = await SharedPreferences.getInstance();
-    await p.remove(_kToken);
+    try {
+      await (await _prefs())?.remove(_kToken);
+    } catch (_) {}
   }
 
   /// Đổi địa chỉ máy chủ (để trống = dùng mặc định).
   Future<void> setApiBase(String? value) async {
-    final p = await SharedPreferences.getInstance();
     final v = (value ?? '').trim().replaceAll(RegExp(r'/+$'), '');
-    if (v.isEmpty) {
-      apiBase = AppConfig.defaultApiBase;
-      await p.remove(_kApiBase);
-    } else {
-      apiBase = v;
-      await p.setString(_kApiBase, v);
-    }
+    apiBase = v.isEmpty ? AppConfig.defaultApiBase : v;
+    try {
+      final p = await _prefs();
+      if (v.isEmpty) {
+        await p?.remove(_kApiBase);
+      } else {
+        await p?.setString(_kApiBase, v);
+      }
+    } catch (_) {}
     _http.close();
     _http = http.Client();
   }
