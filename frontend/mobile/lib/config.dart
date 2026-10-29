@@ -8,7 +8,7 @@
 class AppConfig {
   static const defaultApiBase = String.fromEnvironment(
     'API_BASE',
-    defaultValue: 'https://api.tuyensinhsdhnhom09.id.vn/api/v1',
+    defaultValue: 'https://tuyensinh-nhom09-api.onrender.com/api/v1',
   );
 
   /// Trang web của cổng tuyển sinh (mở các chức năng chỉ có trên web, ví dụ in đơn đăng ký).

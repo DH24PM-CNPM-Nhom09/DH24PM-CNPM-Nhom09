@@ -36,7 +36,7 @@ widgets/                 nút, ô nhập, thẻ, ô minh chứng ...
 ```bash
 cd frontend/mobile
 flutter pub get
-flutter run                     # dùng máy chủ thật https://api.tuyensinhsdhnhom09.id.vn/api/v1
+flutter run                     # dùng máy chủ thật https://tuyensinh-nhom09-api.onrender.com/api/v1
 ```
 
 Chạy với backend trên máy tính (cùng Wi-Fi với điện thoại):
