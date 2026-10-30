@@ -35,4 +35,4 @@ docker compose up -d --build
 docker compose exec backend npm run db:seed:demo
 ```
 
-Mở http://localhost:3000 (cổng thí sinh) và http://localhost:3000/admin/login (cổng cán bộ). Hướng dẫn đầy đủ: [frontend/TRIEN_KHAI_DOCKER.md](frontend/TRIEN_KHAI_DOCKER.md).
+Mở http://localhost:3000 (cổng thí sinh) và http://localhost:3000/admin/login (cổng cán bộ). Hướng dẫn đầy đủ: [frontend/TRIEN_KHAI_DOCKER.md](frontend/TRIEN_KHAI_DOCKER.md). Đưa lên mạng miễn phí với tên miền riêng: [frontend/TRIEN_KHAI_MIEN_PHI.md](frontend/TRIEN_KHAI_MIEN_PHI.md).

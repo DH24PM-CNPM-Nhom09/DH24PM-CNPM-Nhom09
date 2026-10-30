@@ -1794,7 +1794,7 @@ export interface DecisionDetail {
   signedAt: string | null;
   signatureRef: string | null;
   batch: { batchCode: string; batchName: string; degreeLevel: DegreeLevel; legalBasis: string | null };
-  rows: { applicationCode: string; fullName: string; dob: string | null; gender: string | null; majorCode: string; majorName: string; total: number | null; cancelled: boolean }[];
+  rows: { applicationCode: string; fullName: string; dob: string | null; gender: string | null; idNumber?: string | null; majorCode: string; majorName: string; total: number | null; cancelled: boolean }[];
 }
 export async function getDecisions(batchId: number): Promise<DecisionsOverview> {
   if (!USE_MOCK) return request<DecisionsOverview>(`/admin/decisions/batches/${batchId}`);

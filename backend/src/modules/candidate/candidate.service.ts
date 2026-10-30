@@ -9,6 +9,7 @@ import { env, SystemConfigService } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, str, ymd } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
+import { removeFile, saveFile } from "../../common/file-store";
 import { ApplicationsService } from "../admin/applications.service";
 
 const ALLOWED_MIME: Record<string, string> = { "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png" };
@@ -174,10 +175,7 @@ export class CandidateService {
 
     const hash = createHash("sha256").update(file.buffer).digest("hex");
     const rel = path.posix.join(String(applicationId), `${randomUUID()}${ext}`);
-    const root = path.resolve(env.uploadDir());
-    fs.mkdirSync(path.join(root, String(applicationId)), { recursive: true });
-    const abs = path.join(root, rel);
-    fs.writeFileSync(abs, file.buffer);
+    await saveFile(this.prisma, rel, file.buffer);
     // multer/busboy đọc tên tệp theo latin1 -> đổi lại UTF-8 để giữ dấu tiếng Việt
     const original = Buffer.from(file.originalname, "latin1").toString("utf8");
     const fileName = original.normalize("NFC").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 200) || `minh_chung${ext}`;
@@ -213,14 +211,11 @@ export class CandidateService {
         await this.audit.record({ type: "CANDIDATE", id: candidateId }, "DOCUMENT_UPLOAD", { table: "application_document", id: doc.document_id }, `${app.application_code}: ${replace ? "nộp lại" : "nộp"} ${fileName}`, tx);
         return doc;
       });
-      if (replace) {
-        const old = path.resolve(root, replace.file_path);
-        if (old.startsWith(root + path.sep)) fs.rm(old, { force: true }, () => undefined);
-      }
+      if (replace) removeFile(this.prisma, replace.file_path);
       // Trùng tệp đã nộp trong cùng hồ sơ: cảnh báo, không chặn (thiết kế M3)
       return { success: true, documentId: id(saved.document_id), duplicateWarning: duplicate > 0 };
     } catch (e) {
-      fs.rm(abs, { force: true }, () => undefined);
+      removeFile(this.prisma, rel);
       throw e;
     }
   }

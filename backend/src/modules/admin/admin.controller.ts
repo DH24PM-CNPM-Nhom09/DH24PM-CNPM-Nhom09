@@ -94,10 +94,11 @@ export class ApplicationsController {
   @Get("admin/application-documents/:id/file")
   @RequirePermission("application:view")
   async file(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
-    const { abs, fileName } = await this.svc.documentFile(id);
+    const { data, fileName, type } = await this.svc.documentFile(id);
+    res.setHeader("Content-Type", type);
     res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`);
     res.setHeader("Cache-Control", "private, no-store");
-    res.sendFile(abs);
+    res.send(data);
   }
 }
 

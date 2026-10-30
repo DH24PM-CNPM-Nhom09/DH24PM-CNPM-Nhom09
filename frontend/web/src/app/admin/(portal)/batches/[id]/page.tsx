@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import ExportConditionsButtons from "@/components/ExportConditionsButtons";
 import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
+import { fromBatchDetail } from "@/lib/admission-conditions-export";
 import { IconAlert, IconCheck, IconChevronLeft, IconPlus, IconX } from "@/components/admin/Icons";
 import { BATCH_LABEL, BatchBadge, BatchMajorBadge, Btn, ErrorBox, fieldCls, Label, Modal, Notice, Panel, Skeleton, useToast } from "@/components/admin/ui";
 import {
@@ -106,7 +108,10 @@ function BatchDetailInner() {
             {b.legalBasis && <>, căn cứ {b.legalBasis}</>}
           </p>
         </div>
-        <BatchBadge status={b.status} />
+        <div className="flex flex-col items-start gap-2 md:items-end">
+          <BatchBadge status={b.status} />
+          {data.majors.length > 0 && <ExportConditionsButtons doc={fromBatchDetail(data)} />}
+        </div>
       </div>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">

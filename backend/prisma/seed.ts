@@ -13,9 +13,11 @@ import * as fs from "fs";
 import * as path from "path";
 import { seedAnnouncements } from "./announcements-seed";
 import { createSeedDb } from "./demo/mockData";
+import { dbStorage, saveSeedFile } from "./hosted-util";
 
 const prisma = new PrismaClient();
-const DEMO_PASSWORD = "Demo@123";
+// Máy chủ công khai: đặt SEED_DEMO_PASSWORD để tài khoản mẫu không dùng mật khẩu ai cũng biết
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD?.trim() || "Demo@123";
 const DEMO_CANDIDATE_EMAIL = "thisinh.demo@gmail.com";
 const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
 const B = (n: number) => BigInt(n);
@@ -44,7 +46,7 @@ async function seedAdmin() {
       staff_role: { create: [{ role_id: roles.ADMIN }] },
     },
   });
-  console.log(`✓ Tạo tài khoản quản trị: quantri@agu.edu.vn / ${password}  (hệ thống bắt đổi mật khẩu ở lần đăng nhập đầu)`);
+  console.log(`✓ Tạo tài khoản quản trị: quantri@agu.edu.vn / ${process.env.SEED_ADMIN_PASSWORD ? "(mật khẩu trong SEED_ADMIN_PASSWORD)" : password}  (hệ thống bắt đổi mật khẩu ở lần đăng nhập đầu)`);
 }
 
 /** PDF 1 trang hợp lệ, đủ để xem thử trong trình duyệt */
@@ -200,7 +202,7 @@ async function seedDemo() {
       },
     });
 
-    fs.mkdirSync(path.join(uploadRoot, "demo", String(a.applicationId)), { recursive: true });
+    if (!dbStorage()) fs.mkdirSync(path.join(uploadRoot, "demo", String(a.applicationId)), { recursive: true });
     for (const d of a.documents) {
       const buf = tinyPdf([
         "Tep minh chung mau - Du lieu demo",
@@ -211,7 +213,7 @@ async function seedDemo() {
         "Day khong phai giay to that.",
       ]);
       const rel = path.posix.join("demo", String(a.applicationId), `${d.documentId}.pdf`);
-      fs.writeFileSync(path.join(uploadRoot, rel), buf);
+      await saveSeedFile(prisma, uploadRoot, rel, buf);
       await prisma.application_document.create({
         data: {
           document_id: B(d.documentId),
@@ -359,7 +361,7 @@ async function seedDemo() {
   const nAnn = await seedAnnouncements(prisma);
   if (nAnn) console.log(`✓ Đã nạp ${nAnn} thông báo tuyển sinh / quy định mẫu.`);
 
-  console.log("\n✓ Đã nạp dữ liệu mẫu. Tài khoản đăng nhập (mật khẩu chung: " + DEMO_PASSWORD + "):");
+  console.log("\n✓ Đã nạp dữ liệu mẫu. Tài khoản đăng nhập (mật khẩu chung: " + (process.env.SEED_DEMO_PASSWORD?.trim() ? "giá trị SEED_DEMO_PASSWORD bạn đã đặt" : DEMO_PASSWORD) + "):");
   console.log("  Cán bộ tuyển sinh  canbo@agu.edu.vn");
   console.log("  Hội đồng           hoidong@agu.edu.vn");
   console.log("  Lãnh đạo           lanhdao@agu.edu.vn");

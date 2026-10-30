@@ -741,3 +741,11 @@ model appeal_request {
 
   @@index([confirmed_by_staff_id], map: "fk_appeal_request_staff")
 }
+
+/// Nội dung tệp minh chứng khi UPLOAD_STORAGE=db (migration v13) — khóa trùng application_document.file_path
+model stored_file {
+  file_path  String   @id @db.VarChar(255)
+  content    Bytes    @db.LongBlob
+  size_bytes Int      @db.UnsignedInt
+  created_at DateTime @default(now()) @db.DateTime(0)
+}

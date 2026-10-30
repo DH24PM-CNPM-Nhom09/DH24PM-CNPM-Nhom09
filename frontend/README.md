@@ -8,7 +8,7 @@ Người phụ trách: Nguyễn Phúc Khang (nhánh `frontend`).
 | :--- | :--- |
 | `frontend/web/` | Giao diện Next.js 14 + Tailwind (cổng thí sinh `/`, cổng cán bộ `/admin`) |
 | `backend/` (ở thư mục gốc repo) | API NestJS + Prisma mà web gọi tới |
-| `backend/database/` | CSDL `admission_db`: bản gốc v3 của nhóm + các migration v4 → v12 (chỉ thêm, không xóa) |
+| `backend/database/` | CSDL `admission_db`: bản gốc v3 của nhóm + các migration v4 → v13 (chỉ thêm, không xóa) |
 | `frontend/docker/`, `frontend/docker-compose.yml` | Chạy cả CSDL + API + web bằng một lệnh |
 
 ## Chạy nhanh bằng Docker
@@ -29,5 +29,12 @@ Mở http://localhost:3000 (thí sinh) và http://localhost:3000/admin/login (c�
 - **Cán bộ** (chi tiết hồ sơ → bấm tên tệp minh chứng): nút **Đọc tự động** đối chiếu số CCCD, họ tên, ngày sinh, ngày cấp với thông tin thí sinh khai; với văn bằng, chứng chỉ thì tách *Số hiệu* và *Số vào sổ cấp bằng* để tra cứu.
 - Ảnh được xử lý ngay trong trình duyệt, không gửi lên máy chủ. Thư viện (jsQR, Tesseract.js, pdf.js) tự tải từ CDN jsDelivr ở lần bấm đầu tiên nên máy cần có mạng. Mã nguồn: `web/src/lib/idcard-parse.ts`, `web/src/lib/idcard-reader.ts`.
 
+## Xuất file: điều kiện tuyển sinh và giấy báo trúng tuyển
+
+- **Điều kiện tuyển sinh (PDF + Excel):** cán bộ bấm **PDF / Excel** ở trang chi tiết đợt tuyển sinh; thí sinh bấm **Điều kiện (PDF) / Excel** ở tab *Đợt đang mở đăng ký*. Tệp gồm thời gian, căn cứ, ngành và chỉ tiêu, điều kiện dự tuyển, hình thức xét tuyển, hồ sơ cần nộp.
+- **Giấy báo trúng tuyển (PDF):** tự tạo sau khi quyết định trúng tuyển được ký ban hành. Thí sinh tải ở trang hồ sơ; cán bộ tải cả danh sách của một quyết định (mỗi thí sinh 1 trang) hoặc từng người ở trang *Quyết định & nhập học*. Mỗi giấy báo có mã QR đối chiếu (mã hồ sơ + số quyết định).
+- Tạo ngay trên trình duyệt bằng pdfmake và SheetJS (tải từ CDN jsDelivr khi bấm). Mã nguồn: `web/src/lib/admission-conditions-export.ts`, `web/src/lib/admission-letter-pdf.ts`.
+
 Hướng dẫn đầy đủ cho cả nhóm (cài Docker, tài khoản demo, lỗi thường gặp, đưa lên máy chủ): [TRIEN_KHAI_DOCKER.md](TRIEN_KHAI_DOCKER.md).
+Đưa web lên mạng miễn phí với tên miền riêng (Render + Aiven MySQL + Resend gửi OTP): [TRIEN_KHAI_MIEN_PHI.md](TRIEN_KHAI_MIEN_PHI.md).
 Chạy không dùng Docker (XAMPP + Node.js): [backend/README.md](../backend/README.md) và [web/ADMIN_README.md](web/ADMIN_README.md).

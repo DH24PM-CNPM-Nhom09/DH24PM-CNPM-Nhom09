@@ -27,10 +27,10 @@ export class NotificationDispatcher implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (!this.mail.configured) {
-      this.log.warn("Chưa cấu hình SMTP_USER/SMTP_PASS trong .env: mã xác thực sẽ in ra cửa sổ này, thông báo email nằm chờ trong bảng notification.");
+      this.log.warn("Chưa cấu hình gửi email (RESEND_API_KEY hoặc SMTP_USER/SMTP_PASS trong .env): mã xác thực sẽ in ra cửa sổ này, thông báo email nằm chờ trong bảng notification.");
       return;
     }
-    this.log.log(`Đã bật gửi email qua ${process.env.SMTP_HOST || "smtp.gmail.com"} bằng tài khoản ${process.env.SMTP_USER}.`);
+    this.log.log(`Đã bật gửi email qua ${this.mail.describe()}.`);
     this.timer = setInterval(() => void this.tick(), INTERVAL_MS);
   }
 
@@ -47,7 +47,7 @@ export class NotificationDispatcher implements OnModuleInit, OnModuleDestroy {
           deleted_at: null,
           email: { not: null },
           candidate: { isNot: null },
-          ...(env.devBypass() ? { otp_verification: { some: { purpose: "REGISTER", verified_at: { not: null } } } } : {}),
+          ...(env.verifiedEmailOnly() ? { otp_verification: { some: { purpose: "REGISTER", verified_at: { not: null } } } } : {}),
         },
         select: { email: true, candidate: { select: { candidate_id: true } } },
       });

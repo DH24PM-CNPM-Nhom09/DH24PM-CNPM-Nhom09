@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppLayout, { notifyNotificationsChanged } from "@/components/layout/AppLayout";
 import Card from "@/components/ui/Card";
+import ExportConditionsButtons from "@/components/ExportConditionsButtons";
+import { fromOpenBatch } from "@/lib/admission-conditions-export";
 import {
   CATEGORY_LABEL,
   CATEGORY_TONE,
@@ -167,6 +169,7 @@ function BatchesTab({ loggedIn }: { loggedIn: boolean }) {
                 >
                   {loggedIn ? "Nộp hồ sơ đợt này" : "Đăng ký để nộp hồ sơ"}
                 </Link>
+                <ExportConditionsButtons doc={fromOpenBatch(b)} tone="public" />
               </div>
             </div>
             <ul className="divide-y divide-gray-100">
