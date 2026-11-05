@@ -794,6 +794,15 @@ export async function unlockCandidateAccount(accountId: number) {
   return delay({ success: true });
 }
 
+/** DELETE /admin/candidates/{id}   { reason } — chỉ xóa được tài khoản chưa nộp hồ sơ nào */
+export async function deleteCandidateAccount(accountId: number, reason: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/candidates/${accountId}`, { method: "DELETE", body: JSON.stringify({ reason }) });
+  requirePermission("candidate:manage");
+  if (reason.trim().length < 5) fail("REASON_REQUIRED", "Nhập lý do xóa (ít nhất 5 ký tự).");
+  // Dữ liệu mẫu: mọi thí sinh mẫu đều đã nộp hồ sơ
+  fail("HAS_SUBMITTED_APPLICATION", 'Không xóa được: tài khoản đã nộp hồ sơ. Hồ sơ đã nộp phải được lưu để đối chiếu, hãy dùng "Khóa tài khoản".');
+}
+
 /** Tải tệp CSV danh sách thí sinh theo bộ lọc (mở bằng Excel) */
 export async function exportCandidateAccounts(query: CandidateAccountQuery): Promise<Blob> {
   if (USE_MOCK) {

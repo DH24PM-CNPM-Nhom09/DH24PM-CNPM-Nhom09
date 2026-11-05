@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Put, Query, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Put, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { asStaff, CurrentUser, RequirePermission, type AuthUser } from "../../common/auth";
 import { str } from "../../common/util";
@@ -273,6 +273,13 @@ export class CandidateAccountsController {
   @RequirePermission("candidate:manage")
   unlock(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
     return this.svc.unlock(asStaff(user), id);
+  }
+
+  /** Xóa tài khoản chưa nộp hồ sơ (body: { reason }) */
+  @Delete(":id")
+  @RequirePermission("candidate:manage")
+  remove(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.remove(asStaff(user), id, body?.reason);
   }
 }
 

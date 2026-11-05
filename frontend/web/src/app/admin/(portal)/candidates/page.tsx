@@ -10,6 +10,7 @@ import {
   exportCandidateAccounts,
   getCandidateAccount,
   listCandidateAccounts,
+  deleteCandidateAccount,
   lockCandidateAccount,
   unlockCandidateAccount,
   type CandidateAccountQuery,
@@ -32,6 +33,7 @@ const TABS: { key: CandidateAccountStatus | ""; label: string }[] = [
 ];
 const GENDER: Record<string, string> = { NAM: "Nam", NU: "Nữ", KHAC: "Khác" };
 const COMPLAINT_STATUS: Record<string, string> = { PENDING: "Chờ xử lý", PROCESSING: "Đang xử lý", RESOLVED: "Đã xử lý", REJECTED: "Từ chối" };
+const DELETE_PRESETS = ["Tài khoản tạo để chạy thử.", "Thí sinh đăng ký trùng, đã có tài khoản khác.", "Thí sinh yêu cầu xóa tài khoản."];
 const LOCK_PRESETS = [
   "Khai thông tin cá nhân không trung thực.",
   "Tài khoản đăng ký trùng (một người nhiều tài khoản).",
@@ -285,12 +287,13 @@ function CandidateDetail({ accountId, onClose, onChanged }: { accountId: number;
   const canManage = can("candidate:manage");
   const canSeeApp = can("application:view");
   const { data, error, loading, reload } = useAsync(() => getCandidateAccount(accountId), [accountId]);
-  const [mode, setMode] = useState<"view" | "lock">("view");
+  const [mode, setMode] = useState<"view" | "lock" | "delete">("view");
   const [reason, setReason] = useState("");
+  const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
 
-  async function run(fn: () => Promise<unknown>, done: string) {
+  async function run(fn: () => Promise<unknown>, done: string, close = false) {
     setBusy(true);
     setFormError("");
     try {
@@ -298,8 +301,10 @@ function CandidateDetail({ accountId, onClose, onChanged }: { accountId: number;
       toast(done);
       setMode("view");
       setReason("");
-      reload(true);
+      setSure(false);
       onChanged();
+      if (close) return onClose();
+      reload(true);
     } catch (e) {
       setFormError(errorMessage(e));
     } finally {
@@ -308,11 +313,25 @@ function CandidateDetail({ accountId, onClose, onChanged }: { accountId: number;
   }
 
   const acc = data?.account;
+  // Chỉ xóa được tài khoản chưa nộp hồ sơ nào (backend kiểm tra lại)
+  const submittedApps = (data?.applications ?? []).filter((a) => a.submittedAt || a.reviewStatus !== "DRAFT");
   const title = data ? data.profile?.fullName ?? data.account.email ?? "Thí sinh" : "Thông tin thí sinh";
 
   const footer =
     !data || !canManage ? (
       <Btn onClick={onClose}>Đóng</Btn>
+    ) : mode === "delete" ? (
+      <>
+        <Btn onClick={() => setMode("view")}>Hủy</Btn>
+        <Btn
+          variant="danger"
+          loading={busy}
+          disabled={!sure}
+          onClick={() => run(() => deleteCandidateAccount(accountId, reason), "Đã xóa tài khoản thí sinh.", true)}
+        >
+          Xóa vĩnh viễn
+        </Btn>
+      </>
     ) : mode === "lock" ? (
       <>
         <Btn onClick={() => setMode("view")}>Hủy</Btn>
@@ -345,6 +364,19 @@ function CandidateDetail({ accountId, onClose, onChanged }: { accountId: number;
             </Btn>
           </>
         )}
+        <Btn
+          variant="danger"
+          disabled={submittedApps.length > 0}
+          title={submittedApps.length ? "Tài khoản đã nộp hồ sơ nên không xóa được, hãy dùng Khóa tài khoản." : "Xóa tài khoản chưa nộp hồ sơ"}
+          onClick={() => {
+            setFormError("");
+            setReason("");
+            setSure(false);
+            setMode("delete");
+          }}
+        >
+          Xóa tài khoản
+        </Btn>
       </>
     );
 
@@ -356,6 +388,32 @@ function CandidateDetail({ accountId, onClose, onChanged }: { accountId: number;
         <div className="space-y-3">
           <Skeleton className="h-24" />
           <Skeleton className="h-32" />
+        </div>
+      ) : mode === "delete" ? (
+        <div className="grid gap-3">
+          <Notice>
+            Xóa tài khoản <b>{data.profile?.fullName ?? acc.email}</b>
+            {acc.email ? ` (${acc.email})` : ""}. Thí sinh không đăng nhập được nữa; hồ sơ nháp (nếu có) bị hủy. Email, số điện thoại và số CCCD được giải phóng để người này đăng ký lại
+            được. Thông tin gốc và lý do được ghi vào nhật ký hệ thống. Thao tác này không hoàn tác được.
+          </Notice>
+          <div>
+            <Label htmlFor="delete-reason" required>
+              Lý do xóa
+            </Label>
+            <textarea id="delete-reason" rows={3} className={fieldCls} value={reason} maxLength={400} onChange={(e) => setReason(e.target.value)} />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {DELETE_PRESETS.map((p) => (
+                <button key={p} type="button" onClick={() => setReason(p)} className="rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:border-gray-300 hover:text-gray-900">
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input type="checkbox" className="mt-0.5" checked={sure} onChange={(e) => setSure(e.target.checked)} />
+            Tôi đã kiểm tra đúng tài khoản cần xóa và hiểu thao tác này không hoàn tác được.
+          </label>
+          {formError && <ErrorBox message={formError} />}
         </div>
       ) : mode === "lock" ? (
         <div className="grid gap-3">
@@ -380,6 +438,11 @@ function CandidateDetail({ accountId, onClose, onChanged }: { accountId: number;
       ) : (
         <div className="grid gap-5">
           {acc.status === "LOCKED" && <Notice>Tài khoản đang bị khóa. Thí sinh không đăng nhập được.</Notice>}
+          {canManage && submittedApps.length > 0 && (
+            <p className="text-xs text-gray-500">
+              Tài khoản đã nộp hồ sơ ({submittedApps.map((a) => a.applicationCode).join(", ")}) nên không xóa được, chỉ khóa được. Chỉ xóa được tài khoản chưa nộp hồ sơ nào.
+            </p>
+          )}
           {acc.tempLockedUntil && <Notice>Đang bị khóa tạm đến {fmtDateTime(acc.tempLockedUntil)} do đăng nhập sai mật khẩu nhiều lần.</Notice>}
 
           <section>

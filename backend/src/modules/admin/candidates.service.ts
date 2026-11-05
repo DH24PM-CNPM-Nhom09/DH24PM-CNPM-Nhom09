@@ -15,8 +15,10 @@ function maskId(v: string | null) {
 
 /**
  * Quản lý tài khoản thí sinh (phía cán bộ): ai đã đăng ký, thông tin cá nhân, hồ sơ đã nộp.
- * Quản trị được khóa / mở khóa. Không xóa tài khoản thí sinh để giữ lịch sử hồ sơ.
+ * Quản trị được khóa / mở khóa / xóa.
  * Khóa = candidate_account.status "LOCKED" (khác khóa tạm do sai mật khẩu, dùng locked_until).
+ * Xóa = xóa mềm (deleted_at) và chỉ cho tài khoản CHƯA NỘP hồ sơ nào (tài khoản thử, đăng ký trùng, bỏ dở):
+ * hồ sơ đã nộp phải được lưu để đối chiếu, khi đó dùng Khóa.
  */
 @Injectable()
 export class CandidateAccountsService {
@@ -213,6 +215,58 @@ export class CandidateAccountsService {
       );
       if (a.status === "LOCKED" && a.candidate)
         await this.audit.notifyCandidate(id(a.candidate.candidate_id), "Tài khoản của bạn đã được mở khóa", "Tài khoản tuyển sinh sau đại học của bạn đã được mở khóa. Bạn có thể đăng nhập lại bình thường.", tx);
+    });
+    return { success: true };
+  }
+
+  /**
+   * Xóa tài khoản thí sinh (xóa mềm). Chỉ cho tài khoản chưa từng nộp hồ sơ.
+   * Giải phóng email / số điện thoại / số CCCD để người đó đăng ký lại được; hồ sơ nháp (nếu có) bị hủy.
+   * Thông tin gốc (họ tên, email, SĐT) được ghi vào nhật ký hệ thống kèm lý do.
+   */
+  async remove(me: StaffUser, accountId: number, reason: unknown) {
+    const why = String(reason ?? "").trim();
+    if (why.length < 5) fail("REASON_REQUIRED", "Nhập lý do xóa (ít nhất 5 ký tự). Lý do được ghi vào nhật ký hệ thống.");
+    const a = await this.prisma.candidate_account.findFirst({
+      where: { account_id: BigInt(accountId), deleted_at: null },
+      include: { candidate: { include: { application: { where: { deleted_at: null } } } } },
+    });
+    if (!a) notFound("Không tìm thấy tài khoản thí sinh.");
+    const apps = a.candidate?.application ?? [];
+    const submitted = apps.filter((x) => x.submitted_at !== null || x.review_status !== "DRAFT");
+    if (submitted.length)
+      fail(
+        "HAS_SUBMITTED_APPLICATION",
+        `Không xóa được: tài khoản đã nộp hồ sơ ${submitted.map((x) => x.application_code).join(", ")}. Hồ sơ đã nộp phải được lưu để đối chiếu, hãy dùng "Khóa tài khoản".`,
+        HttpStatus.CONFLICT,
+      );
+    const who = [a.candidate?.full_name, a.email, a.phone_number].filter(Boolean).join(" · ") || `#${accountId}`;
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      // Hủy các hồ sơ nháp còn dở
+      if (apps.length)
+        await tx.application.updateMany({ where: { application_id: { in: apps.map((x) => x.application_id) } }, data: { is_cancelled: true, deleted_at: now } });
+      if (a.candidate)
+        await tx.candidate.update({ where: { candidate_id: a.candidate.candidate_id }, data: { id_number: null, deleted_at: now } });
+      await tx.candidate_account.update({
+        where: { account_id: a.account_id },
+        data: {
+          // username/email/SĐT là duy nhất: đổi đi để người đó đăng ký lại bằng chính email/SĐT này được
+          username: `deleted-${a.account_id}-${now.getTime()}`,
+          email: null,
+          phone_number: null,
+          password_hash: null,
+          status: "LOCKED",
+          deleted_at: now,
+        },
+      });
+      await this.audit.record(
+        { type: "STAFF", id: me.staffAccountId },
+        "CANDIDATE_DELETE",
+        { table: "candidate_account", id: a.account_id },
+        `Xóa tài khoản thí sinh ${who}${apps.length ? ` (hủy ${apps.length} hồ sơ nháp)` : ""}: ${why.slice(0, 400)}`,
+        tx,
+      );
     });
     return { success: true };
   }
