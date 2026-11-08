@@ -13,6 +13,7 @@ import { dec, id, iso, isoReq, num, parseReviewStatus, toInt, transferNote, ymd 
 import { contentType, readFile } from "../../common/file-store";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
 import { toAuditDto, toBatchDto, toBatchMajorDto, toHistoryDto, toMajorDto } from "./mappers";
+import { parseDateTimeVn } from "../../common/validate";
 
 const REVIEWABLE: ReviewStatus[] = ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT", "APPROVED", "REJECTED"];
 
@@ -439,7 +440,7 @@ export class ApplicationsService {
   async confirmPayment(me: StaffUser, applicationId: number, body: { receiptNo?: unknown; transactionCode?: unknown; paidAt?: unknown }) {
     const receiptNo = String(body.receiptNo ?? "").trim().slice(0, 50) || null;
     const transactionCode = String(body.transactionCode ?? "").trim().slice(0, 100) || null;
-    const paidAt = body.paidAt ? new Date(String(body.paidAt)) : new Date();
+    const paidAt = body.paidAt ? (parseDateTimeVn(body.paidAt) ?? new Date(NaN)) : new Date();
     if (Number.isNaN(paidAt.getTime()) || paidAt.getTime() > Date.now() + 60_000) fail("VALIDATION", "Ngày nộp tiền không hợp lệ.");
     const a = await this.prisma.application.findFirst({
       where: { application_id: BigInt(applicationId), ...this.base() },
@@ -579,7 +580,8 @@ export class ApplicationsService {
     if (act === "REJECT" && (!reason || reason.length < 10)) fail("REASON_REQUIRED", "Lý do không đạt cần ít nhất 10 ký tự để thí sinh hiểu rõ.");
     if (act === "REQUEST_SUPPLEMENT") {
       if (content.length < 10) fail("CONTENT_REQUIRED", "Nêu cụ thể giấy tờ cần bổ sung (ít nhất 10 ký tự).");
-      deadline = payload.deadline ? new Date(payload.deadline) : null;
+      // Chuỗi không kèm múi giờ = giờ Việt Nam (backend chạy UTC; trước đây lệch 7 tiếng)
+      deadline = payload.deadline ? parseDateTimeVn(payload.deadline) : null;
       if (!deadline || Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) fail("INVALID_DEADLINE", "Hạn bổ sung phải sau thời điểm hiện tại.");
       reason = content;
     }

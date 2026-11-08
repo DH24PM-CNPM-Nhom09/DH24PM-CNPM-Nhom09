@@ -14,6 +14,7 @@ import { admissionView } from "./admission-view";
 
 import { DOC_LABEL, LANGUAGE_LABEL, LANGUAGE_OPTIONS, OPTIONAL_DOCS, requiredDocs, type Degree, type LanguageOption } from "../../common/documents";
 import { phoneAvailable } from "../../common/pending-accounts";
+import { isVnPhone, normalizePhone, parseYmd } from "../../common/validate";
 
 type FeeItem = { code: string; label: string; amount: number };
 
@@ -415,11 +416,12 @@ export class ApplicationFlowService {
     const clean = (v: unknown, max: number) => str(v).trim().replace(/\s+/g, " ").slice(0, max);
     const idNumber = str(body.idNumber).replace(/\s/g, "");
     const issueDateRaw = str(body.idIssueDate);
-    const issueDate = new Date(`${issueDateRaw}T00:00:00Z`);
+    // Ngày có thật (không nhận 2020-02-30); trước đây new Date tự đổi thành 01/03
+    const issueDate = parseYmd(issueDateRaw) ?? new Date(NaN);
     const idIssuePlace = clean(body.idIssuePlace, 255);
     const birthplace = clean(body.birthplace, 255);
     const ethnicity = clean(body.ethnicity, 50);
-    const phone = str(body.phoneNumber).replace(/[\s.]/g, "");
+    const phone = normalizePhone(body.phoneNumber);
     const permanentAddress = clean(body.permanentAddress, 1000);
     const address = clean(body.address, 1000);
 
@@ -432,7 +434,7 @@ export class ApplicationFlowService {
     if (idIssuePlace.length < 3) errors.push("Chọn hoặc ghi nơi cấp CCCD");
     if (birthplace.length < 2) errors.push("Nhập nơi sinh");
     if (ethnicity.length < 2) errors.push("Nhập dân tộc");
-    if (!/^0\d{9}$/.test(phone)) errors.push("Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0");
+    if (!isVnPhone(phone)) errors.push("Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0");
     if (permanentAddress.length < 5) errors.push("Nhập nơi thường trú theo CCCD");
     if (address.length < 5) errors.push("Nhập địa chỉ liên hệ");
     if (errors.length) fail("VALIDATION", `${errors.join(". ")}.`);

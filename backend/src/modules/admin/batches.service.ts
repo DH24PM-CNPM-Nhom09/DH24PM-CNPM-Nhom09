@@ -3,8 +3,11 @@ import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
 import { id, str } from "../../common/util";
-import { PrismaService } from "../../prisma/prisma.service";
+import type { ReviewStatus } from "../../common/review-rules";
+import { PrismaService, type Tx } from "../../prisma/prisma.service";
+import { ApplicationsService } from "./applications.service";
 import { toBatchDto, toBatchMajorDto, toMajorDto } from "./mappers";
+import { parseDateTimeVn, tooLong } from "../../common/validate";
 
 type BatchStatus = "DRAFT" | "OPEN" | "CLOSED" | "IN_REVIEW" | "COMPLETED" | "CANCELLED";
 
@@ -35,7 +38,36 @@ export class BatchesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly apps: ApplicationsService,
   ) {}
+
+  /**
+   * Hồ sơ chọn "thi đánh giá năng lực tiếng Anh" mà kết quả là Không đạt / Vắng thi thì không thể kết luận "Đạt".
+   * Trước đây các hồ sơ này kẹt lại, chặn đợt chuyển sang "Xét kết quả" cho tới khi cán bộ bấm "Không đạt" từng hồ sơ.
+   * Nay hệ thống tự kết luận Không đạt (ghi lý do, lịch sử, thông báo thí sinh) khi chuyển đợt sang IN_REVIEW.
+   */
+  private async concludeEnglishFailures(tx: Tx, me: StaffUser, batchId: bigint) {
+    const stuck = await tx.application.findMany({
+      where: {
+        deleted_at: null,
+        is_cancelled: false,
+        review_status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT"] },
+        language_option: "TEST",
+        admission_batch_major: { batch_id: batchId },
+        english_test_registration: { result: { in: ["FAILED", "ABSENT"] } },
+      },
+      include: { english_test_registration: true },
+    });
+    for (const a of stuck) {
+      const why = a.english_test_registration?.result === "ABSENT" ? "vắng kỳ thi đánh giá năng lực tiếng Anh" : "không đạt kỳ thi đánh giá năng lực tiếng Anh";
+      const reason = `Không đáp ứng điều kiện ngoại ngữ: thí sinh ${why}.`;
+      await this.apps.changeStatus(tx, id(a.application_id), a.review_status as ReviewStatus, "REJECTED", { type: "STAFF", staffId: me.staffAccountId }, reason);
+      // Yêu cầu bổ sung đang chờ (nếu có) không còn ý nghĩa
+      await tx.supplement_request.updateMany({ where: { application_id: a.application_id, status: "PENDING" }, data: { status: "EXPIRED" } });
+      await this.audit.notifyCandidate(id(a.candidate_id), `Kết quả thẩm định hồ sơ ${a.application_code}`, `Hồ sơ ${a.application_code}: Không đạt. ${reason}`, tx);
+    }
+    return stuck.length;
+  }
 
   async list() {
     const batches = await this.prisma.admission_batch.findMany({
@@ -91,12 +123,17 @@ export class BatchesService {
 
   async create(me: StaffUser, dto: Record<string, unknown>) {
     const code = str(dto.batchCode).trim().toUpperCase();
-    const name = str(dto.batchName).trim();
+    const name = str(dto.batchName).trim().replace(/\s+/g, " ");
     const degree = str(dto.degreeLevel);
-    const regStart = new Date(str(dto.registrationStartAt));
-    const regEnd = new Date(str(dto.registrationEndAt));
-    const examStart = dto.examStartAt ? new Date(str(dto.examStartAt)) : null;
-    const examEnd = dto.examEndAt ? new Date(str(dto.examEndAt)) : null;
+    const legalBasis = str(dto.legalBasis).trim().replace(/\s+/g, " ") || null;
+    // Chuỗi không kèm múi giờ được hiểu là giờ Việt Nam (common/validate.ts)
+    const regStart = parseDateTimeVn(dto.registrationStartAt) ?? new Date(NaN);
+    const regEnd = parseDateTimeVn(dto.registrationEndAt) ?? new Date(NaN);
+    const examStart = dto.examStartAt ? (parseDateTimeVn(dto.examStartAt) ?? new Date(NaN)) : null;
+    const examEnd = dto.examEndAt ? (parseDateTimeVn(dto.examEndAt) ?? new Date(NaN)) : null;
+    const lenErr = tooLong(name, 255, "Tên đợt") ?? tooLong(legalBasis, 100, "Căn cứ pháp lý");
+    if (lenErr) fail("VALIDATION", lenErr);
+    if ((examStart && Number.isNaN(examStart.getTime())) || (examEnd && Number.isNaN(examEnd.getTime()))) fail("INVALID_DATES", "Ngày thi không hợp lệ.");
     if (!/^[A-Z0-9-]{3,30}$/.test(code)) fail("INVALID_CODE", "Mã đợt chỉ gồm chữ in hoa, số và dấu gạch ngang (3–30 ký tự).");
     if (name.length < 5) fail("NAME_REQUIRED", "Nhập tên đợt tuyển sinh.");
     if (!["THAC_SI", "TIEN_SI"].includes(degree)) fail("VALIDATION", "Bậc đào tạo không hợp lệ.");
@@ -116,7 +153,7 @@ export class BatchesService {
           registration_end_at: regEnd,
           exam_start_at: examStart,
           exam_end_at: examEnd,
-          legal_basis: str(dto.legalBasis).trim() || null,
+          legal_basis: legalBasis,
         },
       });
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "BATCH_CREATE", { table: "admission_batch", id: b.batch_id }, `Tạo đợt ${code}`, tx);
@@ -140,7 +177,24 @@ export class BatchesService {
       });
       if (batch.registration_end_at.getTime() < Date.now()) issues.push("Thời hạn đăng ký đã qua, cập nhật lại lịch trước khi mở.");
     }
-    if (to === "IN_REVIEW" && detail.unresolvedCount > 0) issues.push(`Còn ${detail.unresolvedCount} hồ sơ chưa có kết luận thẩm định.`);
+    let englishFailed = 0;
+    if (to === "IN_REVIEW") {
+      englishFailed = await this.prisma.application.count({
+        where: {
+          deleted_at: null,
+          is_cancelled: false,
+          review_status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT"] },
+          language_option: "TEST",
+          admission_batch_major: { batch_id: batch.batch_id },
+          english_test_registration: { result: { in: ["FAILED", "ABSENT"] } },
+        },
+      });
+      const left = detail.unresolvedCount - englishFailed;
+      if (left > 0)
+        issues.push(
+          `Còn ${left} hồ sơ chưa có kết luận thẩm định.${englishFailed ? ` (${englishFailed} hồ sơ không đạt / vắng thi tiếng Anh sẽ được tự kết luận Không đạt khi chuyển.)` : ""}`,
+        );
+    }
     if (issues.length) fail("PRECONDITION_FAILED", issues.join(" "), HttpStatus.CONFLICT);
 
     await this.prisma.$transaction(async (tx) => {
@@ -148,15 +202,16 @@ export class BatchesService {
       if (res.count === 0) conflict("STALE_STATUS", "Đợt vừa được người khác cập nhật, tải lại trang.");
       if (to === "OPEN") await tx.admission_batch_major.updateMany({ where: { batch_id: batch.batch_id, status: "APPROVED" }, data: { status: "OPEN" } });
       if (to === "CLOSED") await tx.admission_batch_major.updateMany({ where: { batch_id: batch.batch_id, status: "OPEN" }, data: { status: "CLOSED" } });
+      if (to === "IN_REVIEW" && englishFailed) englishFailed = await this.concludeEnglishFailures(tx, me, batch.batch_id);
       await this.audit.record(
         { type: "STAFF", id: me.staffAccountId },
         "BATCH_STATUS_CHANGE",
         { table: "admission_batch", id: batch.batch_id },
-        `${batch.batch_code}: ${BATCH_VI[from]} → ${BATCH_VI[to as BatchStatus]}`,
+        `${batch.batch_code}: ${BATCH_VI[from]} → ${BATCH_VI[to as BatchStatus]}${englishFailed ? ` (tự kết luận Không đạt ${englishFailed} hồ sơ không đạt / vắng thi tiếng Anh)` : ""}`,
         tx,
       );
     });
-    return { success: true };
+    return { success: true, autoRejected: englishFailed };
   }
 
   async addMajor(me: StaffUser, batchId: number, majorId: number, quota: number) {

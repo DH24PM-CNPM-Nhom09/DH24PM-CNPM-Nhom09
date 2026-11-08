@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 // ============================================================================
 // npm run db:update — cập nhật CSDL ĐANG CÓ DỮ LIỆU lên bản mới nhất. Chạy lại nhiều lần vẫn an toàn.
-//   1. Chạy database/migration_v5 → v14 (chỉ THÊM cột / dòng cấu hình / giá trị cho phép)
+//   1. Chạy database/migration_v5 → v14 (chỉ THÊM cột / dòng cấu hình / giá trị cho phép), rồi thêm chỉ mục v15
 //   2. Sửa cột candidate.nationality bị lỗi font ("Viá»‡t Nam" -> "Việt Nam") do bản cũ ghi sai
 //   3. Nạp thông báo tuyển sinh / quy định mẫu nếu bảng announcement còn trống
 // Không xóa bất kỳ dòng hay cột nào.
@@ -10,6 +10,7 @@ import { PrismaClient } from "@prisma/client";
 import * as fs from "fs";
 import * as path from "path";
 import { seedAnnouncements } from "./announcements-seed";
+import { ensureIndexes } from "./ensure-indexes";
 
 const prisma = new PrismaClient();
 
@@ -42,6 +43,10 @@ function sqlStatements(file: string) {
       for (const stmt of sqlStatements(path.join(__dirname, "..", "database", name))) await prisma.$executeRawUnsafe(stmt);
       console.log(`✓ Đã chạy ${label}.`);
     }
+
+    // v15: chỉ mục (mã học viên không trùng, hàng đợi email) — chạy được cả MySQL 8 lẫn MariaDB
+    await ensureIndexes(prisma);
+    console.log("✓ Đã kiểm tra chỉ mục v15 (mã học viên không trùng, hàng đợi gửi email).");
 
     const fixed = await prisma.$executeRawUnsafe("UPDATE candidate SET nationality = ? WHERE nationality = ?", "Việt Nam", "Viá»‡t Nam");
     console.log(fixed ? `✓ Đã sửa lỗi font quốc tịch cho ${fixed} thí sinh.` : "✓ Cột quốc tịch không có lỗi font.");

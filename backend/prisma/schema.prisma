@@ -409,7 +409,7 @@ model enrollment_completion {
   completed_by_staff_id   BigInt?        @db.UnsignedBigInt
   completed_at            DateTime?      @db.DateTime(0)
   transferred_to_training Boolean        @default(false)
-  transfer_ref            String?        @db.VarChar(100)
+  transfer_ref            String?        @unique(map: "uq_completion_transfer_ref") @db.VarChar(100)
   application             application    @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_completion_application")
   staff_account           staff_account? @relation(fields: [completed_by_staff_id], references: [staff_account_id], onDelete: Restrict, onUpdate: Restrict, map: "fk_completion_staff")
 
@@ -522,6 +522,7 @@ model notification {
 
   @@index([created_at], map: "idx_notification_created")
   @@index([recipient_type, recipient_id], map: "idx_notification_recipient")
+  @@index([status, channel, notification_id], map: "idx_notification_queue")
 }
 
 model original_document_submission {

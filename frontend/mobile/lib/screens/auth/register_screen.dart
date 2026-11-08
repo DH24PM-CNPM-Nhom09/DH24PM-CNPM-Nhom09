@@ -42,15 +42,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _validate() {
     final e = <String, String>{};
-    final name = _name.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (name.length < 4 || !RegExp(r"^[\p{L} ]+$", unicode: true).hasMatch(name)) {
-      e['name'] = 'Họ và tên chỉ gồm chữ cái và khoảng trắng, ví dụ: Nguyễn Văn An.';
+    // Cùng quy tắc với backend/src/common/validate.ts: chữ cái, dấu gạch nối / dấu nháy giữa các chữ, tối đa 100 ký tự
+    final name = _name.text.trim().replaceAll(RegExp(r'\s+'), ' ').replaceAll(RegExp('[’ʼ`]'), "'");
+    final nameRe = RegExp(r"^[\p{L}\p{M}]+(?:['-]?[\p{L}\p{M}]+)*(?: [\p{L}\p{M}]+(?:['-]?[\p{L}\p{M}]+)*)*$", unicode: true);
+    if (name.length < 4 || name.length > 100 || !nameRe.hasMatch(name)) {
+      e['name'] = 'Họ và tên chỉ gồm chữ cái (có thể có dấu gạch nối hoặc dấu nháy), ví dụ: Nguyễn Văn An.';
     }
     if (_dob.isEmpty) {
       e['dob'] = 'Chọn ngày sinh.';
     } else {
+      // Tuổi tròn theo lịch: đúng ngày sinh nhật 18 tuổi là đủ tuổi
       final d = DateTime.parse(_dob);
-      final age = DateTime.now().difference(d).inDays / 365.25;
+      final now = DateTime.now();
+      var age = now.year - d.year;
+      if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
       if (age < 18 || age > 80) e['dob'] = 'Thí sinh phải từ 18 tuổi trở lên.';
     }
     if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$').hasMatch(_email.text.trim())) e['email'] = 'Email không hợp lệ.';

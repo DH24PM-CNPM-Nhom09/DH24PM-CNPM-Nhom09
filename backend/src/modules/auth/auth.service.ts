@@ -12,6 +12,7 @@ import { OtpService } from "../../common/otp.service";
 import { phoneAvailable } from "../../common/pending-accounts";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toStaffDto } from "../admin/mappers";
+import { dobError, fullNameError, isVnPhone, normalizeFullName, normalizePhone, parseYmd } from "../../common/validate";
 
 const DEMO_CANDIDATE_EMAIL = "thisinh.demo@gmail.com";
 
@@ -269,19 +270,19 @@ export class AuthService {
    * rồi gửi mã 6 số về email. Đăng ký lại bằng email chưa xác thực thì cập nhật thông tin và gửi mã mới.
    */
   async register(body: Record<string, unknown>) {
-    const fullName = String(body.fullName ?? "").trim().replace(/\s+/g, " ");
+    const fullName = normalizeFullName(body.fullName);
     const email = String(body.email ?? "").trim().toLowerCase();
-    const phone = String(body.phoneNumber ?? "").replace(/[\s.-]/g, "");
+    const phone = normalizePhone(body.phoneNumber);
     const password = String(body.password ?? "");
-    const dobRaw = String(body.dob ?? "");
-    const dob = /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? new Date(dobRaw + "T00:00:00Z") : new Date(NaN);
+    const dob = parseYmd(body.dob);
 
-    if (fullName.length < 4 || !/^[\p{L} ]+$/u.test(fullName)) fail("VALIDATION", "Họ và tên chỉ gồm chữ cái và khoảng trắng, ví dụ: Nguyễn Văn An.");
-    if (Number.isNaN(dob.getTime())) fail("VALIDATION", "Ngày sinh không hợp lệ.");
-    const age = (Date.now() - dob.getTime()) / (365.25 * 86_400_000);
-    if (age < 18 || age > 80) fail("VALIDATION", "Ngày sinh không hợp lệ: thí sinh phải từ 18 tuổi trở lên.");
+    const nameErr = fullNameError(fullName);
+    if (nameErr) fail("VALIDATION", nameErr);
+    const dobErr = dobError(dob);
+    if (dobErr || !dob) fail("VALIDATION", dobErr ?? "Ngày sinh không hợp lệ.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 255) fail("VALIDATION", "Email không hợp lệ.");
-    if (!/^0\d{9}$/.test(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
+    if (!isVnPhone(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
+    if (password.length > 128) fail("WEAK_PASSWORD", "Mật khẩu tối đa 128 ký tự.");
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))
       fail("WEAK_PASSWORD", "Mật khẩu cần ít nhất 8 ký tự, gồm cả chữ và số.");
     if (body.agreePrivacy !== true) fail("CONSENT_REQUIRED", "Bạn cần đồng ý với Chính sách bảo vệ dữ liệu cá nhân để tạo tài khoản.");

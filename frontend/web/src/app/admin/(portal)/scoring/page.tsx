@@ -274,7 +274,7 @@ function ScheduleTab({ data, canManage }: { data: ScoringOverview; canManage: bo
     setErr("");
     try {
       const r = await autoScheduleInterviews(data.major.batchMajorId, { ...form, startAt: new Date(form.startAt).toISOString(), minutes: Number(form.minutes) });
-      toast(r.scheduled ? `Đã xếp lịch ${r.scheduled} thí sinh và gửi thông báo.` : "Không còn thí sinh nào cần xếp lịch.");
+      toast(r.scheduled ? `Đã xếp lịch ${r.scheduled} thí sinh và gửi thông báo.${"skippedBusySlots" in r && r.skippedBusySlots ? ` Đã bỏ qua ${r.skippedBusySlots} khung giờ phòng / tiểu ban đang bận.` : ""}` : "Không còn thí sinh nào cần xếp lịch.");
       setAuto(false);
     } catch (e) {
       setErr(errorMessage(e));

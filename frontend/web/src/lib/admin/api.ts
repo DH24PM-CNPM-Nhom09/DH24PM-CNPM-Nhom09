@@ -804,7 +804,7 @@ export async function deleteCandidateAccount(accountId: number, reason: string) 
 }
 
 /** Tải tệp CSV danh sách thí sinh theo bộ lọc (mở bằng Excel) */
-export async function exportCandidateAccounts(query: CandidateAccountQuery): Promise<Blob> {
+export async function exportCandidateAccounts(query: CandidateAccountQuery): Promise<Blob & { exportTotal?: number; exportRows?: number; truncated?: boolean }> {
   if (USE_MOCK) {
     const rows = mockCandidates();
     const csv = "\uFEFF" + ["Họ và tên,Email,Điện thoại", ...rows.map((r) => [r.fullName, r.email, r.phoneNumber].map((v) => `"${v ?? ""}"`).join(","))].join("\r\n");
@@ -818,7 +818,11 @@ export async function exportCandidateAccounts(query: CandidateAccountQuery): Pro
     fail("NETWORK", `Không kết nối được máy chủ (${API_BASE}). Kiểm tra backend đã chạy chưa.`);
   }
   if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không xuất được danh sách." }));
-  return res.blob();
+  return Object.assign(await res.blob(), {
+    exportTotal: Number(res.headers.get("X-Export-Total")) || undefined,
+    exportRows: Number(res.headers.get("X-Export-Rows")) || undefined,
+    truncated: res.headers.get("X-Export-Truncated") === "1",
+  });
 }
 
 // ============================================================================
@@ -1688,7 +1692,7 @@ export async function saveCommittee(batchMajorId: number, data: { committeeName:
   return NEED_BACKEND();
 }
 export async function autoScheduleInterviews(batchMajorId: number, data: { startAt: string; minutes: number; location: string }) {
-  if (!USE_MOCK) return request<{ scheduled: number }>(`/admin/scoring/majors/${batchMajorId}/interviews/auto`, { method: "POST", body: JSON.stringify(data) });
+  if (!USE_MOCK) return request<{ scheduled: number; skippedBusySlots?: number }>(`/admin/scoring/majors/${batchMajorId}/interviews/auto`, { method: "POST", body: JSON.stringify(data) });
   return NEED_BACKEND();
 }
 export async function updateInterview(scheduleId: number, data: { scheduledAt: string; location: string }) {

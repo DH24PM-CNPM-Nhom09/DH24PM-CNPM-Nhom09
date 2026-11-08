@@ -14,6 +14,7 @@ import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { seedAnnouncements } from "./announcements-seed";
+import { ensureIndexes } from "./ensure-indexes";
 import { normalizeDatabaseUrl } from "./hosted-util";
 
 const SQL_FILE = path.join(__dirname, "..", "database", "hosted", "admission_db_mysql.sql");
@@ -72,6 +73,8 @@ function runSeed(demo: boolean) {
       const added = Number(n_after) - Number(n_before);
       console.log(added > 0 ? `✓ CSDL đã có dữ liệu, bổ sung ${added} bảng mới.` : "✓ CSDL đã có bảng, giữ nguyên dữ liệu.");
     }
+    // Chỉ mục thêm ở bản sau (mã học viên không trùng, hàng đợi email) — chỉ thêm, không đụng dữ liệu
+    await ensureIndexes(prisma);
 
     if ((await prisma.staff_account.count()) === 0) {
       const demo = String(process.env.SEED_DEMO ?? "").toLowerCase() === "true";

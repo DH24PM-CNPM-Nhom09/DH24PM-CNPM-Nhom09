@@ -14,15 +14,32 @@ import type { RegisterPayload } from "@/lib/types";
 
 type Errors = Partial<Record<keyof RegisterPayload | "confirm" | "agree", string>>;
 
+// Cùng quy tắc với backend/src/common/validate.ts
+const NAME_RE = /^[\p{L}\p{M}]+(?:['-]?[\p{L}\p{M}]+)*(?: [\p{L}\p{M}]+(?:['-]?[\p{L}\p{M}]+)*)*$/u;
+const normalizeName = (s: string) => s.normalize("NFC").replace(/[’ʼ`]/g, "'").replace(/\s+/g, " ").trim();
+/** Tuổi tròn theo lịch (đúng ngày sinh nhật là đủ tuổi); null nếu ngày không có thật */
+function ageToday(ymd: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  const now = new Date();
+  let age = now.getFullYear() - y;
+  if (now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d)) age--;
+  return age;
+}
+
 /** Kiểm tra trước ở trình duyệt — cùng quy tắc với backend (backend vẫn kiểm tra lại) */
 function validate(f: RegisterPayload & { confirm: string; agree: boolean }): Errors {
   const e: Errors = {};
-  const name = f.fullName.trim().replace(/\s+/g, " ");
-  if (name.length < 4 || !/^[\p{L} ]+$/u.test(name)) e.fullName = "Nhập đầy đủ họ và tên, chỉ gồm chữ cái.";
+  const name = normalizeName(f.fullName);
+  if (name.length < 4 || name.length > 100 || !NAME_RE.test(name)) e.fullName = "Nhập đầy đủ họ và tên (tối đa 100 ký tự), chỉ gồm chữ cái; có thể có dấu gạch nối hoặc dấu nháy.";
   if (!f.dob) e.dob = "Chọn ngày sinh.";
   else {
-    const age = (Date.now() - new Date(f.dob).getTime()) / (365.25 * 86_400_000);
-    if (!(age >= 18 && age <= 80)) e.dob = "Thí sinh phải từ 18 tuổi trở lên.";
+    const age = ageToday(f.dob);
+    if (age === null) e.dob = "Ngày sinh không hợp lệ.";
+    else if (age < 18 || age > 80) e.dob = "Thí sinh phải từ 18 tuổi trở lên.";
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) e.email = "Email không hợp lệ.";
   if (!/^0\d{9}$/.test(f.phoneNumber.replace(/[\s.-]/g, ""))) e.phoneNumber = "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.";
@@ -67,7 +84,7 @@ function RegisterInner() {
     setLoading(true);
     try {
       const res = await registerAccount({
-        fullName: form.fullName.trim().replace(/\s+/g, " "),
+        fullName: normalizeName(form.fullName),
         dob: form.dob,
         email: form.email.trim().toLowerCase(),
         phoneNumber: form.phoneNumber.replace(/[\s.-]/g, ""),

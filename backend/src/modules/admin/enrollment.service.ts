@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { deadlineAfterDays, vnDate, vnTime } from "../../common/admission";
 import { AuditService } from "../../common/audit.service";
@@ -7,6 +8,7 @@ import { conflict, fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, ymd } from "../../common/util";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
 import { ResultsService } from "./results.service";
+import { parseYmd } from "../../common/validate";
 
 const DECISION_VI: Record<string, string> = { DRAFT: "Dự thảo", PENDING_SIGN: "Chờ ký", SIGNED: "Đã ký", FAILED_SIGN: "Bị trả lại", ISSUED: "Đã ban hành" };
 
@@ -120,7 +122,7 @@ export class EnrollmentService {
   private readDecision(body: Record<string, unknown>) {
     const decisionNo = String(body.decisionNo ?? "").trim().replace(/\s+/g, " ");
     const dateRaw = String(body.decisionDate ?? "").trim();
-    const decisionDate = new Date(`${dateRaw}T00:00:00Z`);
+    const decisionDate = parseYmd(dateRaw) ?? new Date(NaN);
     if (decisionNo.length < 3 || decisionNo.length > 50) fail("VALIDATION", "Nhập số quyết định (ví dụ 1234/QĐ-ĐHAG).");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateRaw) || Number.isNaN(decisionDate.getTime())) fail("VALIDATION", "Chọn ngày quyết định.");
     return { decisionNo, decisionDate };
@@ -360,7 +362,23 @@ export class EnrollmentService {
     return { success: true };
   }
 
+  /**
+   * Hoàn tất nhập học + cấp mã học viên HV-<mã đợt>-NNNN.
+   * Hai cán bộ bấm cùng lúc: khóa dòng đợt tuyển sinh (SELECT … FOR UPDATE) để cấp số lần lượt,
+   * cột transfer_ref có chỉ mục UNIQUE (v15); nếu vẫn đụng nhau thì thử lại với số kế tiếp.
+   */
   async complete(me: StaffUser, applicationId: number) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.completeOnce(me, applicationId);
+      } catch (e) {
+        const dup = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+        if (!dup || attempt >= 5) throw e;
+      }
+    }
+  }
+
+  private async completeOnce(me: StaffUser, applicationId: number) {
     return this.prisma.$transaction(async (tx) => {
       const a = await tx.application.findUnique({
         where: { application_id: BigInt(applicationId) },
@@ -372,14 +390,20 @@ export class EnrollmentService {
       if (a.enrollment_completion?.completed_at) conflict("ALREADY_DONE", "Thí sinh đã hoàn tất nhập học.");
       const b = a.admission_batch_major.admission_batch;
       const prefix = `HV-${b.batch_code}-`;
-      const last = await tx.enrollment_completion.findFirst({ where: { transfer_ref: { startsWith: prefix } }, orderBy: { transfer_ref: "desc" } });
-      const ref = `${prefix}${String((last ? Number(last.transfer_ref!.slice(prefix.length)) || 0 : 0) + 1).padStart(4, "0")}`;
+      // Cấp số lần lượt trong một đợt: giữ khóa dòng admission_batch tới hết transaction
+      await tx.$queryRawUnsafe("SELECT batch_id FROM admission_batch WHERE batch_id = ? FOR UPDATE", b.batch_id);
+      const used = await tx.enrollment_completion.findMany({ where: { transfer_ref: { startsWith: prefix } }, select: { transfer_ref: true } });
+      // Lấy số lớn nhất theo GIÁ TRỊ (so chuỗi thì "…-10000" < "…-9999")
+      const maxNo = used.reduce((m, r) => Math.max(m, Number(r.transfer_ref!.slice(prefix.length)) || 0), 0);
+      const ref = `${prefix}${String(maxNo + 1).padStart(4, "0")}`;
       // Thay trigger #7: set admission_status = ENROLLED trong code (Filess.io free không có TRIGGER)
       const row = a.enrollment_completion ?? (await tx.enrollment_completion.create({ data: { application_id: a.application_id } }));
-      await tx.enrollment_completion.update({
-        where: { completion_id: row.completion_id },
+      // Chỉ cập nhật khi chưa hoàn tất: cán bộ khác vừa bấm trước thì báo đã xong, không cấp mã thứ hai
+      const done = await tx.enrollment_completion.updateMany({
+        where: { completion_id: row.completion_id, completed_at: null },
         data: { completed_at: new Date(), completed_by_staff_id: BigInt(me.staffAccountId), transfer_ref: ref, transferred_to_training: true },
       });
+      if (!done.count) conflict("ALREADY_DONE", "Thí sinh đã hoàn tất nhập học.");
       await tx.application.update({ where: { application_id: a.application_id }, data: { admission_status: "ENROLLED" } });
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "ENROLL_COMPLETE", { table: "enrollment_completion", id: row.completion_id }, `${a.application_code}: hoàn tất nhập học, mã học viên ${ref}`, tx);
       await this.audit.notifyCandidate(

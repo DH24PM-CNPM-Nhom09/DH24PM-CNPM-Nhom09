@@ -434,6 +434,7 @@ CREATE TABLE IF NOT EXISTS `enrollment_completion` (
   `transfer_ref` varchar(100) DEFAULT NULL COMMENT 'Mã hồ sơ bên Phân hệ Đào tạo sau khi chuyển giao',
   PRIMARY KEY (`completion_id`),
   UNIQUE KEY `application_id` (`application_id`),
+  UNIQUE KEY `uq_completion_transfer_ref` (`transfer_ref`),
   KEY `fk_completion_staff` (`completed_by_staff_id`),
   CONSTRAINT `fk_completion_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`application_id`),
   CONSTRAINT `fk_completion_staff` FOREIGN KEY (`completed_by_staff_id`) REFERENCES `staff_account` (`staff_account_id`)
@@ -544,7 +545,8 @@ CREATE TABLE IF NOT EXISTS `notification` (
   `read_at` datetime DEFAULT NULL,
   PRIMARY KEY (`notification_id`),
   KEY `idx_notification_recipient` (`recipient_type`,`recipient_id`),
-  KEY `idx_notification_created` (`created_at`)
+  KEY `idx_notification_created` (`created_at`),
+  KEY `idx_notification_queue` (`status`,`channel`,`notification_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `original_document_submission` (

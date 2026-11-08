@@ -12,6 +12,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { removeFile, saveFile } from "../../common/file-store";
 import { phoneAvailable } from "../../common/pending-accounts";
 import { ApplicationsService } from "../admin/applications.service";
+import { dobError, fullNameError, isVnPhone, normalizeFullName, normalizePhone, parseYmd, tooLong } from "../../common/validate";
 
 const ALLOWED_MIME: Record<string, string> = { "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png" };
 const COMPLAINT_TYPES = ["PHUC_KHAO_DIEM", "KHIEU_NAI_KET_QUA", "KHIEU_NAI_HO_SO", "KHAC"];
@@ -71,22 +72,28 @@ export class CandidateService {
   }
 
   async updateProfile(me: CandidateUser, body: Record<string, unknown>) {
-    const fullName = body.fullName !== undefined ? str(body.fullName).trim() : undefined;
-    const dob = body.dob !== undefined ? new Date(str(body.dob)) : undefined;
+    // Cùng quy tắc với lúc đăng ký (auth.service register) — xem common/validate.ts
+    const fullName = body.fullName !== undefined ? normalizeFullName(body.fullName) : undefined;
+    const dobRaw = body.dob !== undefined ? parseYmd(body.dob) : undefined;
     const gender = body.gender !== undefined ? (body.gender === null ? null : str(body.gender)) : undefined;
     const idNumber = body.idNumber !== undefined ? str(body.idNumber).trim() || null : undefined;
-    const address = body.address !== undefined ? str(body.address).trim() || null : undefined;
-    const phone = body.phoneNumber !== undefined ? str(body.phoneNumber).replace(/\s/g, "") || null : undefined;
+    const address = body.address !== undefined ? str(body.address).trim().replace(/\s+/g, " ") || null : undefined;
+    const phone = body.phoneNumber !== undefined ? normalizePhone(body.phoneNumber) || null : undefined;
 
-    if (fullName !== undefined && fullName.length < 2) fail("VALIDATION", "Họ tên không hợp lệ.");
-    if (dob !== undefined) {
-      if (Number.isNaN(dob.getTime())) fail("VALIDATION", "Ngày sinh không hợp lệ.");
-      const age = (Date.now() - dob.getTime()) / (365.25 * 86_400_000);
-      if (age < 18 || age > 80) fail("VALIDATION", "Ngày sinh không hợp lệ (thí sinh phải từ 18 tuổi).");
+    if (fullName !== undefined) {
+      const e = fullNameError(fullName);
+      if (e) fail("VALIDATION", e);
     }
+    if (dobRaw !== undefined) {
+      const e = dobError(dobRaw);
+      if (e) fail("VALIDATION", e);
+    }
+    const dob = dobRaw ?? undefined;
+    const lenErr = tooLong(address, 1000, "Địa chỉ liên hệ");
+    if (lenErr) fail("VALIDATION", lenErr);
     if (gender !== undefined && gender !== null && !["NAM", "NU", "KHAC"].includes(gender)) fail("VALIDATION", "Giới tính không hợp lệ.");
     if (idNumber && !/^\d{12}$/.test(idNumber)) fail("VALIDATION", "Số CCCD phải gồm đúng 12 chữ số.");
-    if (phone && !/^0\d{9}$/.test(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
+    if (phone && !isVnPhone(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
 
     // Đã nộp hồ sơ: không tự sửa được thông tin nhận dạng (họ tên, ngày sinh, giới tính, số CCCD) —
     // đó là thông tin cán bộ đã thẩm định và thí sinh đã cam kết. SĐT, địa chỉ liên hệ vẫn sửa được.

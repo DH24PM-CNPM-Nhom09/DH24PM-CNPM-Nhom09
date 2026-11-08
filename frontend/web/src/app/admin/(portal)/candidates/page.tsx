@@ -100,7 +100,9 @@ function CandidatesInner() {
       a.download = `danh-sach-thi-sinh-${new Date().toLocaleDateString("sv-SE")}.csv`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast("Đã tải danh sách. Mở tệp bằng Excel.");
+      if (blob.truncated)
+        toast(`Danh sách quá dài: tệp chỉ có ${blob.exportRows}/${blob.exportTotal} thí sinh. Hãy lọc theo đợt hoặc trạng thái rồi xuất từng phần.`, "error");
+      else toast("Đã tải danh sách. Mở tệp bằng Excel.");
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {

@@ -250,8 +250,13 @@ export class CandidateAccountsController {
   @Get("export")
   @RequirePermission("candidate:view")
   async export(@CurrentUser() user: AuthUser, @Query() q: Q, @Res() res: Response) {
-    const csv = await this.svc.exportCsv(asStaff(user), q);
+    const { csv, total, exported, truncated } = await this.svc.exportCsv(asStaff(user), q);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    // Web đọc 2 header này để cảnh báo khi danh sách bị cắt bớt
+    res.setHeader("X-Export-Total", String(total));
+    res.setHeader("X-Export-Rows", String(exported));
+    if (truncated) res.setHeader("X-Export-Truncated", "1");
+    res.setHeader("Access-Control-Expose-Headers", "X-Export-Total, X-Export-Rows, X-Export-Truncated, Content-Disposition");
     res.setHeader("Content-Disposition", `attachment; filename="danh-sach-thi-sinh.csv"`);
     res.setHeader("Cache-Control", "private, no-store");
     res.send(csv);

@@ -5,6 +5,10 @@ import type { StaffUser } from "../../common/auth";
 import { fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, toInt, ymd } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
+import { csvCell } from "../../common/csv";
+
+/** Số dòng tối đa của một lần xuất CSV (đủ cho một kỳ tuyển sinh; vượt thì tệp ghi rõ và web cảnh báo) */
+const EXPORT_MAX_ROWS = 50_000;
 
 type Status = "ACTIVE" | "PENDING_VERIFY" | "LOCKED";
 
@@ -273,20 +277,29 @@ export class CandidateAccountsService {
 
   /** Xuất danh sách (theo bộ lọc hiện tại) ra CSV mở được bằng Excel; ghi nhật ký vì có dữ liệu cá nhân */
   async exportCsv(me: StaffUser, q: Record<string, string | undefined>) {
-    const rows = await this.prisma.candidate_account.findMany({
-      where: await this.where(q),
-      orderBy: { account_id: "asc" },
-      take: 5000,
-      include: { candidate: { include: { application: this.latestApp } } },
-    });
+    // Đọc theo từng lô 1000 dòng (không tải một lần cả bảng); vượt EXPORT_MAX_ROWS thì dừng và BÁO rõ trong tệp + header
+    const where = await this.where(q);
+    const total = await this.prisma.candidate_account.count({ where });
+    const fetchChunk = (after: bigint | undefined, take: number) =>
+      this.prisma.candidate_account.findMany({
+        where,
+        orderBy: { account_id: "asc" },
+        take,
+        ...(after ? { cursor: { account_id: after }, skip: 1 } : {}),
+        include: { candidate: { include: { application: this.latestApp } } },
+      });
+    const rows: Awaited<ReturnType<typeof fetchChunk>> = [];
+    let cursor: bigint | undefined;
+    while (rows.length < EXPORT_MAX_ROWS) {
+      const chunk = await fetchChunk(cursor, Math.min(1000, EXPORT_MAX_ROWS - rows.length));
+      if (!chunk.length) break;
+      rows.push(...chunk);
+      cursor = chunk[chunk.length - 1].account_id;
+    }
+    const truncated = total > rows.length;
     const STATUS_VI: Record<string, string> = { ACTIVE: "Hoạt động", PENDING_VERIFY: "Chưa xác thực email", LOCKED: "Bị khóa" };
     const REVIEW_VI: Record<string, string> = { DRAFT: "Nháp, chưa nộp", SUBMITTED: "Chờ tiếp nhận", UNDER_REVIEW: "Đang thẩm định", NEEDS_SUPPLEMENT: "Chờ bổ sung", APPROVED: "Đạt thẩm định", REJECTED: "Không đạt" };
-    const cell = (v: unknown) => {
-      const s = v === null || v === undefined ? "" : String(v);
-      // Chặn công thức Excel (=, +, -, @) và bọc dấu ngoặc kép
-      const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
+    const cell = csvCell;
     const head = ["STT", "Họ và tên", "Ngày sinh", "Giới tính", "Số CCCD", "Email", "Điện thoại", "Địa chỉ", "Trạng thái tài khoản", "Ngày đăng ký", "Mã hồ sơ gần nhất", "Ngành", "Trạng thái hồ sơ"];
     const lines = rows.map((a, i) => {
       const c = a.candidate;
@@ -309,8 +322,15 @@ export class CandidateAccountsService {
         .map(cell)
         .join(",");
     });
-    await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "CANDIDATE_EXPORT", { table: "candidate_account", id: null }, `Xuất danh sách ${rows.length} tài khoản thí sinh ra tệp CSV`);
+    if (truncated)
+      lines.push(cell(`Tệp chỉ có ${rows.length}/${total} thí sinh đầu tiên (giới hạn ${EXPORT_MAX_ROWS} dòng). Lọc theo đợt / trạng thái rồi xuất từng phần.`));
+    await this.audit.record(
+      { type: "STAFF", id: me.staffAccountId },
+      "CANDIDATE_EXPORT",
+      { table: "candidate_account", id: null },
+      `Xuất danh sách ${rows.length}${truncated ? `/${total}` : ""} tài khoản thí sinh ra tệp CSV`,
+    );
     // BOM để Excel đọc đúng tiếng Việt
-    return "﻿" + [head.map(cell).join(","), ...lines].join("\r\n");
+    return { csv: "﻿" + [head.map(cell).join(","), ...lines].join("\r\n"), total, exported: rows.length, truncated };
   }
 }
