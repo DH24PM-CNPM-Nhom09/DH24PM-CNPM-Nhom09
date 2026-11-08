@@ -96,7 +96,7 @@ function RegisterInner() {
     setLoading(true);
     setError("");
     try {
-      await verifyRegistration(form.email, code);
+      await verifyRegistration(form.email, code, form.password || undefined);
       router.replace("/profile?welcome=1");
     } catch (e) {
       setError(errMsg(e, "Xác thực thất bại, vui lòng thử lại."));

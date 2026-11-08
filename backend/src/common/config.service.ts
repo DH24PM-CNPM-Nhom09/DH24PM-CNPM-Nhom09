@@ -12,10 +12,27 @@ export class SystemConfigService {
     return Number.isFinite(n) && n > 0 ? n : fallback;
   }
 
+  /**
+   * Số tiền (lệ phí): cho phép 0 (miễn phí). Chỉ dùng mặc định khi chưa cấu hình hoặc giá trị không hợp lệ.
+   * (int() coi giá trị ≤ 0 là chưa cấu hình — đúng cho số ngày, số lần thử…, nhưng sai với lệ phí.)
+   */
+  async money(key: string, fallback: number): Promise<number> {
+    const row = await this.prisma.system_config.findUnique({ where: { config_key: key } });
+    return parseMoney(row?.config_value, fallback);
+  }
+
   async text(key: string, fallback = ""): Promise<string> {
     const row = await this.prisma.system_config.findUnique({ where: { config_key: key } });
     return row?.config_value?.trim() || fallback;
   }
+}
+
+/** "0" -> 0; "" / null / chữ / số âm -> mặc định */
+export function parseMoney(raw: string | null | undefined, fallback: number): number {
+  const v = (raw ?? "").trim();
+  if (!v) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 export const env = {

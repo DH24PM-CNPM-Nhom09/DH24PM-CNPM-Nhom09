@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { ABSENT_NOTE, admissionStatusFromResult, eligibleWhere, PENDING_REVIEW, RESULT_VI, vnTime, weightedTotal } from "../../common/admission";
+import { ABSENT_NOTE, admissionStatusFromResult, eligibleWhere, PENDING_REVIEW, RESULT_VI, to10, vnTime, weightedTotal } from "../../common/admission";
 import { AuditService } from "../../common/audit.service";
 import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
@@ -58,7 +58,7 @@ export class ResultsService {
     const names = Object.fromEntries(staff.map((s) => [id(s.staff_account_id), s.full_name]));
     const results = apps.map((a) => a.admission_result).filter((r): r is NonNullable<typeof r> => !!r);
     const stage = ScoringService.resultStage(results);
-    const subjects = bm.exam_subject.map((s) => ({ subjectId: id(s.subject_id), subjectName: s.subject_name, weight: Number(s.weight) }));
+    const subjects = bm.exam_subject.map((s) => ({ subjectId: id(s.subject_id), subjectName: s.subject_name, weight: Number(s.weight), maxScore: Number(s.max_score) }));
     const rows = apps
       .map((a) => {
         const sc = Object.fromEntries(a.exam_score.map((s) => [id(s.subject_id), s.note === ABSENT_NOTE ? null : Number(s.score)]));
@@ -70,7 +70,7 @@ export class ResultsService {
           dob: ymd(a.candidate.dob),
           scores: sc,
           absent: a.exam_score.some((s) => s.note === ABSENT_NOTE),
-          total: complete ? weightedTotal(subjects.map((s) => ({ score: Number(a.exam_score.find((x) => id(x.subject_id) === s.subjectId)!.score), weight: s.weight }))) : null,
+          total: complete ? weightedTotal(subjects.map((s) => ({ score: Number(a.exam_score.find((x) => id(x.subject_id) === s.subjectId)!.score), weight: s.weight, max: s.maxScore }))) : null,
           rank: a.admission_result ? (a.application_ranking?.rank_order ?? null) : null,
           result: a.admission_result?.result ?? null,
           resultLabel: a.admission_result ? RESULT_VI[a.admission_result.result] : null,
@@ -127,8 +127,8 @@ export class ResultsService {
           return {
             a,
             absent: a.exam_score.some((s) => s.note === ABSENT_NOTE),
-            total: weightedTotal(subjects.map((s) => ({ score: Number(get(s.subject_id)!.score), weight: Number(s.weight) }))),
-            mainScore: Number(get(main.subject_id)!.score),
+            total: weightedTotal(subjects.map((s) => ({ score: Number(get(s.subject_id)!.score), weight: Number(s.weight), max: Number(s.max_score) }))),
+            mainScore: to10(Number(get(main.subject_id)!.score), Number(main.max_score)),
           };
         });
         scored.sort(

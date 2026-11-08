@@ -743,6 +743,15 @@ model appeal_request {
 }
 
 /// Nội dung tệp minh chứng khi UPLOAD_STORAGE=db (migration v13) — khóa trùng application_document.file_path
+/// Bộ đếm nhập sai OTP và giới hạn số lần gọi API xác thực (migration v14)
+model security_counter {
+  counter_key String   @id @db.VarChar(191)
+  hits        Int      @default(0) @db.UnsignedInt
+  reset_at    DateTime @db.DateTime(0)
+
+  @@index([reset_at], map: "idx_security_counter_reset")
+}
+
 model stored_file {
   file_path  String   @id @db.VarChar(255)
   content    Bytes    @db.LongBlob

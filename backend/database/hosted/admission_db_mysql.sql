@@ -658,6 +658,14 @@ CREATE TABLE IF NOT EXISTS `stored_file` (
   PRIMARY KEY (`file_path`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Nội dung tệp minh chứng khi UPLOAD_STORAGE=db';
 
+CREATE TABLE IF NOT EXISTS `security_counter` (
+  `counter_key` varchar(191) NOT NULL COMMENT 'otp:<otp_id> hoặc rl:<ip>|<đường dẫn>',
+  `hits` int(10) unsigned NOT NULL DEFAULT 0,
+  `reset_at` datetime NOT NULL COMMENT 'Hết thời hạn đếm (UTC)',
+  PRIMARY KEY (`counter_key`),
+  KEY `idx_security_counter_reset` (`reset_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bộ đếm nhập sai OTP và giới hạn số lần gọi API xác thực';
+
 CREATE TABLE IF NOT EXISTS `supervisor_request` (
   `request_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `proposal_id` bigint(20) unsigned NOT NULL,

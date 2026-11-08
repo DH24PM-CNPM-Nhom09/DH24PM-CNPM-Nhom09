@@ -5,12 +5,16 @@ import { ApplicationsService } from "../modules/admin/applications.service";
 import { EnrollmentService } from "../modules/admin/enrollment.service";
 import { ScoringService } from "../modules/admin/scoring.service";
 import { id } from "./util";
+import { purgeCounters } from "./counter";
+import { purgeStalePendingAccounts } from "./pending-accounts";
 
 /**
  * Tác vụ tự động chạy định kỳ (mặc định 15 phút/lần, đặt AUTO_JOB_MINUTES=0 để tắt):
  *  1. Hồ sơ quá hạn bổ sung → "Không đạt" (REJECT_EXPIRED), báo thí sinh.
  *  2. Thí sinh trúng tuyển quá hạn xác nhận nhập học → xem như từ chối, gọi dự bị.
  *  3. Đơn phúc khảo chưa nộp lệ phí khi đã hết hạn phúc khảo → đóng đơn, điểm giữ nguyên.
+ *  4. Tài khoản đăng ký mà không xác thực email sau 7 ngày → dọn, trả lại email / SĐT cho chủ thật.
+ *  5. Xóa các bộ đếm bảo mật (OTP sai, giới hạn gọi API) đã hết hạn.
  * Người thực hiện ghi là SYSTEM trong nhật ký. Cán bộ vẫn có nút làm tay tương ứng.
  */
 @Injectable()
@@ -46,13 +50,16 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   async runAll() {
     if (this.running) return { skipped: true };
     this.running = true;
-    const out = { supplementsExpired: 0, enrollmentsExpired: 0, waitlistPromoted: 0, appealsClosed: 0 };
+    const out = { supplementsExpired: 0, enrollmentsExpired: 0, waitlistPromoted: 0, appealsClosed: 0, pendingAccountsPurged: 0 };
     try {
       out.supplementsExpired = await this.expireSupplements();
       const e = await this.enrollment.expireOverdue({ type: "SYSTEM", id: null }, null);
       out.enrollmentsExpired = e.expired;
       out.waitlistPromoted = e.promoted;
       out.appealsClosed = await this.closeUnpaidAppeals();
+      out.pendingAccountsPurged = await purgeStalePendingAccounts(this.prisma);
+      await purgeCounters(this.prisma);
+      if (out.pendingAccountsPurged) this.log.log(`Đã dọn ${out.pendingAccountsPurged} tài khoản đăng ký quá 7 ngày chưa xác thực email.`);
       if (out.supplementsExpired || out.enrollmentsExpired || out.appealsClosed)
         this.log.log(`Đã xử lý: ${out.supplementsExpired} hồ sơ quá hạn bổ sung, ${out.enrollmentsExpired} thí sinh quá hạn xác nhận nhập học (gọi ${out.waitlistPromoted} dự bị), ${out.appealsClosed} đơn phúc khảo chưa nộp phí.`);
     } catch (e) {

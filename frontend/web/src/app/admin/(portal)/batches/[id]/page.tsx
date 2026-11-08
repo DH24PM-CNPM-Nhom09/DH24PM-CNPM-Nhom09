@@ -343,7 +343,7 @@ function BatchDetailInner() {
                   () =>
                     updateBatchMajor(edit.batchMajorId, {
                       quota: Number(quota),
-                      subjects: rows.map((r) => ({ subjectId: r.subjectId, subjectName: r.subjectName, examFormat: r.examFormat, weight: (Number(r.weightPct) || 0) / 100, maxScore: r.maxScore })),
+                      subjects: rows.map((r) => ({ subjectId: r.subjectId, subjectName: r.subjectName, examFormat: r.examFormat, weight: (Number(r.weightPct) || 0) / 100, maxScore: Math.min(10, Math.max(1, Number(r.maxScore) || 10)) })),
                     }),
                   "Đã lưu cấu hình ngành.",
                   () => setEdit(null),

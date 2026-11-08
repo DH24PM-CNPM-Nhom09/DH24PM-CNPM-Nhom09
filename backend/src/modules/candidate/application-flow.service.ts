@@ -13,6 +13,7 @@ import { ApplicationsService } from "../admin/applications.service";
 import { admissionView } from "./admission-view";
 
 import { DOC_LABEL, LANGUAGE_LABEL, LANGUAGE_OPTIONS, OPTIONAL_DOCS, requiredDocs, type Degree, type LanguageOption } from "../../common/documents";
+import { phoneAvailable } from "../../common/pending-accounts";
 
 type FeeItem = { code: string; label: string; amount: number };
 
@@ -69,23 +70,23 @@ export class ApplicationFlowService {
    */
   private async feeItems(degree: Degree, languageOption: string | null): Promise<FeeItem[]> {
     const items: FeeItem[] = [
-      { code: "REGISTRATION", label: "Lệ phí đăng ký dự tuyển", amount: await this.config.int("FEE_REGISTRATION", 100_000) },
+      { code: "REGISTRATION", label: "Lệ phí đăng ký dự tuyển", amount: await this.config.money("FEE_REGISTRATION", 100_000) },
       {
         code: "REVIEW",
         label: `Lệ phí xét tuyển ${degree === "TIEN_SI" ? "tiến sĩ" : "thạc sĩ"}`,
-        amount: await this.config.int(degree === "TIEN_SI" ? "APPLICATION_FEE_TIEN_SI" : "APPLICATION_FEE_THAC_SI", degree === "TIEN_SI" ? 1_000_000 : 360_000),
+        amount: await this.config.money(degree === "TIEN_SI" ? "APPLICATION_FEE_TIEN_SI" : "APPLICATION_FEE_THAC_SI", degree === "TIEN_SI" ? 1_000_000 : 360_000),
       },
     ];
-    if (languageOption === "TEST") items.push({ code: "ENGLISH_TEST", label: "Lệ phí đăng ký thi đánh giá năng lực tiếng Anh", amount: await this.config.int("FEE_ENGLISH_TEST", 120_000) });
+    if (languageOption === "TEST") items.push({ code: "ENGLISH_TEST", label: "Lệ phí đăng ký thi đánh giá năng lực tiếng Anh", amount: await this.config.money("FEE_ENGLISH_TEST", 120_000) });
     return items;
   }
 
   /** Các khoản có thể phát sinh sau (chỉ để thí sinh biết trước) */
   private async otherFees() {
     return {
-      supplementCredit: await this.config.int("FEE_SUPPLEMENT_CREDIT", 490_000),
-      appeal: await this.config.int("FEE_APPEAL", 360_000),
-      englishTest: await this.config.int("FEE_ENGLISH_TEST", 120_000),
+      supplementCredit: await this.config.money("FEE_SUPPLEMENT_CREDIT", 490_000),
+      appeal: await this.config.money("FEE_APPEAL", 360_000),
+      englishTest: await this.config.money("FEE_ENGLISH_TEST", 120_000),
     };
   }
 
@@ -439,8 +440,7 @@ export class ApplicationFlowService {
     await this.prisma.$transaction(async (tx) => {
       if (await tx.candidate.count({ where: { id_number: idNumber, candidate_id: { not: BigInt(candidateId) } } }))
         conflict("DUPLICATE_ID_NUMBER", "Số CCCD đã được dùng cho hồ sơ khác.");
-      if (await tx.candidate_account.count({ where: { phone_number: phone, account_id: { not: c.account_id } } }))
-        conflict("DUPLICATE_PHONE", "Số điện thoại đã được dùng cho tài khoản khác.");
+      if (!(await phoneAvailable(tx, phone, c.account_id))) conflict("DUPLICATE_PHONE", "Số điện thoại đã được dùng cho tài khoản khác.");
       await tx.candidate.update({
         where: { candidate_id: BigInt(candidateId) },
         data: { id_number: idNumber, id_issue_date: issueDate, id_issue_place: idIssuePlace, birthplace, ethnicity, permanent_address: permanentAddress, address },
@@ -486,7 +486,10 @@ export class ApplicationFlowService {
       await this.apps.changeStatus(tx, id(a.application_id), "DRAFT", "SUBMITTED", { type: "CANDIDATE" }, "Thí sinh nộp hồ sơ", { submitted_at: new Date() });
       if (!a.application_payment.length)
         await tx.application_payment.create({
-          data: { application_id: a.application_id, amount: new Prisma.Decimal(amount), payment_method: "BANK_TRANSFER", gateway_status: "PENDING", fee_detail: JSON.stringify(items) },
+          // Tổng lệ phí 0 đồng (Trường miễn lệ phí): ghi nhận đã hoàn tất, không bắt thí sinh chuyển khoản
+          data: amount > 0
+            ? { application_id: a.application_id, amount: new Prisma.Decimal(amount), payment_method: "BANK_TRANSFER", gateway_status: "PENDING", fee_detail: JSON.stringify(items) }
+            : { application_id: a.application_id, amount: new Prisma.Decimal(0), payment_method: "KHAC", gateway_status: "SUCCESS", paid_at: new Date(), receipt_no: "MIEN-PHI", fee_detail: JSON.stringify(items) },
         });
       // Bậc tiến sĩ: gửi yêu cầu hướng dẫn tới giảng viên đã chọn
       if (a.research_proposal?.preferred_lecturer_id && !a.research_proposal.supervisor_request.length)
@@ -496,7 +499,9 @@ export class ApplicationFlowService {
         candidateId,
         `Đã nhận hồ sơ ${a.application_code}`,
         `Hồ sơ ${a.application_code} (${a.admission_batch_major.admission_major.major_name}, ${a.admission_batch_major.admission_batch.batch_name}) đã được nộp thành công.\n` +
-          `Vui lòng nộp lệ phí ${amount.toLocaleString("vi-VN")} đồng (${items.map((x) => `${x.label.toLowerCase()} ${x.amount.toLocaleString("vi-VN")}đ`).join(" + ")}) theo hướng dẫn trên cổng thông tin, ghi nội dung chuyển khoản: ${transferNote(a.application_code)} (có mã QR trên cổng thông tin, quét bằng app ngân hàng là điền sẵn).\n` +
+          (amount === 0
+            ? "Đợt này miễn lệ phí, bạn không cần chuyển khoản.\n"
+            : `Vui lòng nộp lệ phí ${amount.toLocaleString("vi-VN")} đồng (${items.map((x) => `${x.label.toLowerCase()} ${x.amount.toLocaleString("vi-VN")}đ`).join(" + ")}) theo hướng dẫn trên cổng thông tin, ghi nội dung chuyển khoản: ${transferNote(a.application_code)} (có mã QR trên cổng thông tin, quét bằng app ngân hàng là điền sẵn).\n`) +
           `Cán bộ tuyển sinh sẽ tiếp nhận và thẩm định hồ sơ; kết quả được thông báo qua cổng và email.`,
         tx,
       );

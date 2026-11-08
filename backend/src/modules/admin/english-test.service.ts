@@ -161,6 +161,13 @@ export class EnglishTestService {
       return { success: true };
     }
     const d = this.readSession({ sessionCode: s.session_code, ...body });
+    // Mở lại phòng đã hủy chỉ khi cán bộ chọn rõ ("status": "SCHEDULED"); sửa thông tin khác giữ nguyên trạng thái
+    const reopen = s.status === "CANCELLED" && body.status === "SCHEDULED";
+    if (s.status === "COMPLETED" && d.testAt.getTime() !== s.test_at.getTime())
+      fail("VALIDATION", "Phòng thi đã nhập xong kết quả, không đổi được ngày giờ thi.");
+    // Đổi giờ thi (hoặc mở lại phòng) thì giờ mới phải ở tương lai — tránh lùi giờ để nhập kết quả sớm
+    if ((d.testAt.getTime() !== s.test_at.getTime() || reopen) && d.testAt.getTime() < Date.now())
+      fail("VALIDATION", "Ngày giờ thi phải ở tương lai.");
     if (d.capacity < s.english_test_registration.length) fail("VALIDATION", `Phòng đã xếp ${s.english_test_registration.length} thí sinh, sức chứa không được nhỏ hơn số này.`);
     if (d.sessionCode !== s.session_code && (await this.prisma.english_test_session.count({ where: { batch_id: s.batch_id, session_code: d.sessionCode } })))
       conflict("DUPLICATE_CODE", `Đợt này đã có phòng thi ${d.sessionCode}.`);
@@ -168,7 +175,7 @@ export class EnglishTestService {
     await this.prisma.$transaction(async (tx) => {
       await tx.english_test_session.update({
         where: { session_id: s.session_id },
-        data: { session_code: d.sessionCode, test_at: d.testAt, room: d.room, location: d.location, capacity: d.capacity, note: d.note, status: s.status === "CANCELLED" ? "SCHEDULED" : s.status },
+        data: { session_code: d.sessionCode, test_at: d.testAt, room: d.room, location: d.location, capacity: d.capacity, note: d.note, status: reopen ? "SCHEDULED" : s.status },
       });
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "ENGLISH_SESSION_UPDATE", { table: "english_test_session", id: s.session_id }, `${s.admission_batch.batch_code}: cập nhật phòng thi ${d.sessionCode}`, tx);
       // Đổi giờ / phòng: báo lại cho thí sinh đã xếp

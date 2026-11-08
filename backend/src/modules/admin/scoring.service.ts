@@ -152,7 +152,7 @@ export class ScoringService {
         scores,
         complete,
         absent: Object.values(scores).some((s) => s.absent),
-        total: complete ? weightedTotal(subjects.map((s) => ({ score: scores[s.subjectId].score, weight: s.weight }))) : null,
+        total: complete ? weightedTotal(subjects.map((s) => ({ score: scores[s.subjectId].score, weight: s.weight, max: s.maxScore }))) : null,
         appeal: a.appeal_request ? { status: a.appeal_request.status } : null,
       };
     });
@@ -376,7 +376,7 @@ export class ScoringService {
     const missing = apps.filter((a) => bm.exam_subject.some((s) => !a.exam_score.some((x) => x.subject_id === s.subject_id)));
     if (missing.length) fail("SCORES_INCOMPLETE", `Còn ${missing.length} thí sinh chưa đủ điểm các hình thức xét (ví dụ ${missing[0].application_code}).`, HttpStatus.CONFLICT);
     const days = await this.config.int("APPEAL_WINDOW_DAYS", 7);
-    const fee = await this.config.int("FEE_APPEAL", 360_000);
+    const fee = await this.config.money("FEE_APPEAL", 360_000);
     const now = new Date();
     const deadline = deadlineAfterDays(now, days);
     await this.prisma.$transaction(
@@ -388,7 +388,7 @@ export class ScoringService {
             const x = a.exam_score.find((e) => e.subject_id === s.subject_id)!;
             return `- ${s.subject_name} (hệ số ${Number(s.weight)}): ${x.note === ABSENT_NOTE ? "vắng" : Number(x.score)}`;
           });
-          const total = weightedTotal(bm.exam_subject.map((s) => ({ score: Number(a.exam_score.find((e) => e.subject_id === s.subject_id)!.score), weight: Number(s.weight) })));
+          const total = weightedTotal(bm.exam_subject.map((s) => ({ score: Number(a.exam_score.find((e) => e.subject_id === s.subject_id)!.score), weight: Number(s.weight), max: Number(s.max_score) })));
           await this.audit.notifyCandidate(
             id(a.candidate_id),
             "Công bố điểm xét tuyển",
@@ -471,7 +471,7 @@ export class ScoringService {
       if (s.note === ABSENT_NOTE) fail("VALIDATION", "Không phúc khảo được phần thí sinh vắng mặt.");
       return s;
     });
-    const fee = await this.config.int("FEE_APPEAL", 360_000);
+    const fee = await this.config.money("FEE_APPEAL", 360_000);
     await this.prisma.$transaction(async (tx) => {
       const req = await tx.appeal_request.create({ data: { application_id: a.application_id, reason: reason, fee_amount: new Prisma.Decimal(fee), status: fee > 0 ? "CHO_NOP_PHI" : "DA_NOP_PHI" } });
       for (const s of scores) await tx.score_appeal.create({ data: { score_id: s.score_id, reason, old_score: s.score } });

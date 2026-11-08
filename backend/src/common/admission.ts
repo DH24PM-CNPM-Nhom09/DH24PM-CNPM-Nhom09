@@ -61,9 +61,15 @@ export function* workingSlots(start: Date, minutes: number): Generator<Date> {
   }
 }
 
-/** Tổng điểm có trọng số, làm tròn 2 chữ số (khớp thủ tục sp_recalc_application_total_score) */
-export function weightedTotal(scores: { score: number; weight: number }[]) {
-  return Math.round(scores.reduce((s, x) => s + x.score * x.weight, 0) * 100) / 100;
+/** Đổi điểm về thang 10 (môn có thang điểm khác 10, ví dụ thang 5) */
+export const to10 = (score: number, max?: number | null) => (max && max > 0 && max !== 10 ? (score * 10) / max : score);
+
+/**
+ * Tổng điểm có trọng số trên thang 10, làm tròn 2 chữ số. Từng môn được quy về thang 10 trước khi nhân trọng số,
+ * nên tổng điểm luôn so được với điểm chuẩn (0–10) dù các môn có thang điểm khác nhau.
+ */
+export function weightedTotal(scores: { score: number; weight: number; max?: number | null }[]) {
+  return Math.round(scores.reduce((s, x) => s + to10(x.score, x.max) * x.weight, 0) * 100) / 100;
 }
 
 /** Nội dung chuyển khoản lệ phí phúc khảo: "PK" + mã hồ sơ bỏ dấu gạch */
@@ -81,12 +87,15 @@ export async function recalcApplicationTotalScore(
 ) {
   const scores = await tx.exam_score.findMany({
     where: { application_id: applicationId },
-    include: { exam_subject: { select: { weight: true } } },
+    include: { exam_subject: { select: { weight: true, max_score: true } } },
   });
-  const total =
-    Math.round(
-      scores.reduce((s: number, x: { score: unknown; exam_subject: { weight: unknown } }) => s + Number(x.score) * Number(x.exam_subject.weight), 0) * 100,
-    ) / 100;
+  const total = weightedTotal(
+    scores.map((x: { score: unknown; exam_subject: { weight: unknown; max_score: unknown } }) => ({
+      score: Number(x.score),
+      weight: Number(x.exam_subject.weight),
+      max: Number(x.exam_subject.max_score),
+    })),
+  );
   await tx.application_ranking.upsert({
     where: { application_id: applicationId },
     create: { application_id: applicationId, total_score: total, rank_order: 1 },

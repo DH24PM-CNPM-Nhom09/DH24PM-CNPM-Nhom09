@@ -210,7 +210,8 @@ export class BatchesService {
     }));
     if (clean.some((s) => !s.name || !(s.weight > 0) || s.weight > 1)) fail("INVALID_SUBJECT", "Mỗi môn cần có tên và trọng số trong khoảng 1–100%.");
     if (clean.some((s) => !EXAM_FORMATS.includes(s.format))) fail("INVALID_SUBJECT", "Hình thức thi không hợp lệ.");
-    if (clean.some((s) => s.maxScore <= 0 || s.maxScore > 99)) fail("INVALID_SUBJECT", "Thang điểm không hợp lệ.");
+    // Điểm lưu trong CSDL tối đa 10 và tổng điểm / điểm chuẩn tính theo thang 10 -> thang điểm môn từ 1 đến 10
+    if (clean.some((s) => !(s.maxScore >= 1) || s.maxScore > 10)) fail("INVALID_SUBJECT", "Thang điểm của môn phải từ 1 đến 10 (tổng điểm và điểm chuẩn tính theo thang 10).");
 
     const existingIds = new Set(bm.exam_subject.map((s) => id(s.subject_id)));
     const keepIds = new Set(clean.filter((s) => s.subjectId && existingIds.has(s.subjectId)).map((s) => s.subjectId!));

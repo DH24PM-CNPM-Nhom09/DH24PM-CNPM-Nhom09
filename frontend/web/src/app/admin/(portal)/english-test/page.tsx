@@ -85,8 +85,15 @@ function Inner() {
     try {
       const payload = { ...form, testAt: new Date(form.testAt).toISOString(), capacity: Number(form.capacity) };
       if (editing === "new") await createEnglishSession(batchId, payload);
-      else if (editing) await updateEnglishSession(editing.sessionId, payload);
-      toast(editing === "new" ? `Đã tạo phòng thi ${form.sessionCode}.` : "Đã lưu phòng thi. Thí sinh trong phòng được báo nếu đổi giờ hoặc phòng.");
+      // Phòng đã hủy: lưu = mở lại phòng (chọn rõ ràng), giờ thi phải ở tương lai
+      else if (editing) await updateEnglishSession(editing.sessionId, editing.status === "CANCELLED" ? { ...payload, status: "SCHEDULED" } : payload);
+      toast(
+        editing === "new"
+          ? `Đã tạo phòng thi ${form.sessionCode}.`
+          : editing && editing.status === "CANCELLED"
+            ? `Đã mở lại phòng thi ${form.sessionCode}.`
+            : "Đã lưu phòng thi. Thí sinh trong phòng được báo nếu đổi giờ hoặc phòng.",
+      );
       setEditing(null);
       ov.reload(true);
     } catch (e) {
@@ -223,6 +230,13 @@ function Inner() {
                         Đã xếp {s.assigned}/{s.capacity} chỗ{s.assigned ? ` · đã nhập kết quả ${s.graded}/${s.assigned}` : ""}
                       </p>
                     </div>
+                    {s.status === "CANCELLED" && (
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Btn size="sm" onClick={() => openSession(s)}>
+                          Mở lại
+                        </Btn>
+                      </div>
+                    )}
                     {s.status !== "CANCELLED" && (
                       <div className="flex shrink-0 flex-wrap gap-2">
                         {s.assigned > 0 && (
@@ -359,7 +373,7 @@ function Inner() {
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing === "new" ? "Thêm phòng thi" : "Sửa phòng thi"}
+        title={editing === "new" ? "Thêm phòng thi" : editing && editing.status === "CANCELLED" ? "Mở lại phòng thi" : "Sửa phòng thi"}
         description={editing && editing !== "new" && editing.assigned ? "Đổi giờ, phòng hoặc địa điểm sẽ gửi thông báo lại cho thí sinh trong phòng." : undefined}
         footer={
           <>

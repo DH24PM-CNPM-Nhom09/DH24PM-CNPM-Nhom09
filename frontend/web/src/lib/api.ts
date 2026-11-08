@@ -78,13 +78,13 @@ export async function registerAccount(payload: RegisterPayload): Promise<OtpSent
   return request<OtpSent>("/auth/register", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export async function verifyRegistration(email: string, otp: string) {
+export async function verifyRegistration(email: string, otp: string, password?: string) {
   if (USE_MOCK) {
     if (otp !== "123456") throw { error_code: "OTP_INVALID", message: "Mã xác thực không đúng (dữ liệu mẫu: 123456)." };
     saveToken("mock-token");
     return delay({ accessToken: "mock-token" });
   }
-  const res = await request<{ accessToken: string }>("/auth/register/verify", { method: "POST", body: JSON.stringify({ email, otp }) });
+  const res = await request<{ accessToken: string }>("/auth/register/verify", { method: "POST", body: JSON.stringify({ email, otp, ...(password ? { password } : {}) }) });
   saveToken(res.accessToken);
   return res;
 }

@@ -995,7 +995,7 @@ export async function createEnglishSession(batchId: number, data: EnglishSession
   if (!USE_MOCK) return request<{ sessionId: number }>(`/admin/english-test/batches/${batchId}/sessions`, { method: "POST", body: JSON.stringify(data) });
   return MOCK_ONLY();
 }
-export async function updateEnglishSession(sessionId: number, data: Partial<EnglishSessionInput> & { status?: "CANCELLED" }) {
+export async function updateEnglishSession(sessionId: number, data: Partial<EnglishSessionInput> & { status?: "CANCELLED" | "SCHEDULED" }) {
   if (!USE_MOCK) return request<{ success: boolean }>(`/admin/english-test/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify(data) });
   return MOCK_ONLY();
 }
@@ -1477,8 +1477,13 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
   const session = readSession();
   if (!session) fail("UNAUTHORIZED", "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
   let staff: StaffAccount;
+  let accessToken = session.accessToken;
   if (!USE_MOCK) {
-    staff = await request<StaffAccount>("/auth/staff/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+    // Đổi mật khẩu làm các phiên cũ hết hiệu lực: backend trả token mới cho phiên đang dùng
+    const res = await request<StaffAccount & { accessToken?: string }>("/auth/staff/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+    const { accessToken: fresh, ...rest } = res;
+    staff = rest as StaffAccount;
+    if (fresh) accessToken = fresh;
   } else {
     await delay(null, 300);
     if (newPassword.length < 8 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword))
@@ -1491,7 +1496,7 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
     commit();
     staff = { ...session.staff, mustChangePassword: false };
   }
-  writeSession({ ...session, staff });
+  writeSession({ ...session, accessToken, staff });
   emitDataChange();
   return staff;
 }
