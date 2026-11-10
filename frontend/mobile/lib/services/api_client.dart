@@ -29,6 +29,9 @@ class ApiClient {
   static const _kToken = 'access_token';
   static const _kApiBase = 'api_base';
 
+  /// Máy chủ cũ không còn hoạt động — địa chỉ đã lưu trỏ tới đây thì tự bỏ.
+  static const _retiredHosts = ['api.tuyensinhsdhnhom09.id.vn', 'trycloudflare.com'];
+
   String apiBase = AppConfig.defaultApiBase;
   String? _token;
   http.Client _http = http.Client();
@@ -54,7 +57,12 @@ class ApiClient {
     try {
       _token = p.getString(_kToken);
       final saved = p.getString(_kApiBase);
-      if (saved != null && saved.trim().isNotEmpty) apiBase = saved.trim();
+      if (saved != null && _retiredHosts.any(saved.contains)) {
+        // Địa chỉ máy chủ cũ đã ngừng chạy (bản 2.0.1 dùng api.tuyensinhsdhnhom09.id.vn): bỏ, dùng máy chủ mặc định
+        await p.remove(_kApiBase);
+      } else if (saved != null && saved.trim().isNotEmpty) {
+        apiBase = saved.trim();
+      }
     } catch (_) {}
   }
 
