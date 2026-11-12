@@ -99,7 +99,9 @@ function WizardInner() {
         setProfile(p);
         setDecl(declFromProfile(p));
         setCommit(Boolean(a && !a.declined && a.declarationConfirmedAt));
-        setBatches(b);
+        // Chỉ hiện đợt đang trong thời gian nhận hồ sơ (ẩn đợt đã hết hạn và đợt chưa tới ngày mở)
+        const now = Date.now();
+        setBatches(b.filter((x) => new Date(x.registrationStartAt).getTime() <= now && new Date(x.registrationEndAt).getTime() >= now));
         // Hồ sơ đã từ chối nhập học không chặn việc đăng ký đợt mới
         setApp(a && a.declined ? null : a);
         if (a && a.reviewStatus === "DRAFT") {

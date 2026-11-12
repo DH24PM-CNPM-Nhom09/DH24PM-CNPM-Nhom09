@@ -78,10 +78,13 @@ export class AnnouncementsService {
     return this.toDto(r, true);
   }
 
-  /** Các đợt đang mở đăng ký, kèm ngành, chỉ tiêu, điều kiện và hình thức xét tuyển */
+  /**
+   * Các đợt đang mở đăng ký, kèm ngành, chỉ tiêu, điều kiện và hình thức xét tuyển.
+   * Đợt đã quá hạn nộp hồ sơ thì không trả về nữa (dù cán bộ chưa bấm "Đóng đợt") — web và app không hiện đợt hết hạn.
+   */
   async openBatches() {
     const batches = await this.prisma.admission_batch.findMany({
-      where: { status: "OPEN", deleted_at: null },
+      where: { status: "OPEN", deleted_at: null, registration_end_at: { gte: new Date() } },
       orderBy: { registration_end_at: "asc" },
       include: {
         admission_batch_major: {
