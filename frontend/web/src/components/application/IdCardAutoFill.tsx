@@ -66,18 +66,23 @@ export default function IdCardAutoFill({
     setApplied(false);
     try {
       const { readIdCard } = await import("@/lib/idcard-reader");
-      let acc: IdCardFields = fields ?? {};
-      const src = [...sources];
+      // Mỗi lần chọn ảnh là đọc lại TỪ ĐẦU: trước đây kết quả lần trước (VD ảnh mẫu) được giữ lại
+      // và ảnh thật chọn sau chỉ bổ sung ô còn trống, nên số CCCD / ngày cấp bị lẫn giữa 2 thẻ.
+      let acc: IdCardFields = {};
+      const src: string[] = [];
+      const ids = new Set<string>();
       for (const [i, f] of files.entries()) {
         if (f.size > 10 * 1024 * 1024) throw new Error(`Tệp "${f.name}" lớn hơn 10MB.`);
         const prefix = files.length > 1 ? `Ảnh ${i + 1}/${files.length}: ` : "";
         const r = await readIdCard(f, (m) => setProgress(prefix + m));
+        if (r.fields.idNumber) ids.add(r.fields.idNumber);
         acc = merge(acc, r.fields, r.source === "QR");
         src.push(`${f.name} — ${r.source === "QR" ? "đọc mã QR" : "nhận dạng chữ"}`);
       }
       setFields(acc);
       setSources(src);
-      if (!ORDER.some((k) => acc[k])) setError("Chưa đọc được thông tin nào. Thử ảnh rõ hơn: chụp thẳng, đủ sáng, không lóa, thẻ chiếm gần hết khung hình.");
+      if (ids.size > 1) setError(`Các ảnh cho ra ${ids.size} số CCCD khác nhau (${[...ids].join(", ")}). Có thể đã chọn lẫn ảnh của thẻ khác — chỉ chọn ảnh 2 mặt của CÙNG một thẻ rồi đọc lại.`);
+      else if (!ORDER.some((k) => acc[k])) setError("Chưa đọc được thông tin nào. Thử ảnh rõ hơn: chụp thẳng, đủ sáng, không lóa, thẻ chiếm gần hết khung hình.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không đọc được ảnh.");
     } finally {

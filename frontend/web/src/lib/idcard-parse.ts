@@ -105,8 +105,10 @@ export function parseCccdText(text: string): IdCardFields {
   const dates = findDates(text);
   if (isBack) {
     // Mặt sau: "Ngày, tháng, năm / Date, month, year: 12/03/2022" là ngày cấp
-    const issueLine = lines.find((l) => /Ng[àa]y\s*,?\s*th[áa]ng\s*,?\s*n[ăa]m|Date\s*,?\s*month/i.test(l) && findDates(l).length);
-    out.idIssueDate = issueLine ? findDates(issueLine)[0] : dates[0];
+    // Mặt sau thẻ mới ghi "Ngày cấp / Date of issue"; nếu không thấy nhãn thì lấy ngày MUỘN NHẤT
+    // (ngày cấp luôn sau ngày sinh — trước đây lấy ngày đầu tiên nên dễ lấy nhầm ngày sinh)
+    const issueLine = lines.find((l) => /Ng[àa]y\s*,?\s*th[áa]ng\s*,?\s*n[ăa]m|Date\s*,?\s*month|Ng[àa]y\s*c[ấa]p|Date of issue/i.test(l) && findDates(l).length);
+    out.idIssueDate = issueLine ? findDates(issueLine)[0] : [...dates].sort().pop();
     for (const p of ISSUE_PLACES) {
       if (p.re.test(text) || p.re.test(upper)) {
         out.idIssuePlace = p.label;

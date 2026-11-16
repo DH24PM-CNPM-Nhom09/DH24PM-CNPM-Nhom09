@@ -6,6 +6,8 @@
 // ============================================================================
 export const CDN = {
   jsqr: "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
+  // ZXing (bản WebAssembly): đọc QR tốt hơn hẳn jsQR với ảnh chụp điện thoại (QR nhỏ, nghiêng, hơi mờ)
+  zxing: "https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.4/dist/iife/reader/index.js",
   tesseract: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
   pdfjs: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
   pdfWorker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js",
