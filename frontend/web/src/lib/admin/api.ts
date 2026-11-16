@@ -1084,7 +1084,7 @@ export interface BatchDetail {
   batch: AdmissionBatch;
   /** Số hồ sơ chưa có kết luận thẩm định — chặn chuyển sang "Xét kết quả" */
   unresolvedCount: number;
-  majors: (BatchMajor & { major: AdmissionMajor; applicationCount: number; approvedCount: number })[];
+  majors: (BatchMajor & { major: AdmissionMajor; applicationCount: number; approvedCount: number; resultsPublished?: boolean })[];
   allMajors: AdmissionMajor[];
   staffNames: Record<number, string>;
 }
@@ -1162,7 +1162,7 @@ const BATCH_FLOW: Record<BatchStatus, BatchStatus[]> = {
   OPEN: ["CLOSED"],
   CLOSED: ["IN_REVIEW"],
   IN_REVIEW: ["COMPLETED"],
-  COMPLETED: [],
+  COMPLETED: ["IN_REVIEW"],
   CANCELLED: [],
 };
 
@@ -1175,7 +1175,11 @@ export function weightSum(subjects: ExamSubject[]) {
 }
 
 /** Trả về danh sách lý do chưa thể chuyển trạng thái (rỗng = được phép) */
-export function batchTransitionIssues(db: { batch: AdmissionBatch; majors: (BatchMajor & { major: AdmissionMajor })[] }, to: BatchStatus, unresolvedApps = 0): string[] {
+export function batchTransitionIssues(
+  db: { batch: AdmissionBatch; majors: (BatchMajor & { major: AdmissionMajor; approvedCount?: number; resultsPublished?: boolean })[] },
+  to: BatchStatus,
+  unresolvedApps = 0,
+): string[] {
   const issues: string[] = [];
   if (to === "OPEN") {
     if (db.majors.length === 0) issues.push("Đợt chưa có ngành tuyển sinh nào.");
@@ -1185,7 +1189,12 @@ export function batchTransitionIssues(db: { batch: AdmissionBatch; majors: (Batc
     });
     if (new Date(db.batch.registrationEndAt).getTime() < Date.now()) issues.push("Thời hạn đăng ký đã qua, cập nhật lại lịch trước khi mở.");
   }
-  if (to === "IN_REVIEW" && unresolvedApps > 0) issues.push(`Còn ${unresolvedApps} hồ sơ chưa có kết luận thẩm định.`);
+  if (to === "IN_REVIEW" && db.batch.status !== "COMPLETED" && unresolvedApps > 0) issues.push(`Còn ${unresolvedApps} hồ sơ chưa có kết luận thẩm định.`);
+  if (to === "COMPLETED")
+    db.majors.forEach((m) => {
+      if ((m.approvedCount ?? 0) > 0 && m.resultsPublished === false)
+        issues.push(`${m.major.majorName}: có ${m.approvedCount} thí sinh đạt thẩm định nhưng chưa công bố kết quả trúng tuyển.`);
+    });
   return issues;
 }
 

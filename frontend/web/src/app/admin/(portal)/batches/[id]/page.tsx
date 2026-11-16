@@ -233,7 +233,7 @@ function BatchDetailInner() {
                 return (
                   <div key={to} className="mt-4 border-t border-gray-100 pt-4">
                     <Btn className="w-full" variant={to === "CANCELLED" ? "danger" : "navy"} disabled={issues.length > 0} onClick={() => { setFormError(""); setTransition(to); }}>
-                      {NEXT_LABEL[to]}
+                      {b.status === "COMPLETED" && to === "IN_REVIEW" ? "Mở lại xét kết quả" : NEXT_LABEL[to]}
                     </Btn>
                     {issues.length > 0 && (
                       <ul className="mt-2 space-y-1 text-xs text-[#92400E]">
@@ -276,7 +276,7 @@ function BatchDetailInner() {
       <Modal
         open={!!transition}
         onClose={() => setTransition(null)}
-        title={transition ? `${NEXT_LABEL[transition]}?` : ""}
+        title={transition ? `${b.status === "COMPLETED" && transition === "IN_REVIEW" ? "Mở lại xét kết quả" : NEXT_LABEL[transition]}?` : ""}
         description={transition ? NEXT_EFFECT[transition] : undefined}
         footer={
           <>

@@ -17,7 +17,8 @@ const BATCH_FLOW: Record<BatchStatus, BatchStatus[]> = {
   OPEN: ["CLOSED"],
   CLOSED: ["IN_REVIEW"],
   IN_REVIEW: ["COMPLETED"],
-  COMPLETED: [],
+  // Mở lại khi lỡ bấm "Hoàn tất" quá sớm (chưa xét xong) — có ghi nhật ký
+  COMPLETED: ["IN_REVIEW"],
   CANCELLED: [],
 };
 const BATCH_VI: Record<BatchStatus, string> = {
@@ -105,6 +106,15 @@ export class BatchesService {
         _count: { _all: true },
       }),
     ]);
+    // Ngành đã công bố kết quả trúng tuyển chưa (dùng để chặn "Hoàn tất đợt" khi chưa xét xong)
+    const published = await this.prisma.admission_result.groupBy({
+      by: ["application_id"],
+      where: { published_at: { not: null }, application: { admission_batch_major: { batch_id: batch.batch_id } } },
+    });
+    const publishedApps = published.length
+      ? await this.prisma.application.findMany({ where: { application_id: { in: published.map((p) => p.application_id) } }, select: { batch_major_id: true } })
+      : [];
+    const publishedBm = new Set(publishedApps.map((a) => String(a.batch_major_id)));
     const countOf = (bmId: bigint, statuses?: string[]) =>
       grouped.filter((g) => g.batch_major_id === bmId && (!statuses || statuses.includes(g.review_status))).reduce((s, g) => s + g._count._all, 0);
     return {
@@ -117,6 +127,7 @@ export class BatchesService {
         major: toMajorDto(bm.admission_major),
         applicationCount: countOf(bm.batch_major_id),
         approvedCount: countOf(bm.batch_major_id, ["APPROVED"]),
+        resultsPublished: publishedBm.has(String(bm.batch_major_id)),
       })),
     };
   }
@@ -195,6 +206,11 @@ export class BatchesService {
           `Còn ${left} hồ sơ chưa có kết luận thẩm định.${englishFailed ? ` (${englishFailed} hồ sơ không đạt / vắng thi tiếng Anh sẽ được tự kết luận Không đạt khi chuyển.)` : ""}`,
         );
     }
+    // Hoàn tất = đợt kết thúc, không tổ chức xét tuyển được nữa -> chỉ cho khi mọi ngành có thí sinh đạt thẩm định đã công bố kết quả
+    if (to === "COMPLETED")
+      for (const m of detail.majors)
+        if (m.approvedCount > 0 && !m.resultsPublished)
+          issues.push(`${m.major.majorName}: có ${m.approvedCount} thí sinh đạt thẩm định nhưng chưa công bố kết quả trúng tuyển (Tổ chức xét tuyển → Xét trúng tuyển).`);
     if (issues.length) fail("PRECONDITION_FAILED", issues.join(" "), HttpStatus.CONFLICT);
 
     await this.prisma.$transaction(async (tx) => {
