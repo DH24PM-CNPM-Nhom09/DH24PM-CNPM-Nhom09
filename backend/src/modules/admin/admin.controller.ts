@@ -450,6 +450,13 @@ export class ScoringController {
     return this.svc.saveScores(asStaff(user), id, body);
   }
 
+  @Post("majors/:id/close-appeal-window")
+  @HttpCode(200)
+  @RequirePermission("exam:manage")
+  closeAppealWindow(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.closeAppealWindow(asStaff(user), id, body);
+  }
+
   @Post("majors/:id/publish-scores")
   @HttpCode(200)
   @RequirePermission("exam:manage")

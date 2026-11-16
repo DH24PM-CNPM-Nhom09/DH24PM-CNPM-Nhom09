@@ -1724,6 +1724,11 @@ export async function publishScores(batchMajorId: number) {
   if (!USE_MOCK) return request<{ success: boolean; appealDeadline: string }>(`/admin/scoring/majors/${batchMajorId}/publish-scores`, { method: "POST" });
   return NEED_BACKEND();
 }
+/** Kết thúc sớm hạn phúc khảo của ngành (khi không còn đơn phúc khảo nào đang chờ) */
+export async function closeAppealWindow(batchMajorId: number, reason: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/majors/${batchMajorId}/close-appeal-window`, { method: "POST", body: JSON.stringify({ reason }) });
+  return NEED_BACKEND();
+}
 export async function confirmAppealFee(requestId: number, receiptNo: string) {
   if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/appeal-requests/${requestId}/confirm-payment`, { method: "PATCH", body: JSON.stringify({ receiptNo }) });
   return NEED_BACKEND();

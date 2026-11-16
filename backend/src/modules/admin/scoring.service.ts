@@ -405,6 +405,40 @@ export class ScoringService {
   }
 
   // ====================================================================== công bố điểm
+  /**
+   * Kết thúc sớm hạn phúc khảo của một ngành (VD mọi thí sinh đã xác nhận không phúc khảo, hoặc khi chạy thử / demo).
+   * Chỉ được khi không còn đơn phúc khảo nào đang chờ (chờ nộp phí hoặc chờ hội đồng kết luận).
+   * Bắt buộc ghi lý do; ghi nhật ký và báo cho thí sinh.
+   */
+  async closeAppealWindow(me: StaffUser, batchMajorId: number, body: Record<string, unknown>) {
+    const reason = String(body.reason ?? "").trim().replace(/\s+/g, " ").slice(0, 300);
+    if (reason.length < 10) fail("REASON_REQUIRED", "Ghi rõ lý do kết thúc sớm hạn phúc khảo (ít nhất 10 ký tự).");
+    const bm = await this.loadBm(batchMajorId);
+    if (!bm.scores_published_at || !bm.appeal_deadline) fail("INVALID_STATE", "Ngành này chưa công bố điểm.", HttpStatus.CONFLICT);
+    if (bm.appeal_deadline.getTime() <= Date.now()) fail("INVALID_STATE", "Hạn phúc khảo đã kết thúc.", HttpStatus.CONFLICT);
+    const inBm = { application: { batch_major_id: bm.batch_major_id } };
+    const waitingFee = await this.prisma.appeal_request.count({ where: { status: "CHO_NOP_PHI", ...inBm } });
+    const waitingCouncil = await this.prisma.score_appeal.count({ where: { status: "PENDING", exam_score: inBm } });
+    if (waitingFee || waitingCouncil)
+      fail("APPEALS_PENDING", `Còn ${waitingFee + waitingCouncil} đơn phúc khảo đang chờ xử lý (mục Phúc khảo). Xử lý xong mới kết thúc sớm được.`, HttpStatus.CONFLICT);
+    const apps = await this.prisma.application.findMany({ where: eligibleWhere(bm.batch_major_id), select: { candidate_id: true, application_code: true } });
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const r = await tx.admission_batch_major.updateMany({ where: { batch_major_id: bm.batch_major_id, appeal_deadline: bm.appeal_deadline }, data: { appeal_deadline: now } });
+      if (r.count === 0) conflict("STALE_STATUS", "Hạn phúc khảo vừa được người khác cập nhật, tải lại trang.");
+      for (const a of apps)
+        await this.audit.notifyCandidate(id(a.candidate_id), "Kết thúc nhận đơn phúc khảo", `Hồ sơ ${a.application_code} — ${bm.admission_major.major_name}: Hội đồng tuyển sinh đã kết thúc nhận đơn phúc khảo điểm xét tuyển. Kết quả trúng tuyển sẽ được công bố trên cổng.`, tx);
+      await this.audit.record(
+        { type: "STAFF", id: me.staffAccountId },
+        "APPEAL_WINDOW_CLOSE",
+        { table: "admission_batch_major", id: bm.batch_major_id },
+        `${bm.admission_batch.batch_code} – ${bm.admission_major.major_name}: kết thúc sớm hạn phúc khảo (hạn cũ ${vnTime(bm.appeal_deadline!)}). Lý do: ${reason}`,
+        tx,
+      );
+    });
+    return { success: true };
+  }
+
   async publishScores(me: StaffUser, batchMajorId: number) {
     const bm = await this.loadBm(batchMajorId);
     this.assertScoringOpen(bm);

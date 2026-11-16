@@ -10,6 +10,7 @@ import {
   autoScheduleInterviews,
   getScoringOverview,
   publishScores,
+  closeAppealWindow,
   saveCommittee,
   saveScores,
   updateInterview,
@@ -474,6 +475,8 @@ function ScoresTab({ data, canScore, canPublish, onPublished }: { data: ScoringO
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmPublish, setConfirmPublish] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
   const now = Date.now();
   const editable = canScore && !locked && data.scoringOpen;
 
@@ -502,6 +505,18 @@ function ScoresTab({ data, canScore, canPublish, onPublished }: { data: ScoringO
       });
       const r = await saveScores(data.major.batchMajorId, items);
       toast(r.changed ? `Đã lưu ${r.changed} điểm thành phần.` : "Không có thay đổi.");
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function closeWindow() {
+    setBusy(true);
+    setErr("");
+    try {
+      await closeAppealWindow(data.major.batchMajorId, closeReason);
+      window.location.reload();
     } catch (e) {
       setErr(errorMessage(e));
     } finally {
@@ -552,7 +567,35 @@ function ScoresTab({ data, canScore, canPublish, onPublished }: { data: ScoringO
               Phúc khảo
             </Link>
             .
+            {canPublish && data.appealDeadline && new Date(data.appealDeadline).getTime() > Date.now() && (
+              <>
+                {" "}
+                <button type="button" className="font-semibold underline" onClick={() => { setErr(""); setCloseReason(""); setCloseOpen(true); }}>
+                  Kết thúc sớm hạn phúc khảo
+                </button>
+              </>
+            )}
           </Notice>
+          <Modal
+            open={closeOpen}
+            onClose={() => setCloseOpen(false)}
+            title="Kết thúc sớm hạn phúc khảo?"
+            description="Thí sinh của ngành này sẽ không gửi đơn phúc khảo được nữa và hội đồng có thể xếp hạng ngay. Chỉ làm khi không còn đơn phúc khảo nào đang chờ. Thao tác được ghi nhật ký và báo cho thí sinh."
+            footer={
+              <>
+                <Btn variant="outline" onClick={() => setCloseOpen(false)}>
+                  Hủy
+                </Btn>
+                <Btn variant="navy" loading={busy} disabled={closeReason.trim().length < 10} onClick={closeWindow}>
+                  Kết thúc hạn phúc khảo
+                </Btn>
+              </>
+            }
+          >
+            <Label htmlFor="close-reason">Lý do (ít nhất 10 ký tự)</Label>
+            <textarea id="close-reason" className={fieldCls} rows={3} value={closeReason} onChange={(e) => setCloseReason(e.target.value)} placeholder="VD: Tất cả thí sinh đã xác nhận không phúc khảo" />
+            {err && <p className="mt-2 text-sm text-[#B91C1C]">{err}</p>}
+          </Modal>
         </div>
       )}
       {err && (
