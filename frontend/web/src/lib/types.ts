@@ -186,6 +186,8 @@ export interface FullApplication {
     paidAt: string | null;
     transferContent: string;
     bank: { bankBin?: string; bankName: string; accountNo: string; accountName: string };
+    /** Ảnh / PDF giao dịch chuyển khoản thí sinh đã gửi */
+    proofs?: PaymentProof[];
   } | null;
   supplement: { content: string; deadline: string } | null;
   history: { status: ReviewStatus; at: string; by: "CANDIDATE" | "STAFF" | "SYSTEM"; reason: string | null }[];
@@ -295,3 +297,12 @@ export type SupervisorOverview =
     };
 
 export type EnglishTestResult = "PENDING" | "PASSED" | "FAILED" | "ABSENT";
+
+/** Minh chứng chuyển khoản lệ phí (ảnh chụp giao dịch thành công / biên lai điện tử) */
+export interface PaymentProof {
+  proofId: number;
+  fileName: string;
+  fileSizeKb: number;
+  note: string | null;
+  uploadedAt: string;
+}

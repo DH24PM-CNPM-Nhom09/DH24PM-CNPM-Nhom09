@@ -214,6 +214,14 @@ export async function fetchDocumentFile(documentId: number): Promise<Blob> {
   return res.blob();
 }
 
+/** Tải ảnh / PDF chuyển khoản lệ phí thí sinh gửi (kèm token) */
+export async function fetchPaymentProofFile(proofId: number): Promise<Blob> {
+  const token = readSession()?.accessToken;
+  const res = await fetch(`${API_BASE}/admin/payment-proofs/${proofId}/file`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không tải được tệp." }));
+  return res.blob();
+}
+
 // ============================================================================
 // Tra cứu dùng chung
 // ============================================================================

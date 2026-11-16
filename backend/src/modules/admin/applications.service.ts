@@ -293,7 +293,7 @@ export class ApplicationsService {
         candidate: { include: { candidate_account: true } },
         application_education: true,
         application_document: { orderBy: { document_id: "asc" } },
-        application_payment: { orderBy: { payment_id: "desc" } },
+        application_payment: { orderBy: { payment_id: "desc" }, include: { payment_proof: { orderBy: { proof_id: "desc" } } } },
         supplement_request: { orderBy: { request_id: "desc" } },
         application_status_history: { orderBy: { history_id: "asc" } },
         admission_batch_major: { include: { admission_batch: true, admission_major: true, exam_subject: true, admission_condition: true } },
@@ -412,6 +412,8 @@ export class ApplicationsService {
                 }
               })(),
               transferContent: transferNote(a.application_code),
+              // Ảnh / PDF chuyển khoản thí sinh gửi để đối chiếu trước khi xác nhận
+              proofs: pay.payment_proof.map((p) => ({ proofId: id(p.proof_id), fileName: p.file_name, fileSizeKb: p.file_size_kb, note: p.note, uploadedAt: isoReq(p.uploaded_at) })),
             }
           : null,
         supplements: a.supplement_request.map((s) => ({
@@ -567,6 +569,15 @@ export class ApplicationsService {
     const data = await readFile(this.prisma, doc.file_path);
     if (!data) notFound("Tệp minh chứng không còn trên máy chủ.");
     return { data, fileName: doc.file_name, type: contentType(doc.file_path) };
+  }
+
+  /** Tệp minh chứng chuyển khoản lệ phí do thí sinh gửi */
+  async paymentProofFile(proofId: number) {
+    const p = await this.prisma.payment_proof.findUnique({ where: { proof_id: BigInt(proofId) }, include: { application: true } });
+    if (!p || p.application.deleted_at) notFound("Không tìm thấy tệp chuyển khoản.");
+    const data = await readFile(this.prisma, p.file_path);
+    if (!data) notFound("Tệp không còn trên máy chủ.");
+    return { data, fileName: p.file_name, type: contentType(p.file_path) };
   }
 
   // ------------------------------------------------------------------ thẩm định

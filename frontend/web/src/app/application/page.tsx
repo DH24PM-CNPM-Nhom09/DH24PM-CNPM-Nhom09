@@ -12,6 +12,7 @@ import { Alert, errMsg } from "@/components/auth/AuthBits";
 import DocSlot from "@/components/application/DocSlot";
 import AdmissionSection from "@/components/application/AdmissionSection";
 import VietQrCode from "@/components/payment/VietQrCode";
+import PaymentProofUpload from "@/components/payment/PaymentProofUpload";
 import { getMyFullApplication, submitSupplement, uploadDocument } from "@/lib/api";
 import { fmtDate, fmtDateTime, timeLeft } from "@/lib/announcements";
 import { checkFile, DEGREE_LABEL, DOC_LABEL, EDU_LABEL, fmtMoney, fmtSize, HISTORY_LABEL, LANGUAGE_OPTION_TEXT, VERIFY_LABEL } from "@/lib/application";
@@ -309,8 +310,9 @@ function StatusInner() {
                   <span className="font-mono font-semibold">{app.applicationCode}</span>. Thông tin tài khoản nhận chuyển khoản sẽ được cập nhật tại đây khi Nhà trường công bố.
                 </div>
               )}
+              {hasBank && <PaymentProofUpload proofs={app.payment.proofs ?? []} onUploaded={load} />}
               <p className="mt-3 text-xs text-gray-500">
-                Nếu chuyển khoản thủ công, ghi đúng nội dung chuyển khoản để Phòng Đào tạo đối chiếu. Trạng thái sẽ chuyển sang “Đã nộp” sau khi cán bộ xác nhận (thường trong 1–2 ngày làm việc). Hồ sơ chỉ được kết luận đạt khi đã nộp lệ phí.
+                Nếu chuyển khoản thủ công, ghi đúng nội dung chuyển khoản để Phòng Đào tạo đối chiếu. Trạng thái sẽ chuyển sang “Đã nộp” sau khi cán bộ đối chiếu sao kê và xác nhận (thường trong 1–2 ngày làm việc). Hồ sơ chỉ được kết luận đạt khi đã nộp lệ phí.
               </p>
             </>
           )}

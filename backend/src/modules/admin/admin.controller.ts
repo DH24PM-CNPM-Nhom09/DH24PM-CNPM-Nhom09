@@ -100,6 +100,17 @@ export class ApplicationsController {
     res.setHeader("Cache-Control", "private, no-store");
     res.send(data);
   }
+
+  /** Ảnh / PDF chuyển khoản lệ phí thí sinh gửi */
+  @Get("admin/payment-proofs/:id/file")
+  @RequirePermission("application:view")
+  async paymentProof(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+    const { data, fileName, type } = await this.svc.paymentProofFile(id);
+    res.setHeader("Content-Type", type);
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(data);
+  }
 }
 
 // ============================================================ M2 — Đợt tuyển sinh

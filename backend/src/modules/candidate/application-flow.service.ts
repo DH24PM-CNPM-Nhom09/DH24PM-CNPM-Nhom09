@@ -8,13 +8,15 @@ import { env, SystemConfigService } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
 import { dec, id, iso, isoReq, num, parseReviewStatus, str, transferNote } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
-import { removeFile } from "../../common/file-store";
+import { contentType, readFile, removeFile, saveFile } from "../../common/file-store";
 import { ApplicationsService } from "../admin/applications.service";
 import { admissionView } from "./admission-view";
 
 import { DOC_LABEL, LANGUAGE_LABEL, LANGUAGE_OPTIONS, OPTIONAL_DOCS, requiredDocs, type Degree, type LanguageOption } from "../../common/documents";
 import { phoneAvailable } from "../../common/pending-accounts";
 import { isVnPhone, normalizePhone, parseYmd } from "../../common/validate";
+import { randomUUID } from "crypto";
+import { checkUpload, type UploadLike } from "../../common/upload-check";
 
 type FeeItem = { code: string; label: string; amount: number };
 
@@ -25,7 +27,7 @@ const fullInclude = {
   admission_batch_major: { include: { admission_batch: true, admission_major: true } },
   application_education: true,
   application_document: { orderBy: { document_id: "asc" } },
-  application_payment: { orderBy: { payment_id: "desc" } },
+  application_payment: { orderBy: { payment_id: "desc" }, include: { payment_proof: { orderBy: { proof_id: "desc" } } } },
   supplement_request: { orderBy: { request_id: "desc" } },
   application_status_history: { orderBy: { history_id: "asc" } },
   research_proposal: { include: { lecturer: true, supervisor_request: { orderBy: { request_id: "desc" }, include: { lecturer: true } } } },
@@ -219,6 +221,8 @@ export class ApplicationFlowService {
             paidAt: iso(pay.paid_at),
             transferContent: transferNote(a.application_code),
             bank,
+            // Ảnh / PDF giao dịch chuyển khoản thí sinh đã gửi (mới nhất trước)
+            proofs: pay.payment_proof.map((p) => ({ proofId: id(p.proof_id), fileName: p.file_name, fileSizeKb: p.file_size_kb, note: p.note, uploadedAt: isoReq(p.uploaded_at) })),
           }
         : null,
       supplement: sup ? { content: sup.content, deadline: isoReq(sup.deadline) } : null,
@@ -250,6 +254,51 @@ export class ApplicationFlowService {
         include: fullInclude,
       }));
     return a ? this.toFull(a) : null;
+  }
+
+  // ------------------------------------------------------------------ minh chứng chuyển khoản lệ phí
+  /**
+   * Thí sinh đã chuyển khoản theo mã VietQR -> tải ảnh chụp giao dịch thành công (hoặc PDF biên lai điện tử)
+   * để cán bộ đối chiếu. Chỉ khi khoản lệ phí đang chờ xác nhận; tối đa 5 tệp cho một khoản.
+   * Trạng thái lệ phí vẫn do CÁN BỘ xác nhận sau khi kiểm tra sao kê (ảnh chụp có thể bị chỉnh sửa).
+   */
+  async uploadPaymentProof(me: CandidateUser, file: UploadLike | undefined, noteRaw: unknown) {
+    const candidateId = this.requireProfile(me);
+    const a = await this.load(candidateId, { review_status: { not: "DRAFT" } });
+    if (!a) notFound("Bạn chưa có hồ sơ đã nộp.");
+    const pay = a.application_payment.find((p) => p.gateway_status === "PENDING");
+    if (!pay) fail("NO_PENDING_PAYMENT", "Hồ sơ không có khoản lệ phí đang chờ nộp.", HttpStatus.CONFLICT);
+    if (pay.payment_proof.length >= 5) fail("TOO_MANY_FILES", "Đã gửi đủ 5 tệp cho khoản lệ phí này. Liên hệ Phòng Đào tạo nếu cần bổ sung.", HttpStatus.CONFLICT);
+    const { ext, sizeKb, fileName } = checkUpload(file, await this.config.int("MAX_FILE_KB", 5120), "chuyen_khoan");
+    const note = str(noteRaw).trim().replace(/\s+/g, " ").slice(0, 500) || null;
+    const rel = path.posix.join("payment-proof", id(a.application_id).toString(), `${randomUUID()}${ext}`);
+    await saveFile(this.prisma, rel, file!.buffer);
+    const row = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.payment_proof.create({
+        data: { payment_id: pay.payment_id, application_id: a.application_id, file_path: rel, file_name: fileName, file_size_kb: sizeKb, note },
+      });
+      await this.audit.record(
+        { type: "CANDIDATE", id: candidateId },
+        "PAYMENT_PROOF_UPLOAD",
+        { table: "payment_proof", id: r.proof_id },
+        `${a.application_code}: gửi minh chứng chuyển khoản lệ phí (${fileName})`,
+        tx,
+      );
+      return r;
+    });
+    return { proofId: id(row.proof_id), fileName, fileSizeKb: sizeKb, note, uploadedAt: isoReq(row.uploaded_at) };
+  }
+
+  /** Thí sinh xem lại tệp chuyển khoản của chính mình */
+  async paymentProofFile(me: CandidateUser, proofId: number) {
+    const candidateId = this.requireProfile(me);
+    const p = await this.prisma.payment_proof.findFirst({
+      where: { proof_id: BigInt(proofId), application: { candidate_id: BigInt(candidateId), deleted_at: null } },
+    });
+    if (!p) notFound("Không tìm thấy tệp.");
+    const data = await readFile(this.prisma, p.file_path);
+    if (!data) notFound("Tệp không còn trên máy chủ.");
+    return { data, fileName: p.file_name, type: contentType(p.file_path) };
   }
 
   async lecturers() {

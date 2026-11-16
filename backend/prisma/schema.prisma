@@ -188,6 +188,7 @@ model application {
   application_document         application_document[]
   application_education        application_education?
   application_payment          application_payment[]
+  payment_proof                payment_proof[]
   application_ranking          application_ranking?
   application_review           application_review[]
   application_status_history   application_status_history[]
@@ -248,16 +249,17 @@ model application_education {
 }
 
 model application_payment {
-  payment_id       BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
-  application_id   BigInt      @db.UnsignedBigInt
-  amount           Decimal     @db.Decimal(15, 2)
-  payment_method   String      @db.VarChar(30)
-  transaction_code String?     @unique(map: "transaction_code") @db.VarChar(100)
-  gateway_status   String      @default("PENDING") @db.VarChar(20)
-  receipt_no       String?     @db.VarChar(50)
-  paid_at          DateTime?   @db.DateTime(0)
-  fee_detail       String?     @db.Text
-  application      application @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_payment_application")
+  payment_id       BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  application_id   BigInt          @db.UnsignedBigInt
+  amount           Decimal         @db.Decimal(15, 2)
+  payment_method   String          @db.VarChar(30)
+  transaction_code String?         @unique(map: "transaction_code") @db.VarChar(100)
+  gateway_status   String          @default("PENDING") @db.VarChar(20)
+  receipt_no       String?         @db.VarChar(50)
+  paid_at          DateTime?       @db.DateTime(0)
+  fee_detail       String?         @db.Text
+  application      application     @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_payment_application")
+  payment_proof    payment_proof[]
 
   @@index([application_id], map: "fk_payment_application")
   @@index([gateway_status], map: "idx_payment_status")
@@ -758,4 +760,21 @@ model stored_file {
   content    Bytes    @db.LongBlob
   size_bytes Int      @db.UnsignedInt
   created_at DateTime @default(now()) @db.DateTime(0)
+}
+
+/// Minh chứng chuyển khoản lệ phí do thí sinh tải lên (migration v16)
+model payment_proof {
+  proof_id            BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  payment_id          BigInt              @db.UnsignedBigInt
+  application_id      BigInt              @db.UnsignedBigInt
+  file_path           String              @db.VarChar(255)
+  file_name           String              @db.VarChar(255)
+  file_size_kb        Int                 @db.UnsignedInt
+  note                String?             @db.VarChar(500)
+  uploaded_at         DateTime            @default(dbgenerated("(utc_timestamp())")) @db.DateTime(0)
+  application_payment application_payment @relation(fields: [payment_id], references: [payment_id], onUpdate: Restrict, map: "fk_proof_payment")
+  application         application         @relation(fields: [application_id], references: [application_id], onUpdate: Restrict, map: "fk_proof_application")
+
+  @@index([payment_id], map: "idx_payment_proof_payment")
+  @@index([application_id], map: "idx_payment_proof_application")
 }

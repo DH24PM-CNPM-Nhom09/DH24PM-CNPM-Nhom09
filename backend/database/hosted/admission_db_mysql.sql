@@ -532,6 +532,22 @@ CREATE TABLE IF NOT EXISTS `lecturer` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `payment_proof` (
+  `proof_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `payment_id` bigint(20) unsigned NOT NULL,
+  `application_id` bigint(20) unsigned NOT NULL,
+  `file_path` varchar(255) NOT NULL,
+  `file_name` varchar(255) NOT NULL,
+  `file_size_kb` int(10) unsigned NOT NULL,
+  `note` varchar(500) DEFAULT NULL,
+  `uploaded_at` datetime NOT NULL DEFAULT (UTC_TIMESTAMP()),
+  PRIMARY KEY (`proof_id`),
+  KEY `idx_payment_proof_payment` (`payment_id`),
+  KEY `idx_payment_proof_application` (`application_id`),
+  CONSTRAINT `fk_proof_payment` FOREIGN KEY (`payment_id`) REFERENCES `application_payment` (`payment_id`),
+  CONSTRAINT `fk_proof_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`application_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `notification` (
   `notification_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `recipient_type` varchar(20) NOT NULL CHECK (`recipient_type` in ('CANDIDATE','STAFF')),

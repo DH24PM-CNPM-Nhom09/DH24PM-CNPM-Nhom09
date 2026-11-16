@@ -38,6 +38,7 @@ function sqlStatements(file: string) {
       ["migration_v12_candidate_declaration.sql", "migration v12 (khai thông tin theo CCCD: ngày cấp, nơi cấp, nơi sinh, dân tộc, thường trú, cam kết)"],
       ["migration_v13_stored_file.sql", "migration v13 (bảng stored_file: lưu tệp minh chứng trong CSDL khi UPLOAD_STORAGE=db)"],
       ["migration_v14_security_counter.sql", "migration v14 (bảng security_counter: đếm nhập sai OTP, giới hạn gọi API đăng nhập lưu trong CSDL)"],
+      ["migration_v16_payment_proof.sql", "migration v16 (bảng payment_proof: minh chứng chuyển khoản lệ phí do thí sinh tải lên)"],
     ];
     for (const [name, label] of migrations) {
       for (const stmt of sqlStatements(path.join(__dirname, "..", "database", name))) await prisma.$executeRawUnsafe(stmt);

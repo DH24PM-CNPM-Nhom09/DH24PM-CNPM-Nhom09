@@ -7,7 +7,7 @@
 //   NEXT_PUBLIC_USE_MOCK=false
 //   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
 // ============================================================================
-import type { Application, ApplicationDocument, Candidate, CandidateNotification, DeclarationInput, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, RegisterPayload, ResearchProposalInput, SupervisorOverview, SupervisorRequest } from "./types";
+import type { Application, ApplicationDocument, Candidate, CandidateNotification, DeclarationInput, EducationInput, FullApplication, LanguageOption, Lecturer, OtpSent, PaymentProof, RegisterPayload, ResearchProposalInput, SupervisorOverview, SupervisorRequest } from "./types";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -206,6 +206,32 @@ function mockFull(): FullApplication {
   const have = new Set(mockApp.documents.map((d) => d.documentType));
   mockApp.missingDocuments = mockApp.requiredDocuments.filter((t) => !have.has(t));
   return structuredClone(mockApp);
+}
+
+/** Gửi ảnh chụp giao dịch chuyển khoản lệ phí thành công (PDF/JPG/PNG ≤ 5MB) */
+export async function uploadPaymentProof(file: File, note: string): Promise<PaymentProof> {
+  if (file.size / 1024 > 5120) throw { error_code: "FILE_TOO_LARGE", message: "Tệp vượt quá 5MB, vui lòng chọn tệp khác." };
+  if (USE_MOCK) return delay({ proofId: Date.now(), fileName: file.name, fileSizeKb: Math.ceil(file.size / 1024), note: note || null, uploadedAt: new Date().toISOString() });
+  const form = new FormData();
+  form.append("file", file);
+  if (note.trim()) form.append("note", note.trim());
+  const token = getToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/applications/me/payment-proof`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
+  } catch {
+    throw { error_code: "NETWORK", message: "Không kết nối được máy chủ. Vui lòng kiểm tra mạng hoặc thử lại sau." };
+  }
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Gửi tệp thất bại, vui lòng thử lại." }));
+  return res.json();
+}
+
+/** Tải lại tệp chuyển khoản đã gửi (kèm token) để xem */
+export async function fetchPaymentProofFile(proofId: number): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/applications/me/payment-proofs/${proofId}/file`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không mở được tệp." }));
+  return res.blob();
 }
 
 export async function getMyFullApplication(): Promise<FullApplication | null> {
