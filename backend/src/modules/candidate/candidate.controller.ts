@@ -155,6 +155,22 @@ export class CandidateController {
     res.json(await this.svc.supervisorRequest(asCandidate(user)));
   }
 
+  /** Minh chứng chuyển khoản lệ phí (ảnh chụp giao dịch / biên lai điện tử) */
+  @Post("applications/me/payment-proof")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 5 * 1024 * 1024 + 1024, files: 1 } }))
+  paymentProof(@CurrentUser() user: AuthUser, @UploadedFile() file: UploadedFileLike | undefined, @Body() body: Record<string, unknown>) {
+    return this.flow.uploadPaymentProof(asCandidate(user), file, body.note);
+  }
+
+  @Get("applications/me/payment-proofs/:id/file")
+  async paymentProofFile(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+    const { data, fileName, type } = await this.flow.paymentProofFile(asCandidate(user), id);
+    res.setHeader("Content-Type", type);
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(data);
+  }
+
   @Post("applications/:id/documents")
   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 5 * 1024 * 1024 + 1024, files: 1 } }))
   upload(

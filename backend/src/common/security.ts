@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
+import type { PrismaService } from "../prisma/prisma.service";
+import { bumpCounter } from "./counter";
 
 /**
  * Lớp bảo vệ cơ bản không cần thư viện ngoài:
@@ -16,21 +18,39 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
 }
 
 const WINDOW_MS = 10 * 60_000;
-const hits = new Map<string, { n: number; reset: number }>();
+/** Dự phòng khi CSDL lỗi: đếm tạm trong bộ nhớ */
+const memHits = new Map<string, { n: number; reset: number }>();
 
-export function authRateLimit(max = Number(process.env.AUTH_RATE_LIMIT ?? 60)) {
+function memBump(key: string, now: number) {
+  const h = memHits.get(key);
+  if (!h || h.reset < now) {
+    memHits.set(key, { n: 1, reset: now + WINDOW_MS });
+    return { hits: 1, resetAt: now + WINDOW_MS };
+  }
+  h.n++;
+  if (memHits.size > 50_000) for (const [k, v] of memHits) if (v.reset < now) memHits.delete(k);
+  return { hits: h.n, resetAt: h.reset };
+}
+
+/**
+ * Giới hạn số lần gọi API xác thực (POST) theo IP + đường dẫn trong 10 phút.
+ * Đếm trong bảng security_counter (migration v14) nên không bị xóa khi backend ngủ / khởi động lại.
+ */
+export function authRateLimit(prisma: PrismaService, max = Number(process.env.AUTH_RATE_LIMIT ?? 60)) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== "POST" || max <= 0) return next();
-    const key = `${req.ip}|${req.path}`;
+    const key = `rl:${req.ip}|${req.path}`;
     const now = Date.now();
-    const h = hits.get(key);
-    if (!h || h.reset < now) hits.set(key, { n: 1, reset: now + WINDOW_MS });
-    else if (++h.n > max) {
-      res.setHeader("Retry-After", String(Math.ceil((h.reset - now) / 1000)));
-      res.status(429).json({ error_code: "TOO_MANY_REQUESTS", message: "Bạn thao tác quá nhiều lần. Vui lòng thử lại sau ít phút." });
-      return;
-    }
-    if (hits.size > 50_000) for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
-    next();
+    void bumpCounter(prisma, key, WINDOW_MS)
+      .then((r) => ({ hits: r.hits, resetAt: r.resetAt.getTime() }))
+      .catch(() => memBump(key, now))
+      .then(({ hits, resetAt }) => {
+        if (hits > max) {
+          res.setHeader("Retry-After", String(Math.max(1, Math.ceil((resetAt - now) / 1000))));
+          res.status(429).json({ error_code: "TOO_MANY_REQUESTS", message: "Bạn thao tác quá nhiều lần. Vui lòng thử lại sau ít phút." });
+          return;
+        }
+        next();
+      });
   };
 }

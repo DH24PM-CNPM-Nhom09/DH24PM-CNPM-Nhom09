@@ -214,6 +214,14 @@ export async function fetchDocumentFile(documentId: number): Promise<Blob> {
   return res.blob();
 }
 
+/** Tải ảnh / PDF chuyển khoản lệ phí thí sinh gửi (kèm token) */
+export async function fetchPaymentProofFile(proofId: number): Promise<Blob> {
+  const token = readSession()?.accessToken;
+  const res = await fetch(`${API_BASE}/admin/payment-proofs/${proofId}/file`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không tải được tệp." }));
+  return res.blob();
+}
+
 // ============================================================================
 // Tra cứu dùng chung
 // ============================================================================
@@ -794,8 +802,17 @@ export async function unlockCandidateAccount(accountId: number) {
   return delay({ success: true });
 }
 
+/** DELETE /admin/candidates/{id}   { reason } — chỉ xóa được tài khoản chưa nộp hồ sơ nào */
+export async function deleteCandidateAccount(accountId: number, reason: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/candidates/${accountId}`, { method: "DELETE", body: JSON.stringify({ reason }) });
+  requirePermission("candidate:manage");
+  if (reason.trim().length < 5) fail("REASON_REQUIRED", "Nhập lý do xóa (ít nhất 5 ký tự).");
+  // Dữ liệu mẫu: mọi thí sinh mẫu đều đã nộp hồ sơ
+  fail("HAS_SUBMITTED_APPLICATION", 'Không xóa được: tài khoản đã nộp hồ sơ. Hồ sơ đã nộp phải được lưu để đối chiếu, hãy dùng "Khóa tài khoản".');
+}
+
 /** Tải tệp CSV danh sách thí sinh theo bộ lọc (mở bằng Excel) */
-export async function exportCandidateAccounts(query: CandidateAccountQuery): Promise<Blob> {
+export async function exportCandidateAccounts(query: CandidateAccountQuery): Promise<Blob & { exportTotal?: number; exportRows?: number; truncated?: boolean }> {
   if (USE_MOCK) {
     const rows = mockCandidates();
     const csv = "\uFEFF" + ["Họ và tên,Email,Điện thoại", ...rows.map((r) => [r.fullName, r.email, r.phoneNumber].map((v) => `"${v ?? ""}"`).join(","))].join("\r\n");
@@ -809,7 +826,11 @@ export async function exportCandidateAccounts(query: CandidateAccountQuery): Pro
     fail("NETWORK", `Không kết nối được máy chủ (${API_BASE}). Kiểm tra backend đã chạy chưa.`);
   }
   if (!res.ok) throw await res.json().catch(() => ({ error_code: "UNKNOWN", message: "Không xuất được danh sách." }));
-  return res.blob();
+  return Object.assign(await res.blob(), {
+    exportTotal: Number(res.headers.get("X-Export-Total")) || undefined,
+    exportRows: Number(res.headers.get("X-Export-Rows")) || undefined,
+    truncated: res.headers.get("X-Export-Truncated") === "1",
+  });
 }
 
 // ============================================================================
@@ -986,7 +1007,7 @@ export async function createEnglishSession(batchId: number, data: EnglishSession
   if (!USE_MOCK) return request<{ sessionId: number }>(`/admin/english-test/batches/${batchId}/sessions`, { method: "POST", body: JSON.stringify(data) });
   return MOCK_ONLY();
 }
-export async function updateEnglishSession(sessionId: number, data: Partial<EnglishSessionInput> & { status?: "CANCELLED" }) {
+export async function updateEnglishSession(sessionId: number, data: Partial<EnglishSessionInput> & { status?: "CANCELLED" | "SCHEDULED" }) {
   if (!USE_MOCK) return request<{ success: boolean }>(`/admin/english-test/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify(data) });
   return MOCK_ONLY();
 }
@@ -1063,7 +1084,7 @@ export interface BatchDetail {
   batch: AdmissionBatch;
   /** Số hồ sơ chưa có kết luận thẩm định — chặn chuyển sang "Xét kết quả" */
   unresolvedCount: number;
-  majors: (BatchMajor & { major: AdmissionMajor; applicationCount: number; approvedCount: number })[];
+  majors: (BatchMajor & { major: AdmissionMajor; applicationCount: number; approvedCount: number; resultsPublished?: boolean })[];
   allMajors: AdmissionMajor[];
   staffNames: Record<number, string>;
 }
@@ -1141,7 +1162,7 @@ const BATCH_FLOW: Record<BatchStatus, BatchStatus[]> = {
   OPEN: ["CLOSED"],
   CLOSED: ["IN_REVIEW"],
   IN_REVIEW: ["COMPLETED"],
-  COMPLETED: [],
+  COMPLETED: ["IN_REVIEW"],
   CANCELLED: [],
 };
 
@@ -1154,7 +1175,11 @@ export function weightSum(subjects: ExamSubject[]) {
 }
 
 /** Trả về danh sách lý do chưa thể chuyển trạng thái (rỗng = được phép) */
-export function batchTransitionIssues(db: { batch: AdmissionBatch; majors: (BatchMajor & { major: AdmissionMajor })[] }, to: BatchStatus, unresolvedApps = 0): string[] {
+export function batchTransitionIssues(
+  db: { batch: AdmissionBatch; majors: (BatchMajor & { major: AdmissionMajor; approvedCount?: number; resultsPublished?: boolean })[] },
+  to: BatchStatus,
+  unresolvedApps = 0,
+): string[] {
   const issues: string[] = [];
   if (to === "OPEN") {
     if (db.majors.length === 0) issues.push("Đợt chưa có ngành tuyển sinh nào.");
@@ -1164,7 +1189,12 @@ export function batchTransitionIssues(db: { batch: AdmissionBatch; majors: (Batc
     });
     if (new Date(db.batch.registrationEndAt).getTime() < Date.now()) issues.push("Thời hạn đăng ký đã qua, cập nhật lại lịch trước khi mở.");
   }
-  if (to === "IN_REVIEW" && unresolvedApps > 0) issues.push(`Còn ${unresolvedApps} hồ sơ chưa có kết luận thẩm định.`);
+  if (to === "IN_REVIEW" && db.batch.status !== "COMPLETED" && unresolvedApps > 0) issues.push(`Còn ${unresolvedApps} hồ sơ chưa có kết luận thẩm định.`);
+  if (to === "COMPLETED")
+    db.majors.forEach((m) => {
+      if ((m.approvedCount ?? 0) > 0 && m.resultsPublished === false)
+        issues.push(`${m.major.majorName}: có ${m.approvedCount} thí sinh đạt thẩm định nhưng chưa công bố kết quả trúng tuyển.`);
+    });
   return issues;
 }
 
@@ -1468,8 +1498,13 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
   const session = readSession();
   if (!session) fail("UNAUTHORIZED", "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
   let staff: StaffAccount;
+  let accessToken = session.accessToken;
   if (!USE_MOCK) {
-    staff = await request<StaffAccount>("/auth/staff/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+    // Đổi mật khẩu làm các phiên cũ hết hiệu lực: backend trả token mới cho phiên đang dùng
+    const res = await request<StaffAccount & { accessToken?: string }>("/auth/staff/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+    const { accessToken: fresh, ...rest } = res;
+    staff = rest as StaffAccount;
+    if (fresh) accessToken = fresh;
   } else {
     await delay(null, 300);
     if (newPassword.length < 8 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword))
@@ -1482,7 +1517,7 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
     commit();
     staff = { ...session.staff, mustChangePassword: false };
   }
-  writeSession({ ...session, staff });
+  writeSession({ ...session, accessToken, staff });
   emitDataChange();
   return staff;
 }
@@ -1674,7 +1709,7 @@ export async function saveCommittee(batchMajorId: number, data: { committeeName:
   return NEED_BACKEND();
 }
 export async function autoScheduleInterviews(batchMajorId: number, data: { startAt: string; minutes: number; location: string }) {
-  if (!USE_MOCK) return request<{ scheduled: number }>(`/admin/scoring/majors/${batchMajorId}/interviews/auto`, { method: "POST", body: JSON.stringify(data) });
+  if (!USE_MOCK) return request<{ scheduled: number; skippedBusySlots?: number }>(`/admin/scoring/majors/${batchMajorId}/interviews/auto`, { method: "POST", body: JSON.stringify(data) });
   return NEED_BACKEND();
 }
 export async function updateInterview(scheduleId: number, data: { scheduledAt: string; location: string }) {
@@ -1687,6 +1722,11 @@ export async function saveScores(batchMajorId: number, items: ScoreInput[]) {
 }
 export async function publishScores(batchMajorId: number) {
   if (!USE_MOCK) return request<{ success: boolean; appealDeadline: string }>(`/admin/scoring/majors/${batchMajorId}/publish-scores`, { method: "POST" });
+  return NEED_BACKEND();
+}
+/** Kết thúc sớm hạn phúc khảo của ngành (khi không còn đơn phúc khảo nào đang chờ) */
+export async function closeAppealWindow(batchMajorId: number, reason: string) {
+  if (!USE_MOCK) return request<{ success: boolean }>(`/admin/scoring/majors/${batchMajorId}/close-appeal-window`, { method: "POST", body: JSON.stringify({ reason }) });
   return NEED_BACKEND();
 }
 export async function confirmAppealFee(requestId: number, receiptNo: string) {

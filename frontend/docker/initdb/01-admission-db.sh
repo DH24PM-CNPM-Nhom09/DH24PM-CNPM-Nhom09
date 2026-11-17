@@ -1,6 +1,6 @@
 #!/bin/bash
 # Khởi tạo CSDL lần đầu (chỉ chạy khi volume dữ liệu MariaDB còn trống):
-# chạy lần lượt file gốc v3 rồi các migration v4 → v13 theo đúng thứ tự.
+# chạy lần lượt file gốc v3 rồi các migration v4 → v16 theo đúng thứ tự.
 set -e
 cd /sql
 for f in admission_db_v3.sql \
@@ -13,7 +13,10 @@ for f in admission_db_v3.sql \
          migration_v10_admission_results.sql \
          migration_v11_privacy.sql \
          migration_v12_candidate_declaration.sql \
-         migration_v13_stored_file.sql; do
+         migration_v13_stored_file.sql \
+         migration_v14_security_counter.sql \
+         migration_v15_indexes.sql \
+         migration_v16_payment_proof.sql; do
   echo "[initdb] $f"
   mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" --default-character-set=utf8mb4 < "$f"
 done

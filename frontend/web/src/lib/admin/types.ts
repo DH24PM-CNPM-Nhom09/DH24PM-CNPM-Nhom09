@@ -141,6 +141,8 @@ export interface Payment {
   transferContent?: string;
   /** Các khoản đã chốt lúc nộp hồ sơ */
   feeDetail?: { code: string; label: string; amount: number }[] | null;
+  /** Ảnh / PDF chuyển khoản thí sinh gửi để đối chiếu */
+  proofs?: { proofId: number; fileName: string; fileSizeKb: number; note: string | null; uploadedAt: string }[];
 }
 
 export type SupplementStatus = "PENDING" | "RESOLVED" | "EXPIRED";

@@ -57,8 +57,57 @@ async function toCanvas(file: Blob, maxSide = 2000): Promise<HTMLCanvasElement> 
   }
 }
 
-/** Thử đọc QR trên cả ảnh và từng góc phóng to (QR trên CCCD nhỏ, nằm góc trên bên phải) */
+interface ZXingLike {
+  readBarcodes: (img: ImageData, opts: Record<string, unknown>) => Promise<{ text: string }[]>;
+}
+
+/** Cắt một vùng (tỉ lệ 0–1) của ảnh và co / phóng để cạnh dài bằng maxSide */
+function cropRegion(canvas: HTMLCanvasElement, fx: number, fy: number, fw: number, fh: number, maxSide: number): ImageData {
+  const sw = Math.round(canvas.width * fw);
+  const sh = Math.round(canvas.height * fh);
+  const scale = Math.min(3, maxSide / Math.max(sw, sh)) || 1;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(sw * scale));
+  c.height = Math.max(1, Math.round(sh * scale));
+  const ctx = c.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(canvas, Math.round(canvas.width * fx), Math.round(canvas.height * fy), sw, sh, 0, 0, c.width, c.height);
+  return ctx.getImageData(0, 0, c.width, c.height);
+}
+
+/** Các vùng cần thử: cả ảnh, rồi lưới ô 1/2 và 1/3 chồng lên nhau (QR trên ảnh chụp thường nhỏ, nằm bất kỳ đâu) */
+function regions(): [number, number, number, number][] {
+  const out: [number, number, number, number][] = [[0, 0, 1, 1]];
+  for (const f of [0.5, 0.34])
+    for (let y = 0; y <= 1 - f + 1e-9; y += f / 2) for (let x = 0; x <= 1 - f + 1e-9; x += f / 2) out.push([x, y, f, f]);
+  return out;
+}
+
+/** Đọc QR bằng ZXing: cả ảnh gốc, rồi từng vùng ở 2 cỡ (phóng to giúp đọc được QR nhỏ trong ảnh chụp) */
+async function readQrZxing(canvas: HTMLCanvasElement): Promise<string | null> {
+  await loadScript(CDN.zxing);
+  const zx = g<ZXingLike>("ZXingWASM");
+  const opts = { formats: ["QRCode"], tryHarder: true, tryDownscale: true, binarizer: "LocalAverage", maxNumberOfSymbols: 1 };
+  const full = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
+  const first = await zx.readBarcodes(full, opts);
+  if (first[0]?.text) return first[0].text;
+  for (const maxSide of [1200, 2400])
+    for (const [fx, fy, fw, fh] of regions()) {
+      const r = await zx.readBarcodes(cropRegion(canvas, fx, fy, fw, fh, maxSide), opts);
+      if (r[0]?.text) return r[0].text;
+    }
+  return null;
+}
+
+/** Thử đọc QR: ZXing trước (mạnh hơn), không được thì dùng jsQR như cũ */
 async function readQr(canvas: HTMLCanvasElement): Promise<string | null> {
+  const z = await readQrZxing(canvas).catch(() => null);
+  if (z) return z;
+  return readQrJsqr(canvas);
+}
+
+/** Cách cũ: jsQR trên cả ảnh và từng góc phóng to */
+async function readQrJsqr(canvas: HTMLCanvasElement): Promise<string | null> {
   await loadScript(CDN.jsqr);
   const jsQR = g<JsQR>("jsQR");
   const tries: [number, number, number, number][] = [
@@ -106,7 +155,8 @@ export interface IdCardResult {
 /** Thí sinh: đọc ảnh CCCD (mặt trước có QR là tốt nhất, hoặc mặt sau để lấy ngày cấp, nơi cấp) */
 export async function readIdCard(file: Blob, onProgress?: (msg: string) => void): Promise<IdCardResult> {
   onProgress?.("Đang mở ảnh…");
-  const canvas = await toCanvas(file);
+  // Giữ ảnh lớn hơn (3000px) để mã QR nhỏ trong ảnh chụp điện thoại vẫn đủ chi tiết
+  const canvas = await toCanvas(file, 3000);
   onProgress?.("Đang tìm mã QR trên thẻ…");
   const qr = await readQr(canvas).catch(() => null);
   const fromQr = qr ? parseCccdQr(qr) : null;

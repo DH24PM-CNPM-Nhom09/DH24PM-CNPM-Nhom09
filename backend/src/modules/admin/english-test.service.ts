@@ -5,6 +5,7 @@ import type { StaffUser } from "../../common/auth";
 import { conflict, fail, notFound } from "../../common/errors";
 import { dec, id, isoReq, ymd } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
+import { parseDateTimeVn, tooLong } from "../../common/validate";
 
 /** Hồ sơ đã nộp và chưa bị loại thì mới xếp thi */
 const ACTIVE_REVIEW = ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT", "APPROVED"];
@@ -125,11 +126,13 @@ export class EnglishTestService {
     const location = String(body.location ?? "").trim().replace(/\s+/g, " ") || null;
     const note = String(body.note ?? "").trim().slice(0, 500) || null;
     const capacity = Number(body.capacity);
-    const testAt = new Date(String(body.testAt ?? ""));
+    const testAt = parseDateTimeVn(body.testAt) ?? new Date(NaN);
     if (!/^[A-Z0-9._-]{1,30}$/.test(sessionCode)) fail("VALIDATION", "Mã phòng thi gồm chữ, số (ví dụ TA-01).");
     if (room.length < 1 || room.length > 100) fail("VALIDATION", "Nhập phòng thi (ví dụ: Phòng B2-101).");
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 500) fail("VALIDATION", "Sức chứa từ 1 đến 500 thí sinh.");
     if (Number.isNaN(testAt.getTime())) fail("VALIDATION", "Chọn ngày giờ thi.");
+    const lenErr = tooLong(location, 255, "Địa điểm") ?? tooLong(String(body.note ?? "").trim(), 500, "Ghi chú");
+    if (lenErr) fail("VALIDATION", lenErr);
     return { sessionCode, room, location: location?.slice(0, 255) ?? null, note, capacity, testAt };
   }
 
@@ -161,6 +164,13 @@ export class EnglishTestService {
       return { success: true };
     }
     const d = this.readSession({ sessionCode: s.session_code, ...body });
+    // Mở lại phòng đã hủy chỉ khi cán bộ chọn rõ ("status": "SCHEDULED"); sửa thông tin khác giữ nguyên trạng thái
+    const reopen = s.status === "CANCELLED" && body.status === "SCHEDULED";
+    if (s.status === "COMPLETED" && d.testAt.getTime() !== s.test_at.getTime())
+      fail("VALIDATION", "Phòng thi đã nhập xong kết quả, không đổi được ngày giờ thi.");
+    // Đổi giờ thi (hoặc mở lại phòng) thì giờ mới phải ở tương lai — tránh lùi giờ để nhập kết quả sớm
+    if ((d.testAt.getTime() !== s.test_at.getTime() || reopen) && d.testAt.getTime() < Date.now())
+      fail("VALIDATION", "Ngày giờ thi phải ở tương lai.");
     if (d.capacity < s.english_test_registration.length) fail("VALIDATION", `Phòng đã xếp ${s.english_test_registration.length} thí sinh, sức chứa không được nhỏ hơn số này.`);
     if (d.sessionCode !== s.session_code && (await this.prisma.english_test_session.count({ where: { batch_id: s.batch_id, session_code: d.sessionCode } })))
       conflict("DUPLICATE_CODE", `Đợt này đã có phòng thi ${d.sessionCode}.`);
@@ -168,7 +178,7 @@ export class EnglishTestService {
     await this.prisma.$transaction(async (tx) => {
       await tx.english_test_session.update({
         where: { session_id: s.session_id },
-        data: { session_code: d.sessionCode, test_at: d.testAt, room: d.room, location: d.location, capacity: d.capacity, note: d.note, status: s.status === "CANCELLED" ? "SCHEDULED" : s.status },
+        data: { session_code: d.sessionCode, test_at: d.testAt, room: d.room, location: d.location, capacity: d.capacity, note: d.note, status: reopen ? "SCHEDULED" : s.status },
       });
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "ENGLISH_SESSION_UPDATE", { table: "english_test_session", id: s.session_id }, `${s.admission_batch.batch_code}: cập nhật phòng thi ${d.sessionCode}`, tx);
       // Đổi giờ / phòng: báo lại cho thí sinh đã xếp

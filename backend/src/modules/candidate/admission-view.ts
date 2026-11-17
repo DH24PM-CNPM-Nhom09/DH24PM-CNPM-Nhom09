@@ -41,6 +41,7 @@ export async function admissionView(prisma: PrismaService, config: SystemConfigS
         subjectId: id(s.subject_id),
         subjectName: s.subject_name,
         weight: Number(s.weight),
+        maxScore: Number(s.max_score),
         score: x ? Number(x.score) : null,
         absent: x?.note === ABSENT_NOTE,
         appeal: ap ? { status: ap.status, oldScore: Number(ap.old_score), newScore: ap.new_score === null ? null : Number(ap.new_score), note: ap.resolution_note } : null,
@@ -52,10 +53,10 @@ export async function admissionView(prisma: PrismaService, config: SystemConfigS
     scores = {
       publishedAt: isoReq(bm.scores_published_at),
       items,
-      total: complete ? weightedTotal(items.map((i) => ({ score: i.score as number, weight: i.weight }))) : null,
+      total: complete ? weightedTotal(items.map((i) => ({ score: i.score as number, weight: i.weight, max: i.maxScore }))) : null,
       appealDeadline: iso(bm.appeal_deadline),
       canAppeal: deadlineOk && !req && items.some((i) => i.score !== null && !i.absent),
-      appealFee: await config.int("FEE_APPEAL", 360_000),
+      appealFee: await config.money("FEE_APPEAL", 360_000),
       appeal: req
         ? {
             status: req.status,

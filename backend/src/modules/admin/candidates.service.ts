@@ -5,6 +5,10 @@ import type { StaffUser } from "../../common/auth";
 import { fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, toInt, ymd } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
+import { csvCell } from "../../common/csv";
+
+/** Số dòng tối đa của một lần xuất CSV (đủ cho một kỳ tuyển sinh; vượt thì tệp ghi rõ và web cảnh báo) */
+const EXPORT_MAX_ROWS = 50_000;
 
 type Status = "ACTIVE" | "PENDING_VERIFY" | "LOCKED";
 
@@ -15,8 +19,10 @@ function maskId(v: string | null) {
 
 /**
  * Quản lý tài khoản thí sinh (phía cán bộ): ai đã đăng ký, thông tin cá nhân, hồ sơ đã nộp.
- * Quản trị được khóa / mở khóa. Không xóa tài khoản thí sinh để giữ lịch sử hồ sơ.
+ * Quản trị được khóa / mở khóa / xóa.
  * Khóa = candidate_account.status "LOCKED" (khác khóa tạm do sai mật khẩu, dùng locked_until).
+ * Xóa = xóa mềm (deleted_at) và chỉ cho tài khoản CHƯA NỘP hồ sơ nào (tài khoản thử, đăng ký trùng, bỏ dở):
+ * hồ sơ đã nộp phải được lưu để đối chiếu, khi đó dùng Khóa.
  */
 @Injectable()
 export class CandidateAccountsService {
@@ -217,22 +223,83 @@ export class CandidateAccountsService {
     return { success: true };
   }
 
+  /**
+   * Xóa tài khoản thí sinh (xóa mềm). Chỉ cho tài khoản chưa từng nộp hồ sơ.
+   * Giải phóng email / số điện thoại / số CCCD để người đó đăng ký lại được; hồ sơ nháp (nếu có) bị hủy.
+   * Thông tin gốc (họ tên, email, SĐT) được ghi vào nhật ký hệ thống kèm lý do.
+   */
+  async remove(me: StaffUser, accountId: number, reason: unknown) {
+    const why = String(reason ?? "").trim();
+    if (why.length < 5) fail("REASON_REQUIRED", "Nhập lý do xóa (ít nhất 5 ký tự). Lý do được ghi vào nhật ký hệ thống.");
+    const a = await this.prisma.candidate_account.findFirst({
+      where: { account_id: BigInt(accountId), deleted_at: null },
+      include: { candidate: { include: { application: { where: { deleted_at: null } } } } },
+    });
+    if (!a) notFound("Không tìm thấy tài khoản thí sinh.");
+    const apps = a.candidate?.application ?? [];
+    const submitted = apps.filter((x) => x.submitted_at !== null || x.review_status !== "DRAFT");
+    if (submitted.length)
+      fail(
+        "HAS_SUBMITTED_APPLICATION",
+        `Không xóa được: tài khoản đã nộp hồ sơ ${submitted.map((x) => x.application_code).join(", ")}. Hồ sơ đã nộp phải được lưu để đối chiếu, hãy dùng "Khóa tài khoản".`,
+        HttpStatus.CONFLICT,
+      );
+    const who = [a.candidate?.full_name, a.email, a.phone_number].filter(Boolean).join(" · ") || `#${accountId}`;
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      // Hủy các hồ sơ nháp còn dở
+      if (apps.length)
+        await tx.application.updateMany({ where: { application_id: { in: apps.map((x) => x.application_id) } }, data: { is_cancelled: true, deleted_at: now } });
+      if (a.candidate)
+        await tx.candidate.update({ where: { candidate_id: a.candidate.candidate_id }, data: { id_number: null, deleted_at: now } });
+      await tx.candidate_account.update({
+        where: { account_id: a.account_id },
+        data: {
+          // username/email/SĐT là duy nhất: đổi đi để người đó đăng ký lại bằng chính email/SĐT này được
+          username: `deleted-${a.account_id}-${now.getTime()}`,
+          email: null,
+          phone_number: null,
+          password_hash: null,
+          status: "LOCKED",
+          deleted_at: now,
+        },
+      });
+      await this.audit.record(
+        { type: "STAFF", id: me.staffAccountId },
+        "CANDIDATE_DELETE",
+        { table: "candidate_account", id: a.account_id },
+        `Xóa tài khoản thí sinh ${who}${apps.length ? ` (hủy ${apps.length} hồ sơ nháp)` : ""}: ${why.slice(0, 400)}`,
+        tx,
+      );
+    });
+    return { success: true };
+  }
+
   /** Xuất danh sách (theo bộ lọc hiện tại) ra CSV mở được bằng Excel; ghi nhật ký vì có dữ liệu cá nhân */
   async exportCsv(me: StaffUser, q: Record<string, string | undefined>) {
-    const rows = await this.prisma.candidate_account.findMany({
-      where: await this.where(q),
-      orderBy: { account_id: "asc" },
-      take: 5000,
-      include: { candidate: { include: { application: this.latestApp } } },
-    });
+    // Đọc theo từng lô 1000 dòng (không tải một lần cả bảng); vượt EXPORT_MAX_ROWS thì dừng và BÁO rõ trong tệp + header
+    const where = await this.where(q);
+    const total = await this.prisma.candidate_account.count({ where });
+    const fetchChunk = (after: bigint | undefined, take: number) =>
+      this.prisma.candidate_account.findMany({
+        where,
+        orderBy: { account_id: "asc" },
+        take,
+        ...(after ? { cursor: { account_id: after }, skip: 1 } : {}),
+        include: { candidate: { include: { application: this.latestApp } } },
+      });
+    const rows: Awaited<ReturnType<typeof fetchChunk>> = [];
+    let cursor: bigint | undefined;
+    while (rows.length < EXPORT_MAX_ROWS) {
+      const chunk = await fetchChunk(cursor, Math.min(1000, EXPORT_MAX_ROWS - rows.length));
+      if (!chunk.length) break;
+      rows.push(...chunk);
+      cursor = chunk[chunk.length - 1].account_id;
+    }
+    const truncated = total > rows.length;
     const STATUS_VI: Record<string, string> = { ACTIVE: "Hoạt động", PENDING_VERIFY: "Chưa xác thực email", LOCKED: "Bị khóa" };
     const REVIEW_VI: Record<string, string> = { DRAFT: "Nháp, chưa nộp", SUBMITTED: "Chờ tiếp nhận", UNDER_REVIEW: "Đang thẩm định", NEEDS_SUPPLEMENT: "Chờ bổ sung", APPROVED: "Đạt thẩm định", REJECTED: "Không đạt" };
-    const cell = (v: unknown) => {
-      const s = v === null || v === undefined ? "" : String(v);
-      // Chặn công thức Excel (=, +, -, @) và bọc dấu ngoặc kép
-      const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
+    const cell = csvCell;
     const head = ["STT", "Họ và tên", "Ngày sinh", "Giới tính", "Số CCCD", "Email", "Điện thoại", "Địa chỉ", "Trạng thái tài khoản", "Ngày đăng ký", "Mã hồ sơ gần nhất", "Ngành", "Trạng thái hồ sơ"];
     const lines = rows.map((a, i) => {
       const c = a.candidate;
@@ -255,8 +322,15 @@ export class CandidateAccountsService {
         .map(cell)
         .join(",");
     });
-    await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "CANDIDATE_EXPORT", { table: "candidate_account", id: null }, `Xuất danh sách ${rows.length} tài khoản thí sinh ra tệp CSV`);
+    if (truncated)
+      lines.push(cell(`Tệp chỉ có ${rows.length}/${total} thí sinh đầu tiên (giới hạn ${EXPORT_MAX_ROWS} dòng). Lọc theo đợt / trạng thái rồi xuất từng phần.`));
+    await this.audit.record(
+      { type: "STAFF", id: me.staffAccountId },
+      "CANDIDATE_EXPORT",
+      { table: "candidate_account", id: null },
+      `Xuất danh sách ${rows.length}${truncated ? `/${total}` : ""} tài khoản thí sinh ra tệp CSV`,
+    );
     // BOM để Excel đọc đúng tiếng Việt
-    return "﻿" + [head.map(cell).join(","), ...lines].join("\r\n");
+    return { csv: "﻿" + [head.map(cell).join(","), ...lines].join("\r\n"), total, exported: rows.length, truncated };
   }
 }

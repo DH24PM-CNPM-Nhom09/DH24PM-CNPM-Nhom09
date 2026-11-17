@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { CanActivate, createParamDecorator, ExecutionContext, Injectable, SetMetadata } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
@@ -29,6 +30,13 @@ export type AuthUser = StaffUser | CandidateUser;
 export interface JwtPayload {
   sub: number;
   typ: "STAFF" | "CANDIDATE";
+  /** "Phiên bản mật khẩu" lúc cấp token: đổi / đặt lại mật khẩu thì mọi token cũ hết hiệu lực */
+  pv?: string;
+}
+
+/** Dấu vân tay ngắn của mật khẩu hiện tại (không lộ mật khẩu): đổi mật khẩu là đổi giá trị này */
+export function passwordVersion(passwordHash: string | null | undefined) {
+  return createHash("sha256").update(`pv:${passwordHash ?? "-"}`).digest("base64url").slice(0, 16);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +94,8 @@ export class AuthGuard implements CanActivate {
         include: { staff_role: { include: { role: true } } },
       });
       if (!staff) unauthorized();
+      if (payload.pv === undefined) unauthorized();
+      if (payload.pv !== passwordVersion(staff.password_hash)) unauthorized("Mật khẩu tài khoản vừa được thay đổi. Vui lòng đăng nhập lại.");
       if (staff.status !== "ACTIVE") fail("ACCOUNT_LOCKED", "Tài khoản của bạn đã bị khóa. Liên hệ quản trị hệ thống.", 401);
       const user: StaffUser = {
         type: "STAFF",
@@ -111,6 +121,8 @@ export class AuthGuard implements CanActivate {
         include: { candidate: true },
       });
       if (!account) unauthorized();
+      if (payload.pv === undefined) unauthorized();
+      if (payload.pv !== passwordVersion(account.password_hash)) unauthorized("Mật khẩu tài khoản vừa được thay đổi. Vui lòng đăng nhập lại.");
       if (account.status === "LOCKED") fail("ACCOUNT_LOCKED", "Tài khoản đã bị khóa. Liên hệ Phòng Đào tạo Sau đại học để được hỗ trợ.", 401);
       req.user = {
         type: "CANDIDATE",

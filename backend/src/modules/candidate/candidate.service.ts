@@ -10,7 +10,9 @@ import { conflict, fail, notFound } from "../../common/errors";
 import { id, iso, isoReq, str, ymd } from "../../common/util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { removeFile, saveFile } from "../../common/file-store";
+import { phoneAvailable } from "../../common/pending-accounts";
 import { ApplicationsService } from "../admin/applications.service";
+import { dobError, fullNameError, isVnPhone, normalizeFullName, normalizePhone, parseYmd, tooLong } from "../../common/validate";
 
 const ALLOWED_MIME: Record<string, string> = { "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png" };
 const COMPLAINT_TYPES = ["PHUC_KHAO_DIEM", "KHIEU_NAI_KET_QUA", "KHIEU_NAI_HO_SO", "KHAC"];
@@ -70,28 +72,66 @@ export class CandidateService {
   }
 
   async updateProfile(me: CandidateUser, body: Record<string, unknown>) {
-    const fullName = body.fullName !== undefined ? str(body.fullName).trim() : undefined;
-    const dob = body.dob !== undefined ? new Date(str(body.dob)) : undefined;
+    // Cùng quy tắc với lúc đăng ký (auth.service register) — xem common/validate.ts
+    const fullName = body.fullName !== undefined ? normalizeFullName(body.fullName) : undefined;
+    const dobRaw = body.dob !== undefined ? parseYmd(body.dob) : undefined;
     const gender = body.gender !== undefined ? (body.gender === null ? null : str(body.gender)) : undefined;
     const idNumber = body.idNumber !== undefined ? str(body.idNumber).trim() || null : undefined;
-    const address = body.address !== undefined ? str(body.address).trim() || null : undefined;
-    const phone = body.phoneNumber !== undefined ? str(body.phoneNumber).replace(/\s/g, "") || null : undefined;
+    const address = body.address !== undefined ? str(body.address).trim().replace(/\s+/g, " ") || null : undefined;
+    const phone = body.phoneNumber !== undefined ? normalizePhone(body.phoneNumber) || null : undefined;
 
-    if (fullName !== undefined && fullName.length < 2) fail("VALIDATION", "Họ tên không hợp lệ.");
-    if (dob !== undefined) {
-      if (Number.isNaN(dob.getTime())) fail("VALIDATION", "Ngày sinh không hợp lệ.");
-      const age = (Date.now() - dob.getTime()) / (365.25 * 86_400_000);
-      if (age < 18 || age > 80) fail("VALIDATION", "Ngày sinh không hợp lệ (thí sinh phải từ 18 tuổi).");
+    if (fullName !== undefined) {
+      const e = fullNameError(fullName);
+      if (e) fail("VALIDATION", e);
     }
+    if (dobRaw !== undefined) {
+      const e = dobError(dobRaw);
+      if (e) fail("VALIDATION", e);
+    }
+    const dob = dobRaw ?? undefined;
+    const lenErr = tooLong(address, 1000, "Địa chỉ liên hệ");
+    if (lenErr) fail("VALIDATION", lenErr);
     if (gender !== undefined && gender !== null && !["NAM", "NU", "KHAC"].includes(gender)) fail("VALIDATION", "Giới tính không hợp lệ.");
     if (idNumber && !/^\d{12}$/.test(idNumber)) fail("VALIDATION", "Số CCCD phải gồm đúng 12 chữ số.");
-    if (phone && !/^0\d{9}$/.test(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
+    if (phone && !isVnPhone(phone)) fail("VALIDATION", "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0.");
+
+    // Đã nộp hồ sơ: không tự sửa được thông tin nhận dạng (họ tên, ngày sinh, giới tính, số CCCD) —
+    // đó là thông tin cán bộ đã thẩm định và thí sinh đã cam kết. SĐT, địa chỉ liên hệ vẫn sửa được.
+    const current = me.candidateId
+      ? await this.prisma.candidate.findUnique({
+          where: { candidate_id: BigInt(me.candidateId) },
+          include: { candidate_account: true, application: { where: { deleted_at: null, is_cancelled: false } } },
+        })
+      : null;
+    const apps = current?.application ?? [];
+    const submitted = apps.filter((a) => a.review_status !== "DRAFT");
+    const identityChanged =
+      !!current &&
+      ((fullName !== undefined && fullName !== current.full_name) ||
+        (dob !== undefined && ymd(dob) !== ymd(current.dob)) ||
+        // Bổ sung mục đang trống thì không tính là sửa
+        (gender !== undefined && !!current.gender && gender !== current.gender) ||
+        (idNumber !== undefined && !!current.id_number && idNumber !== current.id_number));
+    if (identityChanged && submitted.length)
+      fail(
+        "PROFILE_LOCKED",
+        `Hồ sơ ${submitted.map((a) => a.application_code).join(", ")} đã nộp nên không sửa được họ tên, ngày sinh, giới tính, số CCCD. Cần đính chính thì gửi yêu cầu ở mục Khiếu nại.`,
+        HttpStatus.CONFLICT,
+      );
+    const contactChanged =
+      !!current &&
+      ((phone !== undefined && phone !== current.candidate_account.phone_number) || (address !== undefined && address !== current.address));
 
     await this.prisma.$transaction(async (tx) => {
       if (phone !== undefined) {
-        if (phone && (await tx.candidate_account.count({ where: { phone_number: phone, account_id: { not: BigInt(me.accountId) } } })))
+        if (phone && !(await phoneAvailable(tx, phone, BigInt(me.accountId))))
           conflict("DUPLICATE_PHONE", "Số điện thoại đã được dùng cho tài khoản khác.");
         await tx.candidate_account.update({ where: { account_id: BigInt(me.accountId) }, data: { phone_number: phone } });
+      }
+      // Hồ sơ nháp đã tích cam kết mà thông tin khai thay đổi -> phải xem lại và tích cam kết lần nữa
+      if (identityChanged || contactChanged) {
+        const drafts = apps.filter((a) => a.review_status === "DRAFT" && a.declaration_confirmed_at).map((a) => a.application_id);
+        if (drafts.length) await tx.application.updateMany({ where: { application_id: { in: drafts } }, data: { declaration_confirmed_at: null } });
       }
       if (idNumber && (await tx.candidate.count({ where: { id_number: idNumber, account_id: { not: BigInt(me.accountId) } } })))
         conflict("DUPLICATE_ID_NUMBER", "Số CCCD đã được dùng cho hồ sơ khác.");

@@ -7,7 +7,7 @@ import { RequirePermission, useAdmin } from "@/components/admin/AdminShell";
 import DocAutoRead from "@/components/admin/DocAutoRead";
 import { IconAlert, IconCheck, IconChevronLeft, IconClock, IconFile } from "@/components/admin/Icons";
 import { Btn, DocBadge, ErrorBox, fieldCls, Label, Modal, Notice, Panel, ReviewBadge, Skeleton, useToast } from "@/components/admin/ui";
-import { confirmPayment, fetchDocumentFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
+import { confirmPayment, fetchDocumentFile, fetchPaymentProofFile, getApplication, reviewApplication, simulateCandidateSupplement, USE_MOCK, verifyDocument, type ApplicationDetail } from "@/lib/admin/api";
 import { DEGREE_LABEL, DOCUMENT_LABEL, errorMessage, LANGUAGE_OPTION_LABEL, fmtDate, fmtDateTime, fmtMoney, fmtSize, PAYMENT_METHOD_LABEL, relativeDays, toLocalInput } from "@/lib/admin/format";
 import { activeSupplement, blockReason, isSupplementOverdue, type ReviewAction } from "@/lib/admin/stateMachine";
 import type { AdminDocument, ReviewStatus } from "@/lib/admin/types";
@@ -279,6 +279,37 @@ function DetailInner() {
               <div className="col-span-2">
                 <Field label="Nội dung chuyển khoản cần đối chiếu">
                   <span className="break-all font-mono text-[13px]">{a.payment.transferContent}</span>
+                </Field>
+              </div>
+            )}
+            {(a.payment.proofs?.length ?? 0) > 0 && (
+              <div className="col-span-2">
+                <Field label="Minh chứng chuyển khoản thí sinh gửi">
+                  <ul className="mt-1 flex flex-col gap-1.5">
+                    {a.payment.proofs!.map((p) => (
+                      <li key={p.proofId} className="text-[13px]">
+                        <button
+                          type="button"
+                          className="font-semibold text-accent hover:underline"
+                          onClick={() =>
+                            fetchPaymentProofFile(p.proofId)
+                              .then((b) => {
+                                const url = URL.createObjectURL(b);
+                                window.open(url, "_blank", "noopener");
+                                setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                              })
+                              .catch((e) => toast(errorMessage(e), "error"))
+                          }
+                        >
+                          {p.fileName}
+                        </button>
+                        <span className="font-normal text-gray-500"> · {fmtDateTime(p.uploadedAt)}{p.note ? ` · ${p.note}` : ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {a.payment.gatewayStatus !== "SUCCESS" && (
+                    <span className="mt-1 block text-xs font-normal text-gray-500">Ảnh chụp có thể bị chỉnh sửa: đối chiếu sao kê tài khoản trước khi bấm xác nhận đã nộp lệ phí.</span>
+                  )}
                 </Field>
               </div>
             )}

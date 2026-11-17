@@ -21,6 +21,7 @@ import { SystemConfigService } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
 import { dec, id, iso, isoReq, ymd } from "../../common/util";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
+import { parseDateTimeVn, parseYmd } from "../../common/validate";
 
 const ROLES = ["CHU_TICH", "THU_KY", "UY_VIEN"];
 
@@ -152,7 +153,7 @@ export class ScoringService {
         scores,
         complete,
         absent: Object.values(scores).some((s) => s.absent),
-        total: complete ? weightedTotal(subjects.map((s) => ({ score: scores[s.subjectId].score, weight: s.weight }))) : null,
+        total: complete ? weightedTotal(subjects.map((s) => ({ score: scores[s.subjectId].score, weight: s.weight, max: s.maxScore }))) : null,
         appeal: a.appeal_request ? { status: a.appeal_request.status } : null,
       };
     });
@@ -193,7 +194,7 @@ export class ScoringService {
     const name = String(body.committeeName ?? "").trim().replace(/\s+/g, " ");
     const decisionNo = String(body.decisionNo ?? "").trim().slice(0, 50) || null;
     const formedRaw = String(body.formedAt ?? "").trim();
-    const formedAt = formedRaw ? new Date(`${formedRaw}T00:00:00Z`) : null;
+    const formedAt = formedRaw ? (parseYmd(formedRaw) ?? new Date(NaN)) : null;
     if (name.length < 5 || name.length > 255) fail("VALIDATION", "Nhập tên tiểu ban (ví dụ: Tiểu ban xét tuyển ngành Khoa học máy tính).");
     if (formedAt && Number.isNaN(formedAt.getTime())) fail("VALIDATION", "Ngày thành lập không hợp lệ.");
     const raw = Array.isArray(body.members) ? (body.members as Record<string, unknown>[]) : [];
@@ -242,6 +243,27 @@ export class ScoringService {
     );
   }
 
+  /**
+   * Các lượt phỏng vấn đang hẹn (SCHEDULED) cùng phòng / đường dẫn — của MỌI ngành, mọi đợt — hoặc của cùng tiểu ban.
+   * Dùng để không xếp hai thí sinh vào cùng một phòng / một tiểu ban trong cùng khung giờ.
+   */
+  private async busySlots(tx: Tx, location: string, committeeId: bigint, from: Date, excludeScheduleId?: bigint) {
+    const rows = await tx.interview_schedule.findMany({
+      where: {
+        status: "SCHEDULED",
+        scheduled_at: { gte: new Date(from.getTime() - 3 * 3_600_000) },
+        OR: [{ location_or_link: location }, { committee_id: committeeId }],
+        ...(excludeScheduleId ? { schedule_id: { not: excludeScheduleId } } : {}),
+      },
+      include: { application: { select: { application_code: true, admission_batch_major: { select: { admission_major: { select: { major_name: true } } } } } } },
+    });
+    return rows.map((r) => ({
+      at: r.scheduled_at.getTime(),
+      sameRoom: (r.location_or_link ?? "").trim().toLowerCase() === location.trim().toLowerCase(),
+      label: `${r.application.application_code} (${r.application.admission_batch_major.admission_major.major_name}) lúc ${vnTime(r.scheduled_at)}`,
+    }));
+  }
+
   async autoSchedule(me: StaffUser, batchMajorId: number, body: Record<string, unknown>) {
     const bm = await this.loadBm(batchMajorId);
     this.assertScoringOpen(bm);
@@ -250,7 +272,7 @@ export class ScoringService {
       fail("NO_INTERVIEW", "Ngành này không có hình thức phỏng vấn / trình bày nên không cần xếp lịch.", HttpStatus.CONFLICT);
     const committee = await this.activeCommittee(bm.batch_major_id);
     if (!committee) fail("NO_COMMITTEE", "Lập tiểu ban xét tuyển trước khi xếp lịch.", HttpStatus.CONFLICT);
-    const startAt = new Date(String(body.startAt ?? ""));
+    const startAt = parseDateTimeVn(body.startAt) ?? new Date(NaN);
     const minutes = Number(body.minutes);
     const location = String(body.location ?? "").trim().replace(/\s+/g, " ").slice(0, 500) || null;
     if (Number.isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) fail("VALIDATION", "Chọn thời điểm bắt đầu ở tương lai.");
@@ -266,8 +288,17 @@ export class ScoringService {
         });
         if (!waiting.length) return { scheduled: 0 };
         const slots = workingSlots(startAt, minutes);
+        // Bỏ qua khung giờ mà phòng này (ngành khác đã xếp) hoặc tiểu ban này đang bận
+        const busy = await this.busySlots(tx, location, committee.committee_id, startAt);
+        const clash = (t: number) => busy.some((b) => Math.abs(b.at - t) < minutes * 60_000);
+        let skipped = 0;
         for (const a of waiting) {
-          const at = slots.next().value as Date;
+          let at = slots.next().value as Date;
+          while (clash(at.getTime())) {
+            at = slots.next().value as Date;
+            if (++skipped > 5000) fail("NO_SLOT", "Không tìm được khung giờ trống cho phòng này. Chọn phòng khác hoặc ngày bắt đầu khác.", HttpStatus.CONFLICT);
+          }
+          busy.push({ at: at.getTime(), sameRoom: true, label: "" });
           await tx.interview_schedule.create({ data: { application_id: a.application_id, committee_id: committee.committee_id, scheduled_at: at, location_or_link: location } });
           await this.notifyInterview(tx, a.candidate_id, a.application_code, label, at, location, committee.committee_name);
         }
@@ -278,7 +309,7 @@ export class ScoringService {
           `${bm.admission_batch.batch_code} – ${bm.admission_major.major_name}: xếp lịch ${label.toLowerCase()} cho ${waiting.length} thí sinh từ ${vnTime(startAt)}, ${minutes} phút/lượt`,
           tx,
         );
-        return { scheduled: waiting.length };
+        return { scheduled: waiting.length, skippedBusySlots: skipped };
       },
       { timeout: 60_000 },
     );
@@ -293,12 +324,21 @@ export class ScoringService {
     if (s.status !== "SCHEDULED") fail("INVALID_STATE", "Lịch này đã có điểm, không đổi được.", HttpStatus.CONFLICT);
     const bm = await this.loadBm(id(s.application.batch_major_id));
     this.assertNotPublished(bm);
-    const at = new Date(String(body.scheduledAt ?? ""));
+    const at = parseDateTimeVn(body.scheduledAt) ?? new Date(NaN);
     const location = String(body.location ?? "").trim().replace(/\s+/g, " ").slice(0, 500) || null;
     if (Number.isNaN(at.getTime()) || at.getTime() < Date.now()) fail("VALIDATION", "Chọn thời gian ở tương lai.");
     if (!location) fail("VALIDATION", "Nhập địa điểm hoặc đường dẫn.");
     const label = bm.admission_batch.degree_level === "TIEN_SI" ? "Trình bày đề cương nghiên cứu" : "Phỏng vấn chuyên môn";
+    const minutes = await this.config.int("INTERVIEW_MINUTES", 20);
     await this.prisma.$transaction(async (tx) => {
+      // Không cho trùng phòng (với bất kỳ ngành nào) hoặc trùng giờ của cùng tiểu ban
+      const busy = await this.busySlots(tx, location, s.committee_id, at, s.schedule_id);
+      const hit = busy.find((b) => Math.abs(b.at - at.getTime()) < minutes * 60_000);
+      if (hit)
+        conflict(
+          "SCHEDULE_CLASH",
+          `${hit.sameRoom ? "Phòng / đường dẫn này" : "Tiểu ban này"} đã có lịch ${hit.label} (mỗi lượt ${minutes} phút). Chọn giờ hoặc phòng khác.`,
+        );
       await tx.interview_schedule.update({ where: { schedule_id: s.schedule_id }, data: { scheduled_at: at, location_or_link: location } });
       await this.audit.record({ type: "STAFF", id: me.staffAccountId }, "INTERVIEW_UPDATE", { table: "interview_schedule", id: s.schedule_id }, `${s.application.application_code}: đổi lịch sang ${vnTime(at)}, ${location}`, tx);
       await this.notifyInterview(tx, s.application.candidate_id, s.application.application_code, label, at, location, s.admission_committee.committee_name, true);
@@ -365,6 +405,40 @@ export class ScoringService {
   }
 
   // ====================================================================== công bố điểm
+  /**
+   * Kết thúc sớm hạn phúc khảo của một ngành (VD mọi thí sinh đã xác nhận không phúc khảo, hoặc khi chạy thử / demo).
+   * Chỉ được khi không còn đơn phúc khảo nào đang chờ (chờ nộp phí hoặc chờ hội đồng kết luận).
+   * Bắt buộc ghi lý do; ghi nhật ký và báo cho thí sinh.
+   */
+  async closeAppealWindow(me: StaffUser, batchMajorId: number, body: Record<string, unknown>) {
+    const reason = String(body.reason ?? "").trim().replace(/\s+/g, " ").slice(0, 300);
+    if (reason.length < 10) fail("REASON_REQUIRED", "Ghi rõ lý do kết thúc sớm hạn phúc khảo (ít nhất 10 ký tự).");
+    const bm = await this.loadBm(batchMajorId);
+    if (!bm.scores_published_at || !bm.appeal_deadline) fail("INVALID_STATE", "Ngành này chưa công bố điểm.", HttpStatus.CONFLICT);
+    if (bm.appeal_deadline.getTime() <= Date.now()) fail("INVALID_STATE", "Hạn phúc khảo đã kết thúc.", HttpStatus.CONFLICT);
+    const inBm = { application: { batch_major_id: bm.batch_major_id } };
+    const waitingFee = await this.prisma.appeal_request.count({ where: { status: "CHO_NOP_PHI", ...inBm } });
+    const waitingCouncil = await this.prisma.score_appeal.count({ where: { status: "PENDING", exam_score: inBm } });
+    if (waitingFee || waitingCouncil)
+      fail("APPEALS_PENDING", `Còn ${waitingFee + waitingCouncil} đơn phúc khảo đang chờ xử lý (mục Phúc khảo). Xử lý xong mới kết thúc sớm được.`, HttpStatus.CONFLICT);
+    const apps = await this.prisma.application.findMany({ where: eligibleWhere(bm.batch_major_id), select: { candidate_id: true, application_code: true } });
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const r = await tx.admission_batch_major.updateMany({ where: { batch_major_id: bm.batch_major_id, appeal_deadline: bm.appeal_deadline }, data: { appeal_deadline: now } });
+      if (r.count === 0) conflict("STALE_STATUS", "Hạn phúc khảo vừa được người khác cập nhật, tải lại trang.");
+      for (const a of apps)
+        await this.audit.notifyCandidate(id(a.candidate_id), "Kết thúc nhận đơn phúc khảo", `Hồ sơ ${a.application_code} — ${bm.admission_major.major_name}: Hội đồng tuyển sinh đã kết thúc nhận đơn phúc khảo điểm xét tuyển. Kết quả trúng tuyển sẽ được công bố trên cổng.`, tx);
+      await this.audit.record(
+        { type: "STAFF", id: me.staffAccountId },
+        "APPEAL_WINDOW_CLOSE",
+        { table: "admission_batch_major", id: bm.batch_major_id },
+        `${bm.admission_batch.batch_code} – ${bm.admission_major.major_name}: kết thúc sớm hạn phúc khảo (hạn cũ ${vnTime(bm.appeal_deadline!)}). Lý do: ${reason}`,
+        tx,
+      );
+    });
+    return { success: true };
+  }
+
   async publishScores(me: StaffUser, batchMajorId: number) {
     const bm = await this.loadBm(batchMajorId);
     this.assertScoringOpen(bm);
@@ -376,7 +450,7 @@ export class ScoringService {
     const missing = apps.filter((a) => bm.exam_subject.some((s) => !a.exam_score.some((x) => x.subject_id === s.subject_id)));
     if (missing.length) fail("SCORES_INCOMPLETE", `Còn ${missing.length} thí sinh chưa đủ điểm các hình thức xét (ví dụ ${missing[0].application_code}).`, HttpStatus.CONFLICT);
     const days = await this.config.int("APPEAL_WINDOW_DAYS", 7);
-    const fee = await this.config.int("FEE_APPEAL", 360_000);
+    const fee = await this.config.money("FEE_APPEAL", 360_000);
     const now = new Date();
     const deadline = deadlineAfterDays(now, days);
     await this.prisma.$transaction(
@@ -388,7 +462,7 @@ export class ScoringService {
             const x = a.exam_score.find((e) => e.subject_id === s.subject_id)!;
             return `- ${s.subject_name} (hệ số ${Number(s.weight)}): ${x.note === ABSENT_NOTE ? "vắng" : Number(x.score)}`;
           });
-          const total = weightedTotal(bm.exam_subject.map((s) => ({ score: Number(a.exam_score.find((e) => e.subject_id === s.subject_id)!.score), weight: Number(s.weight) })));
+          const total = weightedTotal(bm.exam_subject.map((s) => ({ score: Number(a.exam_score.find((e) => e.subject_id === s.subject_id)!.score), weight: Number(s.weight), max: Number(s.max_score) })));
           await this.audit.notifyCandidate(
             id(a.candidate_id),
             "Công bố điểm xét tuyển",
@@ -471,7 +545,7 @@ export class ScoringService {
       if (s.note === ABSENT_NOTE) fail("VALIDATION", "Không phúc khảo được phần thí sinh vắng mặt.");
       return s;
     });
-    const fee = await this.config.int("FEE_APPEAL", 360_000);
+    const fee = await this.config.money("FEE_APPEAL", 360_000);
     await this.prisma.$transaction(async (tx) => {
       const req = await tx.appeal_request.create({ data: { application_id: a.application_id, reason: reason, fee_amount: new Prisma.Decimal(fee), status: fee > 0 ? "CHO_NOP_PHI" : "DA_NOP_PHI" } });
       for (const s of scores) await tx.score_appeal.create({ data: { score_id: s.score_id, reason, old_score: s.score } });

@@ -434,6 +434,7 @@ CREATE TABLE IF NOT EXISTS `enrollment_completion` (
   `transfer_ref` varchar(100) DEFAULT NULL COMMENT 'Mã hồ sơ bên Phân hệ Đào tạo sau khi chuyển giao',
   PRIMARY KEY (`completion_id`),
   UNIQUE KEY `application_id` (`application_id`),
+  UNIQUE KEY `uq_completion_transfer_ref` (`transfer_ref`),
   KEY `fk_completion_staff` (`completed_by_staff_id`),
   CONSTRAINT `fk_completion_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`application_id`),
   CONSTRAINT `fk_completion_staff` FOREIGN KEY (`completed_by_staff_id`) REFERENCES `staff_account` (`staff_account_id`)
@@ -531,6 +532,22 @@ CREATE TABLE IF NOT EXISTS `lecturer` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `payment_proof` (
+  `proof_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `payment_id` bigint(20) unsigned NOT NULL,
+  `application_id` bigint(20) unsigned NOT NULL,
+  `file_path` varchar(255) NOT NULL,
+  `file_name` varchar(255) NOT NULL,
+  `file_size_kb` int(10) unsigned NOT NULL,
+  `note` varchar(500) DEFAULT NULL,
+  `uploaded_at` datetime NOT NULL DEFAULT (UTC_TIMESTAMP()),
+  PRIMARY KEY (`proof_id`),
+  KEY `idx_payment_proof_payment` (`payment_id`),
+  KEY `idx_payment_proof_application` (`application_id`),
+  CONSTRAINT `fk_proof_payment` FOREIGN KEY (`payment_id`) REFERENCES `application_payment` (`payment_id`),
+  CONSTRAINT `fk_proof_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`application_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `notification` (
   `notification_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `recipient_type` varchar(20) NOT NULL CHECK (`recipient_type` in ('CANDIDATE','STAFF')),
@@ -544,7 +561,8 @@ CREATE TABLE IF NOT EXISTS `notification` (
   `read_at` datetime DEFAULT NULL,
   PRIMARY KEY (`notification_id`),
   KEY `idx_notification_recipient` (`recipient_type`,`recipient_id`),
-  KEY `idx_notification_created` (`created_at`)
+  KEY `idx_notification_created` (`created_at`),
+  KEY `idx_notification_queue` (`status`,`channel`,`notification_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `original_document_submission` (
@@ -657,6 +675,14 @@ CREATE TABLE IF NOT EXISTS `stored_file` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`file_path`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Nội dung tệp minh chứng khi UPLOAD_STORAGE=db';
+
+CREATE TABLE IF NOT EXISTS `security_counter` (
+  `counter_key` varchar(191) NOT NULL COMMENT 'otp:<otp_id> hoặc rl:<ip>|<đường dẫn>',
+  `hits` int(10) unsigned NOT NULL DEFAULT 0,
+  `reset_at` datetime NOT NULL COMMENT 'Hết thời hạn đếm (UTC)',
+  PRIMARY KEY (`counter_key`),
+  KEY `idx_security_counter_reset` (`reset_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bộ đếm nhập sai OTP và giới hạn số lần gọi API xác thực';
 
 CREATE TABLE IF NOT EXISTS `supervisor_request` (
   `request_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,

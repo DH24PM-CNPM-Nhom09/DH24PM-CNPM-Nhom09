@@ -32,17 +32,14 @@ import { CandidateController } from "./modules/candidate/candidate.controller";
 import { CandidateService } from "./modules/candidate/candidate.service";
 import { HealthController } from "./modules/health/health.controller";
 import { PrismaModule } from "./prisma/prisma.service";
+import { jwtSecret } from "./common/jwt-secret";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     JwtModule.registerAsync({
       global: true,
-      useFactory: () => {
-        const secret = process.env.JWT_SECRET;
-        if (!secret || secret.length < 16) throw new Error("JWT_SECRET chưa được cấu hình (cần ít nhất 16 ký tự) trong file .env");
-        return { secret, signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "8h" } };
-      },
+      useFactory: () => ({ secret: jwtSecret(), signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "8h" } }),
     }),
     PrismaModule,
     AuditModule,

@@ -9,6 +9,22 @@ import type { Response } from "express";
  * - Vi phạm UNIQUE / FK / CHECK: đổi sang câu tiếng Việt dễ hiểu.
  * - Lỗi khác: 500, không lộ chi tiết kỹ thuật ra ngoài.
  */
+/** Tên cột thường gặp -> tên mục trên giao diện */
+const FIELD_VI: Record<string, string> = {
+  full_name: "Họ và tên",
+  batch_name: "Tên đợt",
+  legal_basis: "Căn cứ pháp lý",
+  major_name: "Tên ngành",
+  title: "Tiêu đề",
+  committee_name: "Tên tiểu ban",
+  location_or_link: "Địa điểm / đường dẫn",
+  id_issue_place: "Nơi cấp CCCD",
+  birthplace: "Nơi sinh",
+  institution_name: "Tên cơ sở đào tạo",
+  reason: "Lý do",
+  note: "Ghi chú",
+};
+
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger("API");
@@ -38,6 +54,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
       if (exception.code === "P2002") return send(409, "DUPLICATE", "Dữ liệu bị trùng với bản ghi đã có.");
       if (exception.code === "P2003") return send(400, "INVALID_REFERENCE", "Dữ liệu tham chiếu không tồn tại.");
       if (exception.code === "P2025") return send(404, "NOT_FOUND", "Không tìm thấy dữ liệu.");
+      // P2000: giá trị dài hơn cột trong CSDL (VD họ tên > 255 ký tự) — lỗi do dữ liệu nhập, không phải sự cố hệ thống
+      if (exception.code === "P2000") {
+        const col = String((exception.meta as { column_name?: string } | undefined)?.column_name ?? "").replace(/[`'"]/g, "");
+        return send(400, "VALUE_TOO_LONG", `Nội dung nhập quá dài${col && FIELD_VI[col] ? ` ở mục "${FIELD_VI[col]}"` : ""}. Vui lòng rút gọn rồi thử lại.`);
+      }
+    }
+    // Câu SQL viết tay ($queryRaw / $executeRaw) báo lỗi quá dài bằng thông điệp gốc của MySQL / MariaDB
+    if (/Data too long for column|code: 1406\b|\b22001\b/i.test(raw)) {
+      return send(400, "VALUE_TOO_LONG", "Nội dung nhập quá dài. Vui lòng rút gọn rồi thử lại.");
     }
     if (/CONSTRAINT `[^`]+` failed|check constraint/i.test(raw)) {
       return send(400, "CONSTRAINT_VIOLATION", "Dữ liệu không thỏa ràng buộc của hệ thống (giá trị ngoài phạm vi cho phép).");

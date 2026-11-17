@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Put, Query, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Put, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { asStaff, CurrentUser, RequirePermission, type AuthUser } from "../../common/auth";
 import { str } from "../../common/util";
@@ -95,6 +95,17 @@ export class ApplicationsController {
   @RequirePermission("application:view")
   async file(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
     const { data, fileName, type } = await this.svc.documentFile(id);
+    res.setHeader("Content-Type", type);
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(data);
+  }
+
+  /** Ảnh / PDF chuyển khoản lệ phí thí sinh gửi */
+  @Get("admin/payment-proofs/:id/file")
+  @RequirePermission("application:view")
+  async paymentProof(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+    const { data, fileName, type } = await this.svc.paymentProofFile(id);
     res.setHeader("Content-Type", type);
     res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`);
     res.setHeader("Cache-Control", "private, no-store");
@@ -250,8 +261,13 @@ export class CandidateAccountsController {
   @Get("export")
   @RequirePermission("candidate:view")
   async export(@CurrentUser() user: AuthUser, @Query() q: Q, @Res() res: Response) {
-    const csv = await this.svc.exportCsv(asStaff(user), q);
+    const { csv, total, exported, truncated } = await this.svc.exportCsv(asStaff(user), q);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    // Web đọc 2 header này để cảnh báo khi danh sách bị cắt bớt
+    res.setHeader("X-Export-Total", String(total));
+    res.setHeader("X-Export-Rows", String(exported));
+    if (truncated) res.setHeader("X-Export-Truncated", "1");
+    res.setHeader("Access-Control-Expose-Headers", "X-Export-Total, X-Export-Rows, X-Export-Truncated, Content-Disposition");
     res.setHeader("Content-Disposition", `attachment; filename="danh-sach-thi-sinh.csv"`);
     res.setHeader("Cache-Control", "private, no-store");
     res.send(csv);
@@ -273,6 +289,13 @@ export class CandidateAccountsController {
   @RequirePermission("candidate:manage")
   unlock(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
     return this.svc.unlock(asStaff(user), id);
+  }
+
+  /** Xóa tài khoản chưa nộp hồ sơ (body: { reason }) */
+  @Delete(":id")
+  @RequirePermission("candidate:manage")
+  remove(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.remove(asStaff(user), id, body?.reason);
   }
 }
 
@@ -425,6 +448,13 @@ export class ScoringController {
   @RequirePermission("score:enter")
   scores(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
     return this.svc.saveScores(asStaff(user), id, body);
+  }
+
+  @Post("majors/:id/close-appeal-window")
+  @HttpCode(200)
+  @RequirePermission("exam:manage")
+  closeAppealWindow(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number, @Body() body: B) {
+    return this.svc.closeAppealWindow(asStaff(user), id, body);
   }
 
   @Post("majors/:id/publish-scores")

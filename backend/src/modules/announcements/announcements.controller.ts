@@ -27,7 +27,9 @@ export class PublicController {
   @Get("auth-config")
   authConfig() {
     const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || null;
-    return { googleClientId, googleDemo: !googleClientId && String(process.env.DEV_AUTH_BYPASS ?? "").toLowerCase() === "true" };
+    const devBypass = String(process.env.DEV_AUTH_BYPASS ?? "").toLowerCase() === "true";
+    // devAuthBypass: máy chủ đang ở chế độ chạy thử (hiện mã OTP; đăng nhập Google giả nếu chưa có GOOGLE_CLIENT_ID)
+    return { googleClientId, googleDemo: !googleClientId && devBypass, devAuthBypass: devBypass };
   }
 
   @Public()

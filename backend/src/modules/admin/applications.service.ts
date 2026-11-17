@@ -5,7 +5,7 @@ import * as path from "path";
 import { AuditService } from "../../common/audit.service";
 import { can } from "../../common/permissions";
 import type { StaffUser } from "../../common/auth";
-import { env } from "../../common/config.service";
+import { env, parseMoney } from "../../common/config.service";
 import { conflict, fail, notFound } from "../../common/errors";
 import { ABSENT_NOTE } from "../../common/admission";
 import { blockReason, REVIEW_VI, STAFF_ACTIONS, TRANSITIONS, type ReviewAction, type ReviewFacts, type ReviewStatus } from "../../common/review-rules";
@@ -13,6 +13,7 @@ import { dec, id, iso, isoReq, num, parseReviewStatus, toInt, transferNote, ymd 
 import { contentType, readFile } from "../../common/file-store";
 import { PrismaService, type Tx } from "../../prisma/prisma.service";
 import { toAuditDto, toBatchDto, toBatchMajorDto, toHistoryDto, toMajorDto } from "./mappers";
+import { parseDateTimeVn } from "../../common/validate";
 
 const REVIEWABLE: ReviewStatus[] = ["SUBMITTED", "UNDER_REVIEW", "NEEDS_SUPPLEMENT", "APPROVED", "REJECTED"];
 
@@ -137,8 +138,9 @@ export class ApplicationsService {
   // ------------------------------------------------------------------ bảng điều khiển
   async dashboard(me: StaffUser) {
     const now = new Date();
+    // Đợt đang chạy: còn nhận hồ sơ, đã đóng nhận nhưng còn thẩm định, hoặc đang xét kết quả
     const openBatches = await this.prisma.admission_batch.findMany({
-      where: { status: "OPEN", deleted_at: null },
+      where: { status: { in: ["OPEN", "CLOSED", "IN_REVIEW"] }, deleted_at: null },
       include: { admission_batch_major: { include: { admission_major: true } } },
       orderBy: { created_at: "desc" },
     });
@@ -291,7 +293,7 @@ export class ApplicationsService {
         candidate: { include: { candidate_account: true } },
         application_education: true,
         application_document: { orderBy: { document_id: "asc" } },
-        application_payment: { orderBy: { payment_id: "desc" } },
+        application_payment: { orderBy: { payment_id: "desc" }, include: { payment_proof: { orderBy: { proof_id: "desc" } } } },
         supplement_request: { orderBy: { request_id: "desc" } },
         application_status_history: { orderBy: { history_id: "asc" } },
         admission_batch_major: { include: { admission_batch: true, admission_major: true, exam_subject: true, admission_condition: true } },
@@ -410,6 +412,8 @@ export class ApplicationsService {
                 }
               })(),
               transferContent: transferNote(a.application_code),
+              // Ảnh / PDF chuyển khoản thí sinh gửi để đối chiếu trước khi xác nhận
+              proofs: pay.payment_proof.map((p) => ({ proofId: id(p.proof_id), fileName: p.file_name, fileSizeKb: p.file_size_kb, note: p.note, uploadedAt: isoReq(p.uploaded_at) })),
             }
           : null,
         supplements: a.supplement_request.map((s) => ({
@@ -438,7 +442,7 @@ export class ApplicationsService {
   async confirmPayment(me: StaffUser, applicationId: number, body: { receiptNo?: unknown; transactionCode?: unknown; paidAt?: unknown }) {
     const receiptNo = String(body.receiptNo ?? "").trim().slice(0, 50) || null;
     const transactionCode = String(body.transactionCode ?? "").trim().slice(0, 100) || null;
-    const paidAt = body.paidAt ? new Date(String(body.paidAt)) : new Date();
+    const paidAt = body.paidAt ? (parseDateTimeVn(body.paidAt) ?? new Date(NaN)) : new Date();
     if (Number.isNaN(paidAt.getTime()) || paidAt.getTime() > Date.now() + 60_000) fail("VALIDATION", "Ngày nộp tiền không hợp lệ.");
     const a = await this.prisma.application.findFirst({
       where: { application_id: BigInt(applicationId), ...this.base() },
@@ -480,12 +484,12 @@ export class ApplicationsService {
     const rows = await this.prisma.system_config.findMany({ where: { config_key: { in: keys } } });
     const v = (k: string) => rows.find((r) => r.config_key === k)?.config_value?.trim() ?? "";
     return {
-      feeRegistration: Number(v("FEE_REGISTRATION")) || 100_000,
-      feeThacSi: Number(v("APPLICATION_FEE_THAC_SI")) || 360_000,
-      feeTienSi: Number(v("APPLICATION_FEE_TIEN_SI")) || 1_000_000,
-      feeEnglishTest: Number(v("FEE_ENGLISH_TEST")) || 120_000,
-      feeSupplementCredit: Number(v("FEE_SUPPLEMENT_CREDIT")) || 490_000,
-      feeAppeal: Number(v("FEE_APPEAL")) || 360_000,
+      feeRegistration: parseMoney(v("FEE_REGISTRATION"), 100_000),
+      feeThacSi: parseMoney(v("APPLICATION_FEE_THAC_SI"), 360_000),
+      feeTienSi: parseMoney(v("APPLICATION_FEE_TIEN_SI"), 1_000_000),
+      feeEnglishTest: parseMoney(v("FEE_ENGLISH_TEST"), 120_000),
+      feeSupplementCredit: parseMoney(v("FEE_SUPPLEMENT_CREDIT"), 490_000),
+      feeAppeal: parseMoney(v("FEE_APPEAL"), 360_000),
       bankBin: v("PAYMENT_BANK_BIN"),
       bankName: v("PAYMENT_BANK_NAME"),
       accountNo: v("PAYMENT_ACCOUNT_NO"),
@@ -559,11 +563,21 @@ export class ApplicationsService {
 
   /** Nội dung tệp minh chứng (trên đĩa hoặc trong CSDL tùy UPLOAD_STORAGE) */
   async documentFile(documentId: number) {
-    const doc = await this.prisma.application_document.findUnique({ where: { document_id: BigInt(documentId) } });
-    if (!doc) notFound("Không tìm thấy minh chứng.");
+    const doc = await this.prisma.application_document.findUnique({ where: { document_id: BigInt(documentId) }, include: { application: true } });
+    // Hồ sơ nháp (thí sinh chưa nộp) hay đã xóa thì cán bộ không xem được, giống danh sách hồ sơ
+    if (!doc || doc.application.review_status === "DRAFT" || doc.application.deleted_at) notFound("Không tìm thấy minh chứng.");
     const data = await readFile(this.prisma, doc.file_path);
     if (!data) notFound("Tệp minh chứng không còn trên máy chủ.");
     return { data, fileName: doc.file_name, type: contentType(doc.file_path) };
+  }
+
+  /** Tệp minh chứng chuyển khoản lệ phí do thí sinh gửi */
+  async paymentProofFile(proofId: number) {
+    const p = await this.prisma.payment_proof.findUnique({ where: { proof_id: BigInt(proofId) }, include: { application: true } });
+    if (!p || p.application.deleted_at) notFound("Không tìm thấy tệp chuyển khoản.");
+    const data = await readFile(this.prisma, p.file_path);
+    if (!data) notFound("Tệp không còn trên máy chủ.");
+    return { data, fileName: p.file_name, type: contentType(p.file_path) };
   }
 
   // ------------------------------------------------------------------ thẩm định
@@ -577,7 +591,8 @@ export class ApplicationsService {
     if (act === "REJECT" && (!reason || reason.length < 10)) fail("REASON_REQUIRED", "Lý do không đạt cần ít nhất 10 ký tự để thí sinh hiểu rõ.");
     if (act === "REQUEST_SUPPLEMENT") {
       if (content.length < 10) fail("CONTENT_REQUIRED", "Nêu cụ thể giấy tờ cần bổ sung (ít nhất 10 ký tự).");
-      deadline = payload.deadline ? new Date(payload.deadline) : null;
+      // Chuỗi không kèm múi giờ = giờ Việt Nam (backend chạy UTC; trước đây lệch 7 tiếng)
+      deadline = payload.deadline ? parseDateTimeVn(payload.deadline) : null;
       if (!deadline || Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) fail("INVALID_DEADLINE", "Hạn bổ sung phải sau thời điểm hiện tại.");
       reason = content;
     }

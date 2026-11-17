@@ -67,7 +67,7 @@ export class AuthController {
   @Post("register/verify")
   @HttpCode(200)
   verifyRegister(@Body() body: Record<string, unknown>) {
-    return this.auth.verifyRegister(str(body.email), str(body.otp));
+    return this.auth.verifyRegister(str(body.email), str(body.otp), body.password ? str(body.password) : undefined);
   }
 
   @Public()

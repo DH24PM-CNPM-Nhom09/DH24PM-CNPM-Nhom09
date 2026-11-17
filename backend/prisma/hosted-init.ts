@@ -14,6 +14,7 @@ import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { seedAnnouncements } from "./announcements-seed";
+import { ensureIndexes } from "./ensure-indexes";
 import { normalizeDatabaseUrl } from "./hosted-util";
 
 const SQL_FILE = path.join(__dirname, "..", "database", "hosted", "admission_db_mysql.sql");
@@ -62,8 +63,18 @@ function runSeed(demo: boolean) {
       await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
       console.log("✓ Đã tạo đủ bảng và dữ liệu cấu hình.");
     } else {
-      console.log("✓ CSDL đã có bảng, giữ nguyên dữ liệu.");
+      // CSDL đã có dữ liệu: chỉ bổ sung các bảng mới thêm ở bản sau (CREATE TABLE IF NOT EXISTS), không đụng dữ liệu cũ
+      const creates = statements(SQL_FILE).filter((s) => /^CREATE TABLE IF NOT EXISTS/i.test(s));
+      const [{ n_before }] = await prisma.$queryRawUnsafe<{ n_before: bigint }[]>("SELECT COUNT(*) AS n_before FROM information_schema.tables WHERE table_schema = DATABASE()");
+      await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
+      for (const s of creates) await prisma.$executeRawUnsafe(s);
+      await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+      const [{ n_after }] = await prisma.$queryRawUnsafe<{ n_after: bigint }[]>("SELECT COUNT(*) AS n_after FROM information_schema.tables WHERE table_schema = DATABASE()");
+      const added = Number(n_after) - Number(n_before);
+      console.log(added > 0 ? `✓ CSDL đã có dữ liệu, bổ sung ${added} bảng mới.` : "✓ CSDL đã có bảng, giữ nguyên dữ liệu.");
     }
+    // Chỉ mục thêm ở bản sau (mã học viên không trùng, hàng đợi email) — chỉ thêm, không đụng dữ liệu
+    await ensureIndexes(prisma);
 
     if ((await prisma.staff_account.count()) === 0) {
       const demo = String(process.env.SEED_DEMO ?? "").toLowerCase() === "true";

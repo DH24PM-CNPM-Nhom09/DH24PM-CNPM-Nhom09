@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { SystemConfigService } from "./config.service";
+import { bumpCounter, clearCounter } from "./counter";
 import { fail } from "./errors";
 
 export type OtpPurpose = "REGISTER" | "RESET_PASSWORD";
@@ -15,12 +16,10 @@ const MAX_WRONG_ATTEMPTS = 5;
  * - Mã 6 số, chỉ lưu bản băm bcrypt.
  * - Mỗi mục đích chỉ có 1 mã còn hiệu lực; tạo mã mới thì mã cũ hết hạn ngay.
  * - Chờ OTP_RESEND_SECONDS giây giữa 2 lần gửi, tối đa OTP_MAX_RESEND lần mỗi giờ.
- * - Nhập sai 5 lần thì mã bị hủy (đếm trong bộ nhớ của tiến trình backend).
+ * - Nhập sai 5 lần thì mã bị hủy (đếm trong bảng security_counter, không mất khi backend khởi động lại).
  */
 @Injectable()
 export class OtpService {
-  private wrongAttempts = new Map<string, number>();
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
@@ -68,7 +67,6 @@ export class OtpService {
         expires_at: new Date(now.getTime() + minutes * 60_000),
       },
     });
-    this.wrongAttempts.delete(String(row.otp_id));
     return { otp, minutes, resendAfterSeconds: resendAfter };
   }
 
@@ -82,19 +80,18 @@ export class OtpService {
       orderBy: { otp_id: "desc" },
     });
     if (!row) fail("OTP_EXPIRED", "Mã xác thực đã hết hạn hoặc chưa được gửi. Bấm “Gửi lại mã” để nhận mã mới.");
-    const key = String(row.otp_id);
+    const key = `otp:${row.otp_id}`;
     const ok = /^\d{6}$/.test(code) && (await bcrypt.compare(code, row.otp_code_hash));
     if (!ok) {
-      const n = (this.wrongAttempts.get(key) ?? 0) + 1;
+      const { hits: n } = await bumpCounter(this.prisma, key, 24 * 3_600_000);
       if (n >= MAX_WRONG_ATTEMPTS) {
-        this.wrongAttempts.delete(key);
+        await clearCounter(this.prisma, key);
         await this.prisma.otp_verification.update({ where: { otp_id: row.otp_id }, data: { expires_at: new Date() } });
         fail("OTP_LOCKED", "Bạn đã nhập sai quá 5 lần. Mã này đã bị hủy, vui lòng bấm “Gửi lại mã”.");
       }
-      this.wrongAttempts.set(key, n);
       fail("OTP_INVALID", `Mã xác thực không đúng. Bạn còn ${MAX_WRONG_ATTEMPTS - n} lần thử.`);
     }
-    this.wrongAttempts.delete(key);
+    await clearCounter(this.prisma, key);
     return row.otp_id;
   }
 }

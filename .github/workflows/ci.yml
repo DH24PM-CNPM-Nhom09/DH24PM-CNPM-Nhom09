@@ -30,6 +30,8 @@ jobs:
       - run: npm ci
       - run: npm run prisma:generate
       - run: npm run typecheck
+      - name: Kiểm thử đơn vị (test/*.test.ts)
+        run: npm test
       - run: npm run build
 
   frontend:
